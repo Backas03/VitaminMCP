@@ -1,0 +1,9 @@
+# Normalise to LF in the repository. Without this, core.autocrlf=true on Windows
+# checks gradlew out with CRLF and it stops being executable on Linux and macOS.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+gradlew text eol=lf
+
+*.jar binary
+*.zip binary
