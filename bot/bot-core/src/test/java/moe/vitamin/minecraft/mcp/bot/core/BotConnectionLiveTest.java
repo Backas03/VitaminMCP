@@ -118,6 +118,10 @@ class BotConnectionLiveTest {
         int mcpPort = Integer.getInteger("vitaminmcp.mcpPort", 25585);
 
         try (BotSession bot = connect("Tester1")) {
+            // Spawn puts the player in the air; without waiting for the fall to finish the
+            // block "underfoot" is air and breaking it is a no-op the server never reports.
+            bot.awaitGrounded(Duration.ofSeconds(15));
+
             var position = bot.position();
             int x = (int) Math.floor(position.getX());
             int y = (int) Math.floor(position.getY()) - 1;   // the block underfoot

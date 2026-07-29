@@ -41,6 +41,7 @@ public final class BotSession implements AutoCloseable {
 
     private volatile boolean inGame;
     private volatile org.cloudburstmc.math.vector.Vector3d position;
+    private volatile java.util.concurrent.ScheduledExecutorService ticker;
 
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
@@ -108,7 +109,80 @@ public final class BotSession implements AutoCloseable {
                     ? "Bot " + identity.name() + " was rejected: " + reason
                     : "Bot " + identity.name() + " did not reach the world within " + timeout);
         }
+        startTicking();
         return this;
+    }
+
+    /**
+     * Starts behaving like a client.
+     *
+     * <p>A real client sends its position every tick, and the server relies on that. Without
+     * it the player is never processed as moving, never falls, never lands, and stays wherever
+     * it was put — which is usually the air above the spawn point. Everything downstream then
+     * fails in confusing ways: block actions target air, reach checks fail against a position
+     * the server no longer agrees with, and none of it produces an error.
+     *
+     * <p>This is the difference between "the bot connected" and "the bot is a player".
+     */
+    private void startTicking() {
+        java.util.concurrent.ScheduledExecutorService executor =
+                java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
+                    Thread thread = new Thread(runnable, "bot-tick-" + identity.name());
+                    thread.setDaemon(true);
+                    return thread;
+                });
+
+        executor.scheduleAtFixedRate(() -> {
+            try {
+                org.cloudburstmc.math.vector.Vector3d current = position;
+                if (current != null && session.isConnected()) {
+                    // Reporting the position the server last gave us, with onGround true, is
+                    // what a client does when standing still; the server applies gravity and
+                    // corrects us with a teleport if we are wrong, which updates `position`.
+                    session.send(new org.geysermc.mcprotocollib.protocol.packet.ingame
+                            .serverbound.player.ServerboundMovePlayerPosPacket(
+                            true, false, current.getX(), current.getY(), current.getZ()));
+                }
+            } catch (RuntimeException ignored) {
+                // A tick that fails must not kill the scheduler and silently stop the bot.
+            }
+        }, 0, 50, TimeUnit.MILLISECONDS);
+
+        this.ticker = executor;
+    }
+
+    /**
+     * Waits until the bot has stopped falling.
+     *
+     * <p>Polls the server-authoritative position rather than sleeping a fixed time: how long a
+     * spawn fall takes depends on the terrain, and a fixed wait is either too short on one
+     * world or wasted on another.
+     *
+     * @return this session, standing on something
+     */
+    public BotSession awaitGrounded(Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        double lastY = Double.NaN;
+        int stableTicks = 0;
+
+        while (System.nanoTime() < deadline) {
+            org.cloudburstmc.math.vector.Vector3d current = position;
+            if (current != null) {
+                if (Math.abs(current.getY() - lastY) < 1.0e-6) {
+                    // Unchanged across several server updates, so it is standing rather than
+                    // momentarily level mid-fall.
+                    if (++stableTicks >= 5) {
+                        return this;
+                    }
+                } else {
+                    stableTicks = 0;
+                    lastY = current.getY();
+                }
+            }
+            Thread.sleep(100);
+        }
+        throw new IllegalStateException(
+                "Bot " + identity.name() + " never stopped moving within " + timeout);
     }
 
     public BotSession connect() throws InterruptedException {
@@ -146,6 +220,13 @@ public final class BotSession implements AutoCloseable {
 
     @Override
     public void close() {
+        java.util.concurrent.ScheduledExecutorService executor = ticker;
+        if (executor != null) {
+            // Stopped before disconnecting, so the last tick cannot fire against a closed
+            // session and log a spurious failure.
+            executor.shutdownNow();
+            ticker = null;
+        }
         if (session.isConnected()) {
             session.disconnect("Bot session closed");
         }
