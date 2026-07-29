@@ -31,6 +31,12 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.Clientbound
  */
 public final class BotSession implements AutoCloseable {
 
+    /** Consecutive unchanged positions taken as "landed". */
+    private static final int SETTLED_CHECKS = 5;
+
+    /** Gap between settle checks — a server tick, since that is when position can change. */
+    private static final Duration SETTLE_POLL = Duration.ofMillis(50);
+
     /** How long to wait for the whole handshake-login-join sequence. */
     public static final Duration DEFAULT_LOGIN_TIMEOUT = Duration.ofSeconds(30);
 
@@ -155,39 +161,46 @@ public final class BotSession implements AutoCloseable {
     /**
      * Waits until the bot has stopped falling.
      *
-     * <p>Polls the server-authoritative position rather than sleeping a fixed time: how long a
-     * spawn fall takes depends on the terrain, and a fixed wait is either too short on one
-     * world or wasted on another.
+     * <p>Landing is not something the protocol announces, and it cannot be asked of the server
+     * either: {@code isOnGround} for a player is whatever the client last claimed, and this
+     * client claims it every tick — reading it back would be reading our own assertion.
      *
-     * @return this session, standing on something
+     * <p>So the observable used is the one thing the server does control: it corrects a
+     * client's position when it disagrees, and those corrections are what stop arriving once
+     * the player is at rest. Waiting for the correction stream to settle is therefore waiting
+     * for the server to agree about where the bot is, which is the real precondition for
+     * acting on coordinates.
+     *
+     * <p>This is a poll, and unlike the others it cannot be replaced by an agent-side
+     * predicate, because the fact being waited on lives in this process rather than on the
+     * server.
+     *
+     * @param timeout how long to allow for the fall
+     * @throws IllegalStateException if the position never settles
      */
     public BotSession awaitGrounded(Duration timeout) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         double lastY = Double.NaN;
-        int stableTicks = 0;
+        int settledChecks = 0;
 
         while (System.nanoTime() < deadline) {
             org.cloudburstmc.math.vector.Vector3d current = position;
             if (current != null) {
                 if (Math.abs(current.getY() - lastY) < 1.0e-6) {
-                    // Unchanged across several server updates, so it is standing rather than
-                    // momentarily level mid-fall.
-                    if (++stableTicks >= 5) {
+                    // Several checks, not one: a fall passes through frames where Y happens to
+                    // repeat, and one sample would call those landed.
+                    if (++settledChecks >= SETTLED_CHECKS) {
                         return this;
                     }
                 } else {
-                    stableTicks = 0;
+                    settledChecks = 0;
                     lastY = current.getY();
                 }
             }
-            Thread.sleep(100);
+            Thread.sleep(SETTLE_POLL.toMillis());
         }
-        throw new IllegalStateException(
-                "Bot " + identity.name() + " never stopped moving within " + timeout);
-    }
-
-    public BotSession connect() throws InterruptedException {
-        return connect(DEFAULT_LOGIN_TIMEOUT);
+        throw new IllegalStateException("Bot " + identity.name()
+                + " never settled within " + timeout + "; last position " + describePosition());
     }
 
     /** Whether the bot has joined the world, not merely opened a socket. */
