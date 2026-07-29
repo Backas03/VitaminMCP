@@ -1,0 +1,54 @@
+# VitaminMCP — observability for a running Minecraft server, over MCP.
+#
+# The endpoint reaches server internals, so the defaults below assume this is a production
+# server. Read the security notes before changing bind-address or read-only.
+
+enabled: true
+
+# ---------------------------------------------------------------------------- endpoint
+
+# Loopback by default. Anything else makes the endpoint reachable from other machines, where a
+# leaked token becomes remote access to your server's internals. Prefer an SSH tunnel.
+bind-address: "127.0.0.1"
+port: 25585
+
+# REQUIRED. The plugin refuses to start without it — an unauthenticated endpoint is worse than
+# no endpoint. Generate one with, for example:
+#   openssl rand -base64 32
+# If you start without setting this, the startup error prints a generated token you can paste.
+auth-token: ""
+
+# Read-only exposes only the query tools. State-changing tools stay unexposed entirely, so a
+# default install cannot alter the server even with a valid token. Leave this on unless you
+# specifically need otherwise.
+read-only: true
+
+# ----------------------------------------------------------------------------- capture
+
+# Retained records. Older ones are overwritten once these fill, and every query reports how
+# many it could not see, so raising these trades memory for how far back you can look.
+event-buffer-size: 100000
+log-buffer-size: 20000
+
+# Distinct exceptions kept, each with its occurrence count and first-seen time.
+max-exception-groups: 1000
+
+# High-frequency events — PlayerMoveEvent, BlockPhysicsEvent, ChunkLoadEvent, entity movement —
+# are not captured by default. BlockPhysicsEvent alone can fire thousands of times per tick and
+# would overwrite the entire buffer within seconds, discarding everything you actually wanted.
+#
+# Turning this on captures them. They still will not appear in events_query results unless the
+# query names the type explicitly.
+capture-high-frequency: false
+
+# Additional event type simple names to treat as high frequency, e.g. a chatty plugin event.
+extra-high-frequency: []
+
+# Types to pull back out of the high-frequency list, when you specifically want one captured
+# and returned normally.
+reinstate-types: []
+
+# Packages searched for event classes. Empty uses the defaults:
+#   org.bukkit.event, io.papermc.paper.event, com.destroystokyo.paper.event
+# Add a plugin's event package to capture its custom events too.
+scan-packages: []

@@ -1,0 +1,9 @@
+name: VitaminMCP
+version: '${version}'
+main: moe.vitamin.minecraft.mcp.agent.mcp.VitaminMcpPlugin
+description: Exposes server events, logs and exceptions over MCP.
+website: https://github.com/
+# The supported floor. 1.13 is the flattening boundary, and declaring it keeps Bukkit from
+# applying legacy material conversion to this plugin (docs/design.md §5).
+api-version: '1.13'
+load: STARTUP

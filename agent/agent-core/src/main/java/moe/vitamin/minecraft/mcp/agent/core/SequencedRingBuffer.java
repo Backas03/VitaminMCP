@@ -130,6 +130,36 @@ public final class SequencedRingBuffer<T extends Sequenced> {
         return new Batch<>(items, sequence, dropped, sequence >= write);
     }
 
+    /**
+     * Visits every retained record from {@code from} onward, without materialising them.
+     *
+     * <p>Used by {@code events_summary}, which has to touch the whole buffer to count by type.
+     * Building a list of 100k records first would allocate megabytes per call to produce a
+     * response of a few dozen lines.
+     *
+     * @return records in the requested range that were already overwritten
+     */
+    public long forEachRetained(long from, java.util.function.Consumer<? super T> action) {
+        if (from < 0) {
+            throw new IllegalArgumentException("from must not be negative but was: " + from);
+        }
+        Objects.requireNonNull(action, "action");
+
+        long write = writeSequence.get();
+        long oldestRetained = Math.max(0, write - capacity);
+        long dropped = Math.max(0, oldestRetained - from);
+
+        for (long sequence = Math.max(from, oldestRetained); sequence < write; sequence++) {
+            T record = slots.get((int) (sequence & mask));
+            if (record == null || record.sequence() != sequence) {
+                dropped++;
+            } else {
+                action.accept(record);
+            }
+        }
+        return dropped;
+    }
+
     /** Records currently retained. */
     public int capacity() {
         return capacity;

@@ -28,6 +28,13 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier = ""
     relocatedPackages.forEach { relocate(it, "$relocationRoot.$it") }
     mergeServiceFiles()
+
+    // Module descriptors survive relocation unrewritten, so a bundled one still claims the
+    // original module name while none of its classes are there any more. Servers load plugins
+    // from the classpath, where it is ignored — but leaving it behind is the sort of
+    // inconsistency that costs an hour to diagnose the day something does read it.
+    exclude("module-info.class")
+    exclude("META-INF/versions/*/module-info.class")
 }
 
 tasks.named("build") {
