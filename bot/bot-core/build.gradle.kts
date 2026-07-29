@@ -40,6 +40,8 @@ tasks.test {
         "vitaminmcp.host",
         "vitaminmcp.port",
         "vitaminmcp.debugHandshake",
+        "vitaminmcp.token",
+        "vitaminmcp.mcpPort",
     ).forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }

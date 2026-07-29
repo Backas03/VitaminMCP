@@ -2,6 +2,8 @@ package moe.vitamin.minecraft.mcp.bot.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -57,6 +59,37 @@ class BotConnectionLiveTest {
     }
 
     @Test
+    void thePoolCapsHowManyBotsCanExist() throws Exception {
+        try (BotPool pool = new BotPool(HOST, PORT, 1)) {
+            pool.spawn("Tester1", TIMEOUT);
+
+            IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                    () -> pool.spawn("Tester2", TIMEOUT));
+            assertTrue(thrown.getMessage().contains("Bot limit reached"));
+        }
+    }
+
+    @Test
+    void oneNameCanOnlyBeConnectedOnce() throws Exception {
+        // Two bots under one name share a derived UUID, and the server kicks the first as a
+        // duplicate login — which reads as an unrelated bot vanishing for no reason.
+        try (BotPool pool = new BotPool(HOST, PORT, 4)) {
+            pool.spawn("Tester1", TIMEOUT);
+
+            assertThrows(IllegalStateException.class, () -> pool.spawn("Tester1", TIMEOUT));
+        }
+    }
+
+    @Test
+    void aBotKnowsWhereItStands() throws Exception {
+        try (BotSession bot = connect("Tester1")) {
+            // connect() waits for the position, not just the join, so this is never null by
+            // the time a caller can act on it.
+            assertNotNull(bot.position(), "no position was received");
+        }
+    }
+
+    @Test
     void threeBotsStayConnectedAtOnce() throws Exception {
         List<BotSession> bots = new ArrayList<>();
         try {
@@ -72,6 +105,29 @@ class BotConnectionLiveTest {
             }
         } finally {
             bots.forEach(BotSession::close);
+        }
+    }
+
+    /**
+     * The point where the two halves of the project meet: a bot acts, and the agent installed
+     * on the same server reports it. Until this passes they are two unrelated programs.
+     */
+    @Test
+    void aBlockBrokenByABotIsReportedByTheAgent() throws Exception {
+        String token = System.getProperty("vitaminmcp.token", "");
+        int mcpPort = Integer.getInteger("vitaminmcp.mcpPort", 25585);
+
+        try (BotSession bot = connect("Tester1")) {
+            var position = bot.position();
+            int x = (int) Math.floor(position.getX());
+            int y = (int) Math.floor(position.getY()) - 1;   // the block underfoot
+            int z = (int) Math.floor(position.getZ());
+
+            bot.actions().breakBlock(x, y, z);
+
+            String events = AgentProbe.eventsQuery(mcpPort, token, "BlockBreakEvent");
+            assertTrue(events.contains("Tester1"),
+                    "agent did not report the break by Tester1. Response: " + events);
         }
     }
 }

@@ -40,6 +40,7 @@ public final class BotSession implements AutoCloseable {
     private final AtomicReference<String> disconnectReason = new AtomicReference<>();
 
     private volatile boolean inGame;
+    private volatile org.cloudburstmc.math.vector.Vector3d position;
 
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
@@ -128,6 +129,16 @@ public final class BotSession implements AutoCloseable {
         return session;
     }
 
+    /** Where the server last said this bot is, or {@code null} before the first position. */
+    public org.cloudburstmc.math.vector.Vector3d position() {
+        return position;
+    }
+
+    /** Actions this bot can perform. */
+    public BotActions actions() {
+        return new BotActions(this);
+    }
+
     /** Why the server disconnected this bot, if it did. */
     public String disconnectReason() {
         return disconnectReason.get();
@@ -184,6 +195,21 @@ public final class BotSession implements AutoCloseable {
             // the identity, this means the player is actually in a world.
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
+            }
+            // The join packet does not say where the player is; the server follows it with a
+            // position. Waiting for that too means a bot is only "ready" once it knows where it
+            // stands, which is what any action needing coordinates depends on.
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .entity.player.ClientboundPlayerPositionPacket position) {
+                BotSession.this.position = position.getPosition();
+
+                // The server will not act on anything this player sends until the teleport is
+                // acknowledged — a real client replies with the id it was given, and until it
+                // does, block actions and movement are dropped without a word. Skipping this
+                // is why the first bot appeared to connect fine and then do nothing.
+                session.send(new org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound
+                        .level.ServerboundAcceptTeleportationPacket(position.getId()));
+
                 joined.countDown();
             }
         }
