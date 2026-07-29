@@ -110,9 +110,12 @@ public final class CaptureService implements AgentQueries {
     public SequencedRingBuffer.Batch<EventRecord> queryEvents(
             String cursorToken, Collection<String> types, String player, int limit) {
 
-        long from = cursorToken == null
-                ? events.oldestRetainedSequence()
-                : Cursor.parse(cursorToken, Cursor.EVENTS).sequence();
+        // A caller with no cursor is asking "what has happened", meaning from the beginning —
+        // not "from wherever the buffer happens to start now". Anchoring at 0 is what makes the
+        // returned `dropped` count the records the buffer has already overwritten. Starting at
+        // oldestRetainedSequence() instead reports 0 lost on a first query, which is precisely
+        // the moment the caller most needs to know the window is partial (docs/design.md §8).
+        long from = cursorToken == null ? 0 : Cursor.parse(cursorToken, Cursor.EVENTS).sequence();
 
         return events.read(from, limit, record -> {
             if (!highFrequency.allowedInQuery(record.type(), types)) {
@@ -140,9 +143,8 @@ public final class CaptureService implements AgentQueries {
     public SequencedRingBuffer.Batch<LogEntry> queryLogs(
             String cursorToken, LogLevel minLevel, Pattern pattern, int limit) {
 
-        long from = cursorToken == null
-                ? logs.oldestRetainedSequence()
-                : Cursor.parse(cursorToken, Cursor.LOGS).sequence();
+        // Anchored at 0 when there is no cursor, for the same reason as queryEvents.
+        long from = cursorToken == null ? 0 : Cursor.parse(cursorToken, Cursor.LOGS).sequence();
 
         return logs.read(from, limit, entry -> {
             if (minLevel != null && !entry.level().atLeast(minLevel)) {

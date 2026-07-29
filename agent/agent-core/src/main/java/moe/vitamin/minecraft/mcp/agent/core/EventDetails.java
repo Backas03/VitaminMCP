@@ -16,6 +16,7 @@ import org.bukkit.event.Event;
 import org.bukkit.event.block.BlockEvent;
 import org.bukkit.event.entity.EntityEvent;
 import org.bukkit.event.player.PlayerEvent;
+import org.bukkit.plugin.Plugin;
 
 /**
  * Pulls the small set of fields worth keeping out of a Bukkit event.
@@ -47,7 +48,11 @@ final class EventDetails {
      * every other record, so anything included here has to earn its place across many events.
      */
     private static final List<String> VALUE_GETTERS = List.of(
-            "getMessage", "getCause", "getReason", "getAction", "getNewGameMode", "getResult");
+            "getMessage", "getCause", "getReason", "getAction", "getNewGameMode", "getResult",
+            // Without this, PluginEnableEvent and PluginDisableEvent record an empty payload —
+            // they report that *a* plugin changed state but not which one, which is the only
+            // thing anyone reads them for.
+            "getPlugin");
 
     /** Cached per-class plan: the reflective getters that turned out to be usable. */
     private final ConcurrentMap<Class<?>, List<ValueAccessor>> plans = new ConcurrentHashMap<>();
@@ -183,6 +188,9 @@ final class EventDetails {
             }
             if (value instanceof Enum<?> constant) {
                 return constant.name();
+            }
+            if (value instanceof Plugin plugin) {
+                return plugin.getName();
             }
             // Anything else would need a real serializer, which does not belong on the main
             // thread. Its type is still a useful hint.

@@ -122,6 +122,23 @@ class SequencedRingBufferTest {
     }
 
     @Test
+    void aFirstReadFromZeroSurfacesEverythingAlreadyLost() {
+        SequencedRingBuffer<Item> buffer = bufferOf(4);
+        for (int i = 0; i < 100; i++) {
+            appendValue(buffer, "v" + i);
+        }
+
+        // This is how a cursor-less query reaches the buffer. Reading from 0 rather than from
+        // oldestRetainedSequence() is what makes the loss visible: starting at the oldest
+        // retained record would report nothing dropped, on exactly the request where the caller
+        // most needs to know it is seeing 4 records out of 100.
+        SequencedRingBuffer.Batch<Item> batch = buffer.read(0, 10, null);
+
+        assertEquals(96L, batch.dropped());
+        assertEquals(4, batch.items().size());
+    }
+
+    @Test
     void reportsHowMuchHasBeenOverwritten() {
         SequencedRingBuffer<Item> buffer = bufferOf(4);
         for (int i = 0; i < 10; i++) {
