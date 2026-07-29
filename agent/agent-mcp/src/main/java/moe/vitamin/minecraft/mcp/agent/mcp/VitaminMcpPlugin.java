@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.logging.Level;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.CaptureService;
+import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
 import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -95,7 +96,29 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 config.getBoolean("capture-high-frequency", false),
                 stringList(config, "extra-high-frequency"),
                 stringList(config, "reinstate-types"),
-                stringList(config, "scan-packages"));
+                stringList(config, "scan-packages"),
+                readOAuth(config));
+    }
+
+    /**
+     * Reads the OAuth block.
+     *
+     * <p>Absent means disabled, which is the right default for an endpoint bound to loopback on
+     * a machine the operator already controls. It becomes worth configuring when the endpoint
+     * is reachable by anything the operator does not personally run.
+     */
+    private static OAuthSettings readOAuth(FileConfiguration config) {
+        if (!config.getBoolean("oauth.enabled", false)) {
+            return OAuthSettings.disabled();
+        }
+        return new OAuthSettings(
+                true,
+                config.getString("oauth.issuer", ""),
+                config.getString("oauth.introspection-url", ""),
+                config.getString("oauth.client-id", ""),
+                config.getString("oauth.client-secret", ""),
+                config.getString("oauth.resource-url", ""),
+                stringList(config, "oauth.required-scopes"));
     }
 
     private static List<String> stringList(FileConfiguration config, String path) {

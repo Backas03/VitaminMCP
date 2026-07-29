@@ -21,6 +21,7 @@ import java.util.Objects;
  * @param extraHighFrequency   additional simple type names to treat as high frequency
  * @param reinstatedTypes      simple type names to drop from the high-frequency list
  * @param scanPackages         packages searched for event classes
+ * @param oauth                OAuth 2.1 settings for the HTTP endpoint
  */
 public record AgentSettings(
         String bindAddress,
@@ -33,7 +34,8 @@ public record AgentSettings(
         boolean captureHighFrequency,
         List<String> extraHighFrequency,
         List<String> reinstatedTypes,
-        List<String> scanPackages) {
+        List<String> scanPackages,
+        OAuthSettings oauth) {
 
     /**
      * Loopback. Exposing the agent externally has to be a deliberate edit, never a default
@@ -48,6 +50,7 @@ public record AgentSettings(
         extraHighFrequency = extraHighFrequency == null ? List.of() : List.copyOf(extraHighFrequency);
         reinstatedTypes = reinstatedTypes == null ? List.of() : List.copyOf(reinstatedTypes);
         scanPackages = scanPackages == null ? List.of() : List.copyOf(scanPackages);
+        oauth = oauth == null ? OAuthSettings.disabled() : oauth;
     }
 
     /** Whether a usable token was configured. */
@@ -76,6 +79,7 @@ public record AgentSettings(
      * @throws IllegalStateException if the agent must not start
      */
     public void validate() {
+        oauth.validate();
         if (!hasAuthToken()) {
             throw new IllegalStateException(
                     "No auth token is configured. The MCP endpoint grants access to server "

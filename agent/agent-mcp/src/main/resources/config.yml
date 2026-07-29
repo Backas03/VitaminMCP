@@ -23,6 +23,32 @@ auth-token: ""
 # specifically need otherwise.
 read-only: true
 
+# ------------------------------------------------------------------------------- oauth
+
+# Off by default, which is right for a loopback endpoint on a machine you already control:
+# the static auth-token above is a shared secret, and a shared secret is fine when there is
+# exactly one holder and one machine.
+#
+# Turn this on when the endpoint is reachable by anything you do not personally run. An OAuth
+# token carries an identity, an audience and an expiry, and can be revoked centrally — none of
+# which a static token can do.
+#
+# This agent is a *resource server*: it validates tokens, it does not issue them. Point it at
+# an authorization server you already have. Tokens are checked by introspection (RFC 7662)
+# rather than verified locally, so revoking one takes effect immediately instead of at expiry.
+#
+# The static token keeps working alongside this, so local tooling does not break.
+oauth:
+  enabled: false
+  issuer: ""
+  introspection-url: ""
+  client-id: ""
+  client-secret: ""
+  # This server's canonical URL. Tokens must be audienced to it, which is what stops a token
+  # issued for another MCP server being replayed here by that server.
+  resource-url: ""
+  required-scopes: []
+
 # ----------------------------------------------------------------------------- capture
 
 # Retained records. Older ones are overwritten once these fill, and every query reports how

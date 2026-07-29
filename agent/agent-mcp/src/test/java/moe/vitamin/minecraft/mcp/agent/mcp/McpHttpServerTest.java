@@ -53,7 +53,8 @@ class McpHttpServerTest {
 
     private static AgentSettings settings(String token, String bind) {
         return new AgentSettings(bind, 0, token, true, 1024, 1024, 16, false,
-                List.of(), List.of(), List.of());
+                List.of(), List.of(), List.of(),
+                moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled());
     }
 
     @BeforeEach
@@ -271,7 +272,39 @@ class McpHttpServerTest {
         return values;
     }
 
-    /** Enough of the query surface to answer the calls these tests make. */
+    @Test
+    void anUnauthorisedRequestPointsAtTheMetadataDocument() throws Exception {
+        HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(endpoint)
+                        .POST(HttpRequest.BodyPublishers.ofString(rpc(1, "tools/list", "{}")))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        String challenge = response.headers().firstValue("WWW-Authenticate").orElse("");
+        // RFC 9728: a client with no credentials has to be able to discover where to get some,
+        // otherwise the only recovery is a human reading documentation.
+        assertTrue(challenge.contains("resource_metadata="), challenge);
+        assertTrue(challenge.contains("oauth-protected-resource"), challenge);
+    }
+
+    @Test
+    void theMetadataDocumentIsReadableWithoutAToken() throws Exception {
+        HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(
+                                "http://127.0.0.1:" + server.boundPort()
+                                        + "/.well-known/oauth-protected-resource"))
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+
+        // Requiring a token to read the document that explains how to get a token is circular.
+        assertEquals(200, response.statusCode());
+        JsonNode metadata = mapper.readTree(response.body());
+        assertNotNull(metadata.get("resource"));
+        assertEquals("header", metadata.get("bearer_methods_supported").get(0).asText());
+    }
+
+        /** Enough of the query surface to answer the calls these tests make. */
     private static final class StubQueries implements AgentQueries {
 
         @Override

@@ -38,6 +38,10 @@ public final class McpHttpServer {
     /** The single MCP endpoint. */
     private static final String ENDPOINT = "/mcp";
 
+    /** RFC 9728 discovery path. */
+    private static final String PROTECTED_RESOURCE_METADATA =
+            "/.well-known/oauth-protected-resource";
+
     /** Revision implemented here. */
     private static final String PROTOCOL_VERSION = "2025-06-18";
 
@@ -57,7 +61,7 @@ public final class McpHttpServer {
     private final ObjectMapper mapper;
     private final Logger logger;
     private final String serverVersion;
-    private final byte[] expectedToken;
+    private final BearerTokenVerifier tokens;
 
     private HttpServer server;
     private ExecutorService executor;
@@ -73,7 +77,7 @@ public final class McpHttpServer {
         this.mapper = mapper;
         this.logger = logger;
         this.serverVersion = serverVersion;
-        this.expectedToken = settings.authToken().getBytes(StandardCharsets.UTF_8);
+        this.tokens = new BearerTokenVerifier(settings.authToken(), settings.oauth(), logger);
     }
 
     public void start() throws IOException {
@@ -83,6 +87,11 @@ public final class McpHttpServer {
                 new InetSocketAddress(InetAddress.getByName(settings.bindAddress()), settings.port());
         server = HttpServer.create(address, 0);
         server.createContext(ENDPOINT, this::handle);
+
+        // RFC 9728. How a client that has no credentials discovers where to get some: it gets
+        // a 401 pointing here, reads which authorization server to use, and comes back with a
+        // token. Without it the only recovery is a human reading documentation.
+        server.createContext(PROTECTED_RESOURCE_METADATA, this::describeProtectedResource);
 
         AtomicInteger threadNumber = new AtomicInteger();
         executor = Executors.newFixedThreadPool(4, runnable -> {
@@ -124,9 +133,16 @@ public final class McpHttpServer {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
-            if (!isAuthorized(exchange)) {
-                exchange.getResponseHeaders().add("WWW-Authenticate", "Bearer");
-                respond(exchange, 401, "{\"error\":\"unauthorized\"}");
+            String refusal = tokens.refuse(exchange.getRequestHeaders().getFirst("Authorization"));
+            if (refusal != null) {
+                // Points at the metadata document, which is how a client discovers where to
+                // obtain a token rather than simply failing.
+                exchange.getResponseHeaders().add("WWW-Authenticate",
+                        "Bearer error=\"invalid_token\", error_description=\"" + refusal
+                                + "\", resource_metadata=\"http://" + settings.bindAddress()
+                                + ":" + boundPort() + PROTECTED_RESOURCE_METADATA + "\"");
+                respond(exchange, 401,
+                        "{\"error\":\"unauthorized\",\"reason\":\"" + refusal + "\"}");
                 return;
             }
 
@@ -285,19 +301,30 @@ public final class McpHttpServer {
     // ------------------------------------------------------------------ auth
 
     /**
-     * Checks the bearer token.
+     * Serves the metadata that tells a client how to authenticate (RFC 9728).
      *
-     * <p>Compared with {@link MessageDigest#isEqual} rather than {@link String#equals}, which
-     * returns as soon as two bytes differ and so leaks the token a character at a time to
-     * anyone able to time the responses.
+     * <p>Unauthenticated on purpose — this is the document explaining how to authenticate, so
+     * requiring a token to read it would be circular.
      */
-    private boolean isAuthorized(HttpExchange exchange) {
-        String header = exchange.getRequestHeaders().getFirst("Authorization");
-        if (header == null || !header.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            return false;
+    private void describeProtectedResource(HttpExchange exchange) throws IOException {
+        try (exchange) {
+            ObjectNode metadata = mapper.createObjectNode();
+            metadata.put("resource", settings.oauth().resourceUrl().isEmpty()
+                    ? "http://" + settings.bindAddress() + ":" + boundPort() + ENDPOINT
+                    : settings.oauth().resourceUrl());
+
+            if (settings.oauth().enabled()) {
+                metadata.putArray("authorization_servers").add(settings.oauth().issuer());
+                if (!settings.oauth().requiredScopes().isEmpty()) {
+                    var scopes = metadata.putArray("scopes_supported");
+                    settings.oauth().requiredScopes().forEach(scopes::add);
+                }
+            }
+            metadata.putArray("bearer_methods_supported").add("header");
+
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            respond(exchange, 200, metadata.toString());
         }
-        byte[] presented = header.substring(7).trim().getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(presented, expectedToken);
     }
 
     // ------------------------------------------------------------------- i/o
