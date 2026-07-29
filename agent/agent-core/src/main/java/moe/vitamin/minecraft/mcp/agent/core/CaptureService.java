@@ -1,17 +1,20 @@
 package moe.vitamin.minecraft.mcp.agent.core;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import moe.vitamin.minecraft.mcp.contract.CommandResult;
 import moe.vitamin.minecraft.mcp.contract.Cursor;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.EventsSummary;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
+import moe.vitamin.minecraft.mcp.contract.PlayerState;
 import moe.vitamin.minecraft.mcp.contract.ServerInfo;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
@@ -225,6 +228,108 @@ public final class CaptureService implements AgentQueries {
         status.put("distinctExceptions", exceptions.size());
         status.put("highFrequencyExcluded", List.copyOf(highFrequency.excluded()));
         return status;
+    }
+
+    // ------------------------------------------------------------ world state
+
+    @Override
+    public PlayerState playerState(String name, Collection<String> permissionNodes) {
+        return onMainThread(() -> {
+            org.bukkit.entity.Player player = Bukkit.getPlayerExact(name);
+            if (player == null) {
+                org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+                return new PlayerState(
+                        name, String.valueOf(offline.getUniqueId()), false,
+                        null, offline.isOp(), null, 0, 0, 0, List.of());
+            }
+
+            List<PlayerState.PermissionCheck> checks = new ArrayList<>();
+            if (permissionNodes != null) {
+                for (String node : permissionNodes) {
+                    checks.add(new PlayerState.PermissionCheck(node, player.hasPermission(node)));
+                }
+            }
+
+            org.bukkit.Location at = player.getLocation();
+            return new PlayerState(
+                    player.getName(),
+                    player.getUniqueId().toString(),
+                    true,
+                    player.getGameMode().name(),
+                    player.isOp(),
+                    at.getWorld() == null ? null : at.getWorld().getName(),
+                    at.getX(), at.getY(), at.getZ(),
+                    checks);
+        }, Duration.ofSeconds(5), null);
+    }
+
+    @Override
+    public String blockAt(String world, int x, int y, int z) {
+        return onMainThread(() -> {
+            org.bukkit.World target = world == null || world.isBlank()
+                    ? Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0)
+                    : Bukkit.getWorld(world);
+            return target == null ? null : target.getBlockAt(x, y, z).getType().name();
+        }, Duration.ofSeconds(5), null);
+    }
+
+    @Override
+    public CommandResult executeCommand(String command, String asPlayer, Duration timeout) {
+        String normalised = command.startsWith("/") ? command.substring(1) : command;
+        String executedAs = asPlayer == null ? CommandResult.CONSOLE : asPlayer;
+
+        // The log stream is the only place most commands report anything: Bukkit tells us
+        // whether a handler ran, not what it decided. Bracketing the call with cursors turns
+        // the capture we already have into the command's output.
+        long from = logs.written();
+        long startedAt = System.nanoTime();
+
+        Boolean dispatched = onMainThread(() -> {
+            org.bukkit.command.CommandSender sender = asPlayer == null
+                    ? Bukkit.getConsoleSender()
+                    : Bukkit.getPlayerExact(asPlayer);
+            if (sender == null) {
+                throw new IllegalArgumentException("No player online named " + asPlayer);
+            }
+            return Bukkit.dispatchCommand(sender, normalised);
+        }, timeout, Boolean.FALSE);
+
+        long millis = (System.nanoTime() - startedAt) / 1_000_000;
+
+        List<String> output = new ArrayList<>();
+        logs.read(from, 200, null).items()
+                .forEach(entry -> output.add(entry.message()));
+
+        return new CommandResult(
+                normalised, executedAs, Boolean.TRUE.equals(dispatched), output, millis);
+    }
+
+    /**
+     * Runs something on the server's main thread and waits for it.
+     *
+     * <p>Anything touching worlds, players or commands has to run there — Bukkit is not thread
+     * safe and doing it from an HTTP thread corrupts state in ways that surface much later.
+     * The wait is bounded so a wedged main thread returns an error to the caller rather than
+     * tying up the request thread indefinitely.
+     */
+    private <T> T onMainThread(java.util.concurrent.Callable<T> work, Duration timeout, T fallback) {
+        try {
+            return Bukkit.getScheduler()
+                    .callSyncMethod(plugin, work)
+                    .get(timeout.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return fallback;
+        } catch (java.util.concurrent.TimeoutException e) {
+            throw new IllegalStateException(
+                    "The server's main thread did not respond within " + timeout, e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            throw new IllegalStateException(cause == null ? e : cause);
+        }
     }
 
     /** Cursor pointing just past the newest event, for callers that only want what happens next. */

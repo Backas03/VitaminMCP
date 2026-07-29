@@ -65,8 +65,10 @@ class AgentToolsTest {
 
         assertEquals(
                 List.of("server_info", "events_summary", "events_query", "logs_query",
-                        "exceptions_recent"),
+                        "exceptions_recent", "state_query"),
                 names);
+        // command_exec is absent, not merely restricted — see writeToolsAreAbsentWhenReadOnly.
+        assertFalse(names.contains("command_exec"));
     }
 
     @Test
@@ -77,6 +79,62 @@ class AgentToolsTest {
             assertEquals("object", schema.get("type").asText());
             assertNotNull(schema.get("properties"));
         }
+    }
+
+    @Test
+    void writeToolsAreAbsentWhenReadOnly() {
+        List<String> readOnlyNames = names(toolsWith(ResponseBudget.DEFAULT).listTools());
+        List<String> writableNames =
+                names(new AgentTools(queries, mapper, ResponseBudget.DEFAULT, false).listTools());
+
+        // The security boundary is that a default install does not expose a way to change the
+        // server at all. Not "exposes it and refuses" — absent from the listing entirely.
+        assertFalse(readOnlyNames.contains("command_exec"));
+        assertTrue(writableNames.contains("command_exec"));
+    }
+
+    @Test
+    void commandExecRefusesEvenIfCalledDirectlyWhileReadOnly() {
+        // A caller that skipped tools/list and guessed the name must not get through.
+        AgentTools.ToolException thrown = assertThrows(AgentTools.ToolException.class,
+                () -> tools().call("command_exec", args("{\"command\":\"op Someone\"}")));
+
+        assertTrue(thrown.getMessage().contains("read-only"));
+    }
+
+    @Test
+    void commandExecPassesTheCommandThroughWhenAllowed() {
+        AgentTools writable = new AgentTools(queries, mapper, ResponseBudget.DEFAULT, false);
+
+        writable.call("command_exec", args("{\"command\":\"/op Tester1\",\"as\":\"Admin\"}"));
+
+        // The leading slash is stripped: Bukkit dispatches without it.
+        assertEquals("op Tester1", queries.lastCommand);
+        assertEquals("Admin", queries.lastCommandAs);
+    }
+
+    @Test
+    void stateQueryNeedsAKind() {
+        assertThrows(AgentTools.ToolException.class, () -> tools().call("state_query", args("{}")));
+        assertThrows(AgentTools.ToolException.class,
+                () -> tools().call("state_query", args("{\"kind\":\"weather\"}")));
+    }
+
+    @Test
+    void stateQueryReadsAPlayerAndABlock() {
+        JsonNode player = tools().call("state_query",
+                args("{\"kind\":\"player\",\"target\":\"Tester1\"}"));
+        assertEquals("CREATIVE", player.get("gameMode").asText());
+
+        JsonNode block = tools().call("state_query",
+                args("{\"kind\":\"block\",\"world\":\"world\",\"x\":1,\"y\":2,\"z\":3}"));
+        assertEquals("STONE", block.get("block").asText());
+    }
+
+    private static List<String> names(ArrayNode listed) {
+        return StreamSupport.stream(listed.spliterator(), false)
+                .map(tool -> tool.get("name").asText())
+                .toList();
     }
 
     @Test
@@ -310,6 +368,35 @@ class AgentToolsTest {
         @Override
         public String latestLogCursor() {
             return "logs:0";
+        }
+
+        String lastCommand;
+        String lastCommandAs;
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.PlayerState playerState(
+                String name, Collection<String> permissionNodes) {
+            return new moe.vitamin.minecraft.mcp.contract.PlayerState(
+                    name, "00000000-0000-0000-0000-000000000000", true, "CREATIVE", false,
+                    "world", 1, 2, 3, List.of());
+        }
+
+        @Override
+        public String blockAt(String world, int x, int y, int z) {
+            return "world".equals(world) || world == null ? "STONE" : null;
+        }
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.CommandResult executeCommand(
+                String command, String asPlayer, java.time.Duration timeout) {
+            this.lastCommand = command;
+            this.lastCommandAs = asPlayer;
+            return new moe.vitamin.minecraft.mcp.contract.CommandResult(
+                    command,
+                    asPlayer == null
+                            ? moe.vitamin.minecraft.mcp.contract.CommandResult.CONSOLE
+                            : asPlayer,
+                    true, List.of("ok"), 1L);
         }
     }
 }

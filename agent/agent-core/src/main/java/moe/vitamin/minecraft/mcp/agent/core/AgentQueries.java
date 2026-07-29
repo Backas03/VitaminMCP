@@ -4,11 +4,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import moe.vitamin.minecraft.mcp.contract.CommandResult;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.EventsSummary;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
+import moe.vitamin.minecraft.mcp.contract.PlayerState;
 import moe.vitamin.minecraft.mcp.contract.ServerInfo;
 
 /**
@@ -43,4 +45,32 @@ public interface AgentQueries {
 
     /** Cursor just past the newest log entry. */
     String latestLogCursor();
+
+    /**
+     * What the server believes about a player.
+     *
+     * @param permissionNodes nodes to test, since permissions can only be asked about one at a
+     *                        time rather than listed
+     */
+    PlayerState playerState(String name, java.util.Collection<String> permissionNodes);
+
+    /**
+     * The material at a block position, or {@code null} if the world is unknown.
+     *
+     * <p>Exists because "did that block actually change" is otherwise only answerable by
+     * inference from events, and the most common cause of a bot appearing to do nothing is that
+     * it acted on a position holding something other than what the test assumed.
+     */
+    String blockAt(String world, int x, int y, int z);
+
+    /**
+     * Runs a command on the server.
+     *
+     * <p>Separate from the read-only surface on purpose: exposing this is what turns the agent
+     * from an observer into something that can change the server, and it stays unexposed unless
+     * an operator opts in (docs/design.md §14).
+     *
+     * @param asPlayer player to run as, or {@code null} for the console
+     */
+    CommandResult executeCommand(String command, String asPlayer, java.time.Duration timeout);
 }

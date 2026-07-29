@@ -107,10 +107,36 @@ final class AgentTools {
                             "Fetch this one exception including its full stack trace.");
                 }));
 
-        // Nothing below this line yet. State-changing tools stay unexposed unless read-only is
-        // switched off, so a default install cannot be used to change the server at all.
+        tools.add(tool("state_query",
+                "Reads current server state directly rather than inferring it from events. "
+                        + "kind='player' needs 'target' (a player name) and optionally "
+                        + "'permissions'; kind='block' needs 'x','y','z' and optionally 'world'.",
+                properties -> {
+                    enumProperty(properties, "kind", "What to read.", List.of("player", "block"));
+                    stringProperty(properties, "target", "Player name, for kind='player'.");
+                    arrayProperty(properties, "permissions",
+                            "Permission nodes to test. They can only be tested, not listed.");
+                    stringProperty(properties, "world", "World name, for kind='block'.");
+                    numberProperty(properties, "x", "Block X, for kind='block'.");
+                    numberProperty(properties, "y", "Block Y, for kind='block'.");
+                    numberProperty(properties, "z", "Block Z, for kind='block'.");
+                }));
+
+        // Everything above only reads. The line below is the boundary: with read-only left on,
+        // which is the default, there is no exposed way to change the server at all — not
+        // restricted, absent. An operator has to opt in deliberately (docs/design.md §14).
         if (!readOnly) {
-            // command_exec and friends land here in a later stage.
+            tools.add(tool("command_exec",
+                    "Runs a command on the server, as the console by default. This CHANGES the "
+                            + "server. Returns whether a handler accepted it plus whatever it "
+                            + "logged, which is usually where the real answer is — many commands "
+                            + "report failure in their output while still succeeding formally.",
+                    properties -> {
+                        stringProperty(properties, "command",
+                                "The command, with or without a leading slash.");
+                        stringProperty(properties, "as",
+                                "Player name to run as. Omit to run as the console.");
+                    }));
         }
 
         return tools;
@@ -132,6 +158,8 @@ final class AgentTools {
             case "events_query" -> eventsQuery(args);
             case "logs_query" -> logsQuery(args);
             case "exceptions_recent" -> exceptionsRecent(args);
+            case "state_query" -> stateQuery(args);
+            case "command_exec" -> commandExec(args);
             default -> throw new ToolException("Unknown tool: " + name);
         };
     }
@@ -196,6 +224,71 @@ final class AgentTools {
         ObjectNode result = mapper.createObjectNode();
         result.set("items", mapper.valueToTree(capture.recentExceptions(limit)));
         return result;
+    }
+
+    private JsonNode stateQuery(JsonNode args) {
+        String kind = text(args.path("kind"));
+        if (kind == null) {
+            throw new ToolException("state_query needs 'kind': 'player' or 'block'.");
+        }
+
+        return switch (kind.toLowerCase(java.util.Locale.ROOT)) {
+            case "player" -> {
+                String target = text(args.path("target"));
+                if (target == null) {
+                    throw new ToolException("state_query kind='player' needs 'target'.");
+                }
+                yield mapper.valueToTree(
+                        capture.playerState(target, stringSet(args.path("permissions"))));
+            }
+            case "block" -> {
+                ObjectNode result = mapper.createObjectNode();
+                int x = args.path("x").asInt();
+                int y = args.path("y").asInt();
+                int z = args.path("z").asInt();
+                String world = text(args.path("world"));
+                String material = capture.blockAt(world, x, y, z);
+                if (material == null) {
+                    throw new ToolException("No such world: " + world);
+                }
+                result.put("world", world);
+                result.put("x", x);
+                result.put("y", y);
+                result.put("z", z);
+                result.put("block", material);
+                yield result;
+            }
+            default -> throw new ToolException(
+                    "Unknown kind '" + kind + "'. Expected 'player' or 'block'.");
+        };
+    }
+
+    private JsonNode commandExec(JsonNode args) {
+        // Reachable only when the tool was listed, but checked again here: a caller that
+        // guessed the name must not get through just because it skipped tools/list.
+        if (readOnly) {
+            throw new ToolException(
+                    "command_exec is unavailable: this agent is running read-only. Set "
+                            + "'read-only: false' in config.yml to allow it.");
+        }
+
+        String command = text(args.path("command"));
+        if (command == null) {
+            throw new ToolException("command_exec needs 'command'.");
+        }
+        // Normalised here, at the boundary, so every caller is treated the same whether or not
+        // it typed the slash a human would. Bukkit dispatches without one.
+        String normalised = command.startsWith("/") ? command.substring(1) : command;
+        if (normalised.isBlank()) {
+            throw new ToolException("command_exec was given an empty command.");
+        }
+
+        try {
+            return mapper.valueToTree(capture.executeCommand(
+                    normalised, text(args.path("as")), java.time.Duration.ofSeconds(10)));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ToolException(String.valueOf(e.getMessage()));
+        }
     }
 
     // ---------------------------------------------------------------- paging

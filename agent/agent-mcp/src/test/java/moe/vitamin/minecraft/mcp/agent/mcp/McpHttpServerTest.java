@@ -144,7 +144,8 @@ class McpHttpServerTest {
     void listsTools() throws Exception {
         JsonNode result = resultOf(post("tools/list", "{}", TOKEN));
 
-        assertEquals(5, result.get("tools").size());
+        // Six read-only tools; command_exec is not among them by default.
+        assertEquals(6, result.get("tools").size());
     }
 
     @Test
@@ -318,6 +319,35 @@ class McpHttpServerTest {
         @Override
         public String latestLogCursor() {
             return "logs:0";
+        }
+
+        String lastCommand;
+        String lastCommandAs;
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.PlayerState playerState(
+                String name, Collection<String> permissionNodes) {
+            return new moe.vitamin.minecraft.mcp.contract.PlayerState(
+                    name, "00000000-0000-0000-0000-000000000000", true, "CREATIVE", false,
+                    "world", 1, 2, 3, List.of());
+        }
+
+        @Override
+        public String blockAt(String world, int x, int y, int z) {
+            return "world".equals(world) || world == null ? "STONE" : null;
+        }
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.CommandResult executeCommand(
+                String command, String asPlayer, java.time.Duration timeout) {
+            this.lastCommand = command;
+            this.lastCommandAs = asPlayer;
+            return new moe.vitamin.minecraft.mcp.contract.CommandResult(
+                    command,
+                    asPlayer == null
+                            ? moe.vitamin.minecraft.mcp.contract.CommandResult.CONSOLE
+                            : asPlayer,
+                    true, List.of("ok"), 1L);
         }
     }
 }

@@ -111,27 +111,41 @@ class BotConnectionLiveTest {
     /**
      * The point where the two halves of the project meet: a bot acts, and the agent installed
      * on the same server reports it. Until this passes they are two unrelated programs.
+     *
+     * <p>Written to diagnose itself. Every earlier attempt failed with nothing to go on but an
+     * empty event list, because the test could only see what the bot believed. Asking the
+     * agent what the server actually holds — the game mode, the block that is really there —
+     * turns a silent failure into a specific one.
      */
     @Test
     void aBlockBrokenByABotIsReportedByTheAgent() throws Exception {
-        String token = System.getProperty("vitaminmcp.token", "");
-        int mcpPort = Integer.getInteger("vitaminmcp.mcpPort", 25585);
+        AgentProbe agent = AgentProbe.fromSystemProperties();
 
         try (BotSession bot = connect("Tester1")) {
-            // Spawn puts the player in the air; without waiting for the fall to finish the
-            // block "underfoot" is air and breaking it is a no-op the server never reports.
+            // Spawn puts the player in the air; until the fall finishes the block "underfoot"
+            // is air, and breaking air is a no-op the server never reports.
             bot.awaitGrounded(Duration.ofSeconds(15));
 
             var position = bot.position();
             int x = (int) Math.floor(position.getX());
-            int y = (int) Math.floor(position.getY()) - 1;   // the block underfoot
+            int y = (int) Math.floor(position.getY()) - 1;
             int z = (int) Math.floor(position.getZ());
+
+            String gameMode = agent.gameModeOf("Tester1");
+            String before = agent.blockAt("world", x, y, z);
 
             bot.actions().breakBlock(x, y, z);
 
-            String events = AgentProbe.eventsQuery(mcpPort, token, "BlockBreakEvent");
+            String events = agent.awaitEvent("BlockBreakEvent", Duration.ofSeconds(10));
+            String after = agent.blockAt("world", x, y, z);
+
+            String diagnosis = "gameMode=" + gameMode
+                    + " block(" + x + "," + y + "," + z + ") before=" + before + " after=" + after;
+
+            assertNotEquals("AIR", before,
+                    "the bot was not standing on anything, so there was nothing to break. " + diagnosis);
             assertTrue(events.contains("Tester1"),
-                    "agent did not report the break by Tester1. Response: " + events);
+                    "agent reported no BlockBreakEvent by Tester1. " + diagnosis);
         }
     }
 }

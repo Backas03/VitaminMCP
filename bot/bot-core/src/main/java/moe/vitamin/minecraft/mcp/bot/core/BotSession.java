@@ -42,6 +42,7 @@ public final class BotSession implements AutoCloseable {
     private volatile boolean inGame;
     private volatile org.cloudburstmc.math.vector.Vector3d position;
     private volatile java.util.concurrent.ScheduledExecutorService ticker;
+    private volatile boolean loadedSent;
 
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
@@ -290,6 +291,17 @@ public final class BotSession implements AutoCloseable {
                 // is why the first bot appeared to connect fine and then do nothing.
                 session.send(new org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound
                         .level.ServerboundAcceptTeleportationPacket(position.getId()));
+
+                // Added in 1.21.4: the client declares it has finished loading and is ready to
+                // play. Until it arrives the server holds the player in a loading state and
+                // ignores world interactions — silently, so a bot that skips it connects,
+                // stands there, and has every dig discarded with no event and no error. This
+                // was the actual cause of BlockBreakEvent never appearing.
+                if (!loadedSent) {
+                    loadedSent = true;
+                    session.send(org.geysermc.mcprotocollib.protocol.packet.ingame
+                            .serverbound.ServerboundPlayerLoadedPacket.INSTANCE);
+                }
 
                 joined.countDown();
             }
