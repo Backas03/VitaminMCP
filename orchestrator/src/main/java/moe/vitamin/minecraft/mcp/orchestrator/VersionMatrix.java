@@ -52,7 +52,14 @@ public record VersionMatrix(List<Entry> versions) {
         return parse(Files.readString(file, StandardCharsets.UTF_8));
     }
 
-    static VersionMatrix parse(String yaml) {
+    /**
+     * Parses a matrix from YAML text.
+     *
+     * <p>Public alongside {@link #load(Path)} so a caller can build a matrix without a file —
+     * a test asserting how an unreachable version is reported should not have to write one to
+     * disk to do it.
+     */
+    public static VersionMatrix parse(String yaml) {
         List<Entry> entries = new ArrayList<>();
         String id = null;
         String version = null;

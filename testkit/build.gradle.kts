@@ -26,6 +26,7 @@ tasks.test {
         "vitaminmcp.port",
         "vitaminmcp.mcpPort",
         "vitaminmcp.token",
+        "vitaminmcp.agentJar",
     ).forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }

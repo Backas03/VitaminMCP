@@ -109,12 +109,19 @@ public final class BotSession implements AutoCloseable {
     public BotSession connect(Duration timeout) throws InterruptedException {
         session.connect(false);
 
-        if (!joined.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
-            String reason = disconnectReason.get();
+        boolean released = joined.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        String reason = disconnectReason.get();
+
+        // The latch is released by *either* arriving in the world or being disconnected, so it
+        // alone does not mean success. Treating it as success let a rejected bot report
+        // "never settled" from a later call instead of the reason the server actually gave —
+        // which turned a plain protocol mismatch into a mystery.
+        if (reason != null || position == null) {
             close();
             throw new IllegalStateException(reason != null
                     ? "Bot " + identity.name() + " was rejected: " + reason
-                    : "Bot " + identity.name() + " did not reach the world within " + timeout);
+                    : "Bot " + identity.name() + " did not reach the world within " + timeout
+                            + (released ? " (connected, but no position ever arrived)" : ""));
         }
         startTicking();
         return this;
