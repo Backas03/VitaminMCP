@@ -1,0 +1,145 @@
+package moe.vitamin.minecraft.mcp.bot.runner;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
+import moe.vitamin.minecraft.mcp.bot.core.RunnerProtocol;
+
+/**
+ * A bot runner for protocol 772 — Minecraft 1.21.7 and 1.21.8.
+ *
+ * <p>Runs as a child process so that a matrix can drive several protocol versions at once.
+ * Every MCProtocolLib build uses the same package names, so two of them cannot share a
+ * classpath; separate processes are the isolation, and they are also the cleanup.
+ *
+ * <p>Named for the protocol rather than a Minecraft version because one runner covers every
+ * version sharing that protocol. Supporting a new protocol means a sibling module with its own
+ * MCProtocolLib, not a change here.
+ *
+ * <p><b>Only protocol lines go to stdout.</b> Anything else corrupts the stream, so diagnostics
+ * go to stderr, which the parent forwards to its own.
+ */
+public final class RunnerMain {
+
+    /** Minecraft versions this runner speaks for. */
+    public static final String PROTOCOL = "772";
+
+    private final String host;
+    private final int port;
+    private final Map<String, BotSession> bots = new HashMap<>();
+
+    private RunnerMain(String host, int port) {
+        this.host = host;
+        this.port = port;
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length < 2) {
+            System.err.println("usage: bot-runner-" + PROTOCOL + " <host> <port>");
+            System.exit(2);
+        }
+        new RunnerMain(args[0], Integer.parseInt(args[1])).run();
+    }
+
+    private void run() throws Exception {
+        PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
+        BufferedReader in = new BufferedReader(
+                new InputStreamReader(System.in, StandardCharsets.UTF_8));
+
+        out.println(RunnerProtocol.READY);
+
+        String line;
+        while ((line = in.readLine()) != null) {
+            String[] command = RunnerProtocol.decode(line);
+            if (command.length == 0) {
+                continue;
+            }
+            if (RunnerProtocol.SHUTDOWN.equals(command[0])) {
+                break;
+            }
+            try {
+                out.println(handle(command));
+            } catch (Exception e) {
+                // The server's own words are passed through, so a rejected login reads as what
+                // the server said rather than as a timeout in the parent.
+                out.println(RunnerProtocol.encode(
+                        RunnerProtocol.ERROR, command[0], String.valueOf(e.getMessage())));
+            }
+        }
+
+        bots.values().forEach(BotSession::close);
+    }
+
+    private String handle(String[] command) throws Exception {
+        String verb = command[0];
+        return switch (verb) {
+            case RunnerProtocol.SPAWN -> {
+                String name = command[1];
+                BotSession bot = BotSession
+                        .open(host, port, BotIdentity.of(name), "localhost", "127.0.0.1")
+                        .connect(Duration.ofSeconds(30));
+                bot.awaitGrounded(Duration.ofSeconds(15));
+                bots.put(name, bot);
+                yield position(RunnerProtocol.SPAWN, bot);
+            }
+
+            case RunnerProtocol.DESPAWN -> {
+                BotSession bot = bots.remove(command[1]);
+                if (bot != null) {
+                    bot.close();
+                }
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.MOVE -> {
+                require(command[1]).actions().moveTo(
+                        Double.parseDouble(command[2]),
+                        Double.parseDouble(command[3]),
+                        Double.parseDouble(command[4]));
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.BREAK -> {
+                require(command[1]).actions().breakBlock(
+                        Integer.parseInt(command[2]),
+                        Integer.parseInt(command[3]),
+                        Integer.parseInt(command[4]));
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.COMMAND -> {
+                require(command[1]).actions().command(command[2]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.CHAT -> {
+                require(command[1]).actions().chat(command[2]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.POSITION -> position(RunnerProtocol.POSITION, require(command[1]));
+
+            default -> RunnerProtocol.encode(
+                    RunnerProtocol.ERROR, verb, "unknown command '" + verb + "'");
+        };
+    }
+
+    private static String position(String verb, BotSession bot) {
+        return RunnerProtocol.encode(RunnerProtocol.OK, verb,
+                String.valueOf(bot.x()), String.valueOf(bot.y()), String.valueOf(bot.z()));
+    }
+
+    private BotSession require(String name) {
+        BotSession bot = bots.get(name);
+        if (bot == null) {
+            throw new IllegalStateException(
+                    "no bot named " + name + " — spawn it before acting with it");
+        }
+        return bot;
+    }
+}

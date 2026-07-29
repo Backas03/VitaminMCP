@@ -4,9 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.time.Duration;
 import java.util.List;
-import moe.vitamin.minecraft.mcp.bot.core.BotSession;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
 
@@ -44,7 +43,8 @@ final class SessionTools {
                     number(properties, "port", "Minecraft port. Defaults to 25565.");
                     number(properties, "mcpPort", "Agent's MCP port. Defaults to 25585.");
                     string(properties, "token", "The agent's auth-token from its config.yml.");
-                    number(properties, "maxBots", "Bot limit for this session. Defaults to 10.");
+                    string(properties, "runnerJar",
+                            "Path to the bot runner jar built for this server's protocol.");
                 }));
 
         tools.add(tool("session_reset",
@@ -106,12 +106,24 @@ final class SessionTools {
                             + "It is the auth-token in the agent's config.yml.");
         }
 
-        session = new Session(
-                args.path("host").asText("127.0.0.1"),
-                args.path("port").asInt(25565),
-                args.path("mcpPort").asInt(25585),
-                token,
-                args.path("maxBots").asInt(10));
+        String runnerJar = args.path("runnerJar").asText("");
+        if (runnerJar.isBlank()) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar' — the bot runner built for this server's "
+                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
+                            + "bots run in a child process.");
+        }
+
+        try {
+            session = new Session(
+                    args.path("host").asText("127.0.0.1"),
+                    args.path("port").asInt(25565),
+                    args.path("mcpPort").asInt(25585),
+                    token,
+                    java.nio.file.Path.of(runnerJar));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
+        }
 
         // Called immediately so a bad host, port or token fails here with a clear message
         // rather than later inside an unrelated tool.
@@ -137,20 +149,17 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
         try {
-            BotSession bot = require().bots().spawn(name, Duration.ofSeconds(30));
-            bot.awaitGrounded(Duration.ofSeconds(15));
+            BotRunner.BotHandle bot = require().bots().spawn(name);
 
             ObjectNode result = MAPPER.createObjectNode();
             result.put("name", name);
-            result.put("uuid", bot.identity().uuid().toString());
+            result.put("uuid",
+                    moe.vitamin.minecraft.mcp.bot.core.BotIdentity.offlineUuid(name).toString());
             result.put("x", bot.blockX());
             result.put("y", bot.blockY());
             result.put("z", bot.blockZ());
             return result;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted spawning " + name, e);
-        } catch (Exception e) {
+        } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);
         }
     }

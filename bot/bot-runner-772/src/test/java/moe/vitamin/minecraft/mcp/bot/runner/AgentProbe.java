@@ -1,4 +1,6 @@
-package moe.vitamin.minecraft.mcp.bot.core;
+package moe.vitamin.minecraft.mcp.bot.runner;
+
+import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
 
 import java.net.URI;
 import java.net.http.HttpClient;

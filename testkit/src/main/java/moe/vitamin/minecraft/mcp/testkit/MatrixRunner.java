@@ -10,7 +10,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import moe.vitamin.minecraft.mcp.bot.core.BotPool;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.orchestrator.ManagedServer;
 import moe.vitamin.minecraft.mcp.orchestrator.PaperDownloader;
 import moe.vitamin.minecraft.mcp.orchestrator.VersionMatrix;
@@ -43,6 +43,7 @@ public final class MatrixRunner {
 
     private final Path workDirectory;
     private final Path agentJar;
+    private final Path runnerJar;
     private final Path worldTemplate;
     private final Path javaHome;
     private final int parallelism;
@@ -50,20 +51,24 @@ public final class MatrixRunner {
     /**
      * @param workDirectory where per-version server directories and the jar cache live
      * @param agentJar      the VitaminMCP plugin to install on each server
+     * @param runnerJar     the bot runner built for the protocol these versions speak
      * @param worldTemplate world copied in before each run, or {@code null} for a fresh world
      * @param javaHome      JVM used to run the servers
      */
-    public MatrixRunner(Path workDirectory, Path agentJar, Path worldTemplate, Path javaHome) {
-        this(workDirectory, agentJar, worldTemplate, javaHome, DEFAULT_PARALLELISM);
+    public MatrixRunner(
+            Path workDirectory, Path agentJar, Path runnerJar, Path worldTemplate, Path javaHome) {
+        this(workDirectory, agentJar, runnerJar, worldTemplate, javaHome, DEFAULT_PARALLELISM);
     }
 
     public MatrixRunner(
-            Path workDirectory, Path agentJar, Path worldTemplate, Path javaHome, int parallelism) {
+            Path workDirectory, Path agentJar, Path runnerJar, Path worldTemplate, Path javaHome,
+            int parallelism) {
         if (parallelism < 1) {
             throw new IllegalArgumentException("parallelism must be at least 1");
         }
         this.workDirectory = workDirectory;
         this.agentJar = agentJar;
+        this.runnerJar = runnerJar;
         this.worldTemplate = worldTemplate;
         this.javaHome = javaHome;
         this.parallelism = parallelism;
@@ -129,7 +134,10 @@ public final class MatrixRunner {
                 server.prepare(worldTemplate, agentJar, token);
                 server.start(javaHome, timeout);
 
-                try (BotPool bots = new BotPool("127.0.0.1", port)) {
+                // The runner built for this version's protocol. Launching the wrong one is
+                // the failure this whole structure exists to make impossible to do silently.
+                try (BotRunner bots =
+                             BotRunner.launch(runnerJar, javaHome, "127.0.0.1", port)) {
                     AgentClient agent = new AgentClient("127.0.0.1", agentPort, token);
                     ScenarioResult result = new ScenarioRunner(bots, agent).run(scenario);
                     return new MatrixResult.VersionOutcome(

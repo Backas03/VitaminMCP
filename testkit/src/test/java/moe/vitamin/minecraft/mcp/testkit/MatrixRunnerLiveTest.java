@@ -50,7 +50,11 @@ class MatrixRunnerLiveTest {
         Path agentJar = Path.of(System.getProperty("vitaminmcp.agentJar", ""));
         assertTrue(Files.exists(agentJar),
                 "pass -Dvitaminmcp.agentJar=<path to VitaminMCP.jar>");
-        return new MatrixRunner(work, agentJar, null, Path.of(System.getProperty("java.home")));
+        Path runnerJar = Path.of(System.getProperty("vitaminmcp.runnerJar", ""));
+        assertTrue(Files.exists(runnerJar),
+                "pass -Dvitaminmcp.runnerJar=<path to bot-runner-772.jar>");
+        return new MatrixRunner(
+                work, agentJar, runnerJar, null, Path.of(System.getProperty("java.home")));
     }
 
     @Test

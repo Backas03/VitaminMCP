@@ -1,4 +1,6 @@
-package moe.vitamin.minecraft.mcp.bot.core;
+package moe.vitamin.minecraft.mcp.bot.runner;
+
+import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -58,27 +60,7 @@ class BotConnectionLiveTest {
         assertNotEquals(BotIdentity.offlineUuid("Tester2"), identity.uuid());
     }
 
-    @Test
-    void thePoolCapsHowManyBotsCanExist() throws Exception {
-        try (BotPool pool = new BotPool(HOST, PORT, 1)) {
-            pool.spawn("Tester1", TIMEOUT);
 
-            IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                    () -> pool.spawn("Tester2", TIMEOUT));
-            assertTrue(thrown.getMessage().contains("Bot limit reached"));
-        }
-    }
-
-    @Test
-    void oneNameCanOnlyBeConnectedOnce() throws Exception {
-        // Two bots under one name share a derived UUID, and the server kicks the first as a
-        // duplicate login — which reads as an unrelated bot vanishing for no reason.
-        try (BotPool pool = new BotPool(HOST, PORT, 4)) {
-            pool.spawn("Tester1", TIMEOUT);
-
-            assertThrows(IllegalStateException.class, () -> pool.spawn("Tester1", TIMEOUT));
-        }
-    }
 
     @Test
     void aBotKnowsWhereItStands() throws Exception {

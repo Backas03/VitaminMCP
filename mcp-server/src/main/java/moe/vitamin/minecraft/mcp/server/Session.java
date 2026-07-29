@@ -1,6 +1,6 @@
 package moe.vitamin.minecraft.mcp.server;
 
-import moe.vitamin.minecraft.mcp.bot.core.BotPool;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioRunner;
 
@@ -16,20 +16,24 @@ final class Session {
     private final String host;
     private final int port;
     private final AgentClient agent;
-    private final BotPool bots;
+    private final BotRunner bots;
 
-    Session(String host, int port, int mcpPort, String token, int maxBots) {
+    Session(String host, int port, int mcpPort, String token, java.nio.file.Path runnerJar)
+            throws java.io.IOException {
         this.host = host;
         this.port = port;
         this.agent = new AgentClient(host, mcpPort, token);
-        this.bots = new BotPool(host, port, maxBots);
+        // Bots live in a child process built for the server's protocol version, so this JVM
+        // never links a protocol library (docs/design.md §4.2).
+        this.bots = BotRunner.launch(
+                runnerJar, java.nio.file.Path.of(System.getProperty("java.home")), host, port);
     }
 
     AgentClient agent() {
         return agent;
     }
 
-    BotPool bots() {
+    BotRunner bots() {
         return bots;
     }
 
@@ -38,7 +42,7 @@ final class Session {
     }
 
     String describe() {
-        return host + ":" + port + " (" + bots.size() + " bots)";
+        return host + ":" + port + " (" + bots.bots().size() + " bots)";
     }
 
     /**
@@ -49,6 +53,8 @@ final class Session {
      * a scenario that depends on world state has to establish it itself.
      */
     void reset() {
+        // Every bot goes, and with it the runner process — which is the cleanest possible
+        // reset, since nothing of the previous run's protocol state survives it.
         bots.close();
     }
 

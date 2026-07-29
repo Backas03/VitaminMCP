@@ -1,4 +1,7 @@
-package moe.vitamin.minecraft.mcp.bot.core;
+package moe.vitamin.minecraft.mcp.bot.runner;
+
+import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
+import moe.vitamin.minecraft.mcp.bot.core.ForwardingHandshake;
 
 import java.time.Duration;
 import org.cloudburstmc.math.vector.Vector3i;

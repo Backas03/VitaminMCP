@@ -3,44 +3,11 @@ plugins {
     id("vitaminmcp.module-rules")
 }
 
-
 dependencies {
     api(project(":contract"))
-
-    // One protocol version only; older servers are reached through ViaProxy in bot-via
-    // (docs/design.md §4). There is no 1.21.8 release because 1.21.7 and 1.21.8 share
-    // protocol 772 — 1.21.8 was a bugfix with no wire change — so this is the build that
-    // speaks to the supported floor.
-    implementation("org.geysermc.mcprotocollib:protocol:1.21.7-1")
-
-    // Disconnect reasons arrive as Adventure components. MCProtocolLib brings the gson
-    // serializer but not the plain-text one, and a kick reason has to become a String to be
-    // any use in an error message. Pinned to the Adventure version MCProtocolLib already uses.
-    implementation("net.kyori:adventure-text-serializer-plain:4.17.0")
 }
 
-// Deliberately not applying vitaminmcp.server-jvm-target: this module runs in our own JVM,
-// never inside a Minecraft server, so the floor's bytecode constraint does not apply to it.
-
-// Tests that need a live server are skipped unless asked for, so `./gradlew build` stays
-// self-contained:
-//   ./gradlew :bot-core:test -Dvitaminmcp.liveServer=true
-tasks.test {
-    listOf(
-        "vitaminmcp.liveServer",
-        "vitaminmcp.host",
-        "vitaminmcp.port",
-        "vitaminmcp.debugHandshake",
-        "vitaminmcp.token",
-        "vitaminmcp.mcpPort",
-        "vitaminmcp.repeat",
-    ).forEach { key ->
-        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
-    }
-
-    // Diagnostics from a live run are the whole point of these tests; swallowing them means
-    // debugging a protocol handshake through assertion messages alone.
-    testLogging {
-        showStandardStreams = true
-    }
-}
+// No protocol library here, deliberately. bot-core describes *what* a bot is asked to do and
+// speaks to a runner process that does it; the protocol library lives in the runner. That is
+// what lets one matrix run drive several protocol versions, and it means everything above this
+// module is free of MCProtocolLib entirely.

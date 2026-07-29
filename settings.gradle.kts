@@ -12,7 +12,7 @@ include(
     "agent-core",
     "agent-mcp",
     "bot-core",
-    "bot-via",
+    "bot-runner-772",
     "orchestrator",
     "testkit",
     "mcp-server",
@@ -21,4 +21,4 @@ include(
 project(":agent-core").projectDir = file("agent/agent-core")
 project(":agent-mcp").projectDir = file("agent/agent-mcp")
 project(":bot-core").projectDir = file("bot/bot-core")
-project(":bot-via").projectDir = file("bot/bot-via")
+project(":bot-runner-772").projectDir = file("bot/bot-runner-772")

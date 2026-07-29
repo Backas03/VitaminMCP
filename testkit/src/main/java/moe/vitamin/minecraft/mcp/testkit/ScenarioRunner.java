@@ -7,9 +7,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import moe.vitamin.minecraft.mcp.bot.core.BotActions;
-import moe.vitamin.minecraft.mcp.bot.core.BotPool;
-import moe.vitamin.minecraft.mcp.bot.core.BotSession;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 
 /**
  * Runs a declarative scenario against a server.
@@ -41,10 +39,10 @@ public final class ScenarioRunner {
     /** Long enough for a real condition, short enough that a wedged one fails the run. */
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(15);
 
-    private final BotPool bots;
+    private final BotRunner bots;
     private final AgentClient agent;
 
-    public ScenarioRunner(BotPool bots, AgentClient agent) {
+    public ScenarioRunner(BotRunner bots, AgentClient agent) {
         this.bots = bots;
         this.agent = agent;
     }
@@ -104,39 +102,43 @@ public final class ScenarioRunner {
             case "spawn" -> {
                 String name = required(step, "bot");
                 try {
-                    BotSession bot = bots.spawn(name, Duration.ofSeconds(30));
-                    bot.awaitGrounded(Duration.ofSeconds(15));
+                    BotRunner.BotHandle bot = bots.spawn(name);
                     yield ScenarioResult.StepResult.ok(index, action,
-                            name + " joined at " + bot.describePosition());
-                } catch (Exception e) {
-                    throw new IllegalStateException("could not spawn " + name + ": " + e.getMessage(), e);
+                            name + " joined at " + bot.x() + ", " + bot.y() + ", " + bot.z());
+                } catch (java.io.IOException e) {
+                    // The runner passes the server's own words through, so a protocol mismatch
+                    // reads as "Outdated client!" rather than as a timeout.
+                    throw new IllegalStateException(
+                            "could not spawn " + name + ": " + e.getMessage(), e);
                 }
             }
 
             case "despawn" -> {
-                bots.despawn(required(step, "bot"));
+                try {
+                    bots.despawn(required(step, "bot"));
+                } catch (java.io.IOException e) {
+                    throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+                }
                 yield ScenarioResult.StepResult.ok(index, action, "disconnected");
             }
 
             case "move_to" -> {
-                actionsFor(step).moveTo(
-                        step.path("x").asDouble(), step.path("y").asDouble(), step.path("z").asDouble());
+                act(step, bot -> bot.moveTo(step.path("x").asDouble(), step.path("y").asDouble(), step.path("z").asDouble()));
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
             case "break_block" -> {
-                actionsFor(step).breakBlock(
-                        step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt());
+                act(step, bot -> bot.breakBlock(step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt()));
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
             case "command" -> {
-                actionsFor(step).command(required(step, "command"));
+                act(step, bot -> bot.command(required(step, "command")));
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
             case "chat" -> {
-                actionsFor(step).chat(required(step, "message"));
+                act(step, bot -> bot.chat(required(step, "message")));
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
@@ -235,14 +237,23 @@ public final class ScenarioRunner {
         return arguments;
     }
 
-    private BotActions actionsFor(JsonNode step) {
+    /** Runs an action against a named bot, turning a runner failure into a step failure. */
+    private void act(JsonNode step, BotAction action) {
         String name = required(step, "bot");
-        BotSession bot = bots.get(name);
-        if (bot == null) {
+        if (!bots.bots().contains(name)) {
             throw new IllegalStateException(
                     "no bot named " + name + " — spawn it before acting with it");
         }
-        return bot.actions();
+        try {
+            action.perform(new BotRunner.BotHandle(bots, name, 0, 0, 0));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface BotAction {
+        void perform(BotRunner.BotHandle bot) throws java.io.IOException;
     }
 
     private static String required(JsonNode step, String field) {

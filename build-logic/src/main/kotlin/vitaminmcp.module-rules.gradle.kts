@@ -9,7 +9,8 @@ plugins {
 
 // Dependency direction, from CLAUDE.md ("의존은 한 방향으로만 흐른다") and docs/design.md §6:
 //
-//     mcp-server → testkit → {bot-core, bot-via, orchestrator, contract}
+//     mcp-server → testkit → {bot-core, orchestrator, contract}
+//     bot-runner-* → bot-core → contract
 //     agent-mcp  → agent-core → contract
 //
 // The whitelist is exhaustive — a module with no entry here fails the build, so adding a
@@ -21,10 +22,10 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":agent-core" to setOf(":contract"),
     ":agent-mcp" to setOf(":agent-core", ":contract"),
     ":bot-core" to setOf(":contract"),
-    ":bot-via" to setOf(":bot-core", ":contract"),
+    ":bot-runner-772" to setOf(":bot-core", ":contract"),
     ":orchestrator" to setOf(":contract"),
-    ":testkit" to setOf(":bot-core", ":bot-via", ":orchestrator", ":contract"),
-    ":mcp-server" to setOf(":testkit", ":bot-core", ":bot-via", ":orchestrator", ":contract"),
+    ":testkit" to setOf(":bot-core", ":orchestrator", ":contract"),
+    ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
 )
 
 // The invariant is about what a module may *compile* against, so runtime-only and test

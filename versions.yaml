@@ -1,18 +1,26 @@
 # Versions the matrix runs against.
 #
 # Adding one is a block here and nothing else (CLAUDE.md invariant 7). Every version is started
-# natively from a PaperMC build — there is no translation layer, so an entry does not have to
-# say how it is reached (docs/design.md §4).
+# natively from a PaperMC build (docs/design.md §15).
 #
-# The floor is 1.21.8; anything below it will not load the agent at all, and the build refuses
-# to produce one for an older floor (docs/design.md §5.4).
+# Each entry needs a bot runner that speaks its protocol. One JVM cannot speak two Minecraft
+# protocols — every MCProtocolLib build occupies the same package names — so runners are
+# separate processes, named for the protocol rather than the version because one runner covers
+# every version sharing it (docs/design.md §4.2).
+#
+# The floor is 1.21.8; anything below it will not load the agent at all (docs/design.md §5.4).
 
 versions:
   # The floor. Whatever else changes, this one must keep working.
   - id: "1.21.8"
     paper: { version: "1.21.8", build: 60 }
 
-  # Latest published. Pinned to no build on purpose: this entry exists to notice when a new
-  # Paper build breaks something, which a pin would hide.
-  - id: "1.21.11"
-    paper: { version: "1.21.11" }
+  # Shares protocol 772 with 1.21.8, so the same runner drives it. Present to prove that a
+  # protocol-named runner really does span versions — if it did not, this entry would fail
+  # while the one above passed, and the naming would be a lie.
+  - id: "1.21.7"
+    paper: { version: "1.21.7" }
+
+# Not listed: 1.21.9 and later changed protocol and need a sibling runner module
+# (bot-runner-<protocol>) built against the matching MCProtocolLib release. Adding one without
+# it produces "Outdated client!" from the server — an honest failure, but a failure.

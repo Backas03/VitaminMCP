@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import moe.vitamin.minecraft.mcp.bot.core.BotPool;
-import moe.vitamin.minecraft.mcp.bot.core.BotSession;
+import java.nio.file.Path;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -31,11 +31,22 @@ class ScenarioRunnerLiveTest {
             Integer.getInteger("vitaminmcp.mcpPort", 25585),
             System.getProperty("vitaminmcp.token", ""));
 
-    private final BotPool bots = new BotPool(HOST, PORT, 4);
+    private BotRunner bots;
+
+    @org.junit.jupiter.api.BeforeEach
+    void launchRunner() throws Exception {
+        // The runner built for this server's protocol. Bots live in a child process, so this
+        // JVM never links MCProtocolLib at all.
+        bots = BotRunner.launch(
+                Path.of(System.getProperty("vitaminmcp.runnerJar", "")),
+                Path.of(System.getProperty("java.home")), HOST, PORT);
+    }
 
     @AfterEach
     void disconnectBots() {
-        bots.close();
+        if (bots != null) {
+            bots.close();
+        }
     }
 
     private ScenarioResult run(String scenario) {
@@ -47,8 +58,7 @@ class ScenarioRunnerLiveTest {
         // Coordinates are not known until the bot has landed, so the scenario is built around
         // where it actually is. A scenario with hard-coded coordinates would be testing the
         // world rather than the plugin.
-        BotSession scout = bots.spawn("Tester1", java.time.Duration.ofSeconds(30));
-        scout.awaitGrounded(java.time.Duration.ofSeconds(15));
+        BotRunner.BotHandle scout = bots.spawn("Tester1");
         int x = scout.blockX();
         int y = scout.blockY() - 1;
         int z = scout.blockZ();

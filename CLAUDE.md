@@ -14,7 +14,11 @@
     *서버가 무엇을 로드할 수 있는지*다. 하한을 내리거나 툴체인을 올릴 때 여기가 안전장치다
     (design.md §5.1)
   - 나머지 모듈은 우리 JVM에서 도므로 이 제약과 무관하다
-- 봇: MCProtocolLib. **ViaProxy는 쓰지 않는다** — 하한이 1.21.8이라 번역할 구간이 거의 없다 (design.md §4)
+- 봇: MCProtocolLib. **ViaProxy는 쓰지 않는다** (design.md §4)
+  - 봇은 **자식 프로세스**(`bot-runner-<프로토콜>`)에서 돈다. 한 JVM은 두 프로토콜을 말할 수 없다 —
+    MCProtocolLib 빌드마다 패키지명이 같아 한 클래스패스에 못 올린다
+  - 러너 이름은 MC 버전이 아니라 **프로토콜 번호**다. 772 하나가 1.21.7과 1.21.8을 덮는다
+  - `testkit` 이상은 프로토콜 라이브러리를 컴파일 의존하지 않는다
 - MCP: 직접 구현. agent는 HTTP(JDK HttpServer), mcp-server는 stdio.
   MCP Java SDK를 쓰지 않은 이유는 mcp-server 커밋 참조
 - 서버 기동: **네이티브** — PaperMC API에서 jar를 받아 직접 실행 (design.md §15.1)
@@ -29,7 +33,7 @@ agent/
   agent-mcp/         MCP 서버 (JDK HttpServer)
 bot/
   bot-core/          MCProtocolLib 래퍼, 포워딩 핸드셰이크 주입
-  bot-via/           (비어 있음 — Via 폐기, design.md §4)
+  bot-runner-772/    프로토콜 772(1.21.7/1.21.8) 봇 러너. 자식 프로세스로 실행
 orchestrator/        네이티브 서버 기동/월드 리셋/버전 매트릭스
 testkit/             시나리오 실행기, wait_for, assertion
 mcp-server/          툴 노출 + 조립 (엔트리포인트)
@@ -38,7 +42,8 @@ mcp-server/          툴 노출 + 조립 (엔트리포인트)
 의존은 **한 방향으로만** 흐른다:
 
 ```
-mcp-server → testkit → {bot-core, bot-via, orchestrator, contract}
+mcp-server → testkit → {bot-core, orchestrator, contract}
+bot-runner-* → bot-core → contract
 agent-mcp  → agent-core → contract
 ```
 
