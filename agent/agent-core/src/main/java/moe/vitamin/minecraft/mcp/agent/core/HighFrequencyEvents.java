@@ -31,7 +31,16 @@ import java.util.Set;
  */
 public final class HighFrequencyEvents {
 
+    /**
+     * Measured against Paper 1.20.4, idle, zero players: 16,067 events in 72 seconds (~223/s)
+     * before this list was widened. At that rate the default 131k buffer laps in roughly ten
+     * minutes with nobody even playing. Counts below are from that run.
+     */
     private static final Set<String> DEFAULT_EXCLUDED = Set.of(
+            // Ticking — fires 20x/second each, by definition. 2,604 in 72s.
+            "ServerTickStartEvent",
+            "ServerTickEndEvent",
+
             // Movement — per-player, every tick.
             "PlayerMoveEvent",
             "EntityMoveEvent",
@@ -39,18 +48,37 @@ public final class HighFrequencyEvents {
             "VehicleUpdateEvent",
             "PlayerChangedMainHandEvent",
 
-            // Block physics — thousands per tick during redstone or water flow.
+            // Block physics and fluid flow. BlockFromToEvent alone was 8,720 in 72s (~121/s) on
+            // an untouched world — over half of all captured events.
             "BlockPhysicsEvent",
             "BlockCanBuildEvent",
+            "BlockFromToEvent",
+            "FluidLevelChangeEvent",
+            "BlockFormEvent",
 
-            // Chunk streaming — bursts on every player move across a chunk border.
+            // Paper's catch-all game event bridge. 1,752 in 72s.
+            "GenericGameEvent",
+
+            // Chunk and entity streaming — bursts whenever anything moves across a chunk border,
+            // and during world generation. 1,350 in 72s between the two.
             "ChunkLoadEvent",
             "ChunkUnloadEvent",
+            "ChunkPopulateEvent",
+            "EntitiesLoadEvent",
+            "EntitiesUnloadEvent",
+            "EntityAddToWorldEvent",
+            "EntityRemoveFromWorldEvent",
+            "AsyncStructureGenerateEvent",
+            "AsyncStructureSpawnEvent",
 
-            // Per-tick entity bookkeeping.
+            // Per-tick, per-entity bookkeeping.
             "EntityAirChangeEvent",
             "FoodLevelChangeEvent",
-            "ItemDespawnEvent");
+            "ItemDespawnEvent",
+            "EntityPathfindEvent",
+            "EntityInsideBlockEvent",
+            "EntityJumpEvent",
+            "StriderTemperatureChangeEvent");
 
     private final Set<String> excluded;
 

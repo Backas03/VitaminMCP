@@ -21,6 +21,19 @@ class HighFrequencyEventsTest {
     }
 
     @Test
+    void excludesTheTypesThatActuallyDominatedAnIdleServer() {
+        HighFrequencyEvents events = HighFrequencyEvents.defaults();
+
+        // Measured on Paper 1.20.4 with nobody online: these four accounted for roughly
+        // 14,000 of 16,067 events in 72 seconds. The design's examples did not name them, and
+        // leaving them in lapped the buffer on an idle server.
+        assertTrue(events.contains("BlockFromToEvent"));
+        assertTrue(events.contains("ServerTickStartEvent"));
+        assertTrue(events.contains("ServerTickEndEvent"));
+        assertTrue(events.contains("GenericGameEvent"));
+    }
+
+    @Test
     void leavesOrdinaryEventsAlone() {
         HighFrequencyEvents events = HighFrequencyEvents.defaults();
 
