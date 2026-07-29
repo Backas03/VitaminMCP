@@ -1,0 +1,228 @@
+package moe.vitamin.minecraft.mcp.server;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.time.Duration;
+import java.util.List;
+import moe.vitamin.minecraft.mcp.bot.core.BotSession;
+import moe.vitamin.minecraft.mcp.testkit.AgentClient;
+import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
+
+/**
+ * The tools this server exposes, and nothing else.
+ *
+ * <p>Deliberately thin (docs/roadmap.md Stage 4): everything here forwards to testkit, bot-core
+ * or the agent. A behaviour implemented at this layer would be one that scenarios written
+ * against testkit directly could not use, and one with nowhere to be tested without starting an
+ * MCP server.
+ *
+ * <p>The agent's own tools are proxied rather than reimplemented. That keeps one definition of
+ * what {@code events_query} means, and it is what lets a matrix of servers be exposed later by
+ * prefixing names rather than by writing a second set of tools.
+ */
+final class SessionTools {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /** Agent tools passed straight through, in the order a caller usually needs them. */
+    private static final List<String> PROXIED = List.of(
+            "server_info", "events_summary", "events_query", "logs_query",
+            "exceptions_recent", "state_query", "wait_for", "command_exec");
+
+    private Session session;
+
+    ArrayNode listTools() {
+        ArrayNode tools = MAPPER.createArrayNode();
+
+        tools.add(tool("session_start",
+                "Connect to a Minecraft server and its VitaminMCP agent. Call this first — "
+                        + "every other tool needs it.",
+                properties -> {
+                    string(properties, "host", "Server host. Defaults to 127.0.0.1.");
+                    number(properties, "port", "Minecraft port. Defaults to 25565.");
+                    number(properties, "mcpPort", "Agent's MCP port. Defaults to 25585.");
+                    string(properties, "token", "The agent's auth-token from its config.yml.");
+                    number(properties, "maxBots", "Bot limit for this session. Defaults to 10.");
+                }));
+
+        tools.add(tool("session_reset",
+                "Disconnect every bot, keeping the connection. Use between independent tests so "
+                        + "one does not inherit the other's players.",
+                properties -> {}));
+
+        tools.add(tool("bot_spawn",
+                "Connect a bot and wait until it is standing in the world. Its UUID is derived "
+                        + "from its name, so the same name is the same player every run and "
+                        + "permission-dependent behaviour is reproducible.",
+                properties -> string(properties, "name", "Bot name, at most 16 characters.")));
+
+        tools.add(tool("bot_run_scenario",
+                "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
+                        + "command, chat, console, wait_for, assert_block, assert_player, "
+                        + "assert_event. There is no sleep step — use wait_for and name what "
+                        + "you are waiting for. On failure the response says which step failed, "
+                        + "why, and what the server was doing at that moment.",
+                properties -> string(properties, "scenario",
+                        "JSON array of steps, e.g. "
+                                + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]")));
+
+        // Proxied verbatim: one definition of each tool, living where it is implemented.
+        for (String name : PROXIED) {
+            tools.add(tool(name,
+                    "Forwarded to the agent on the connected server. Call session_start first.",
+                    properties -> string(properties, "arguments",
+                            "Passed through unchanged; see the agent's own schema.")));
+        }
+        return tools;
+    }
+
+    JsonNode call(String name, JsonNode arguments) {
+        JsonNode args = arguments == null || arguments.isNull() ? MAPPER.createObjectNode() : arguments;
+
+        return switch (name) {
+            case "session_start" -> sessionStart(args);
+            case "session_reset" -> sessionReset();
+            case "bot_spawn" -> botSpawn(args);
+            case "bot_run_scenario" -> runScenario(args);
+            default -> {
+                if (PROXIED.contains(name)) {
+                    yield require().agent().call(name, (ObjectNode) args);
+                }
+                throw new IllegalArgumentException("Unknown tool: " + name);
+            }
+        };
+    }
+
+    private JsonNode sessionStart(JsonNode args) {
+        if (session != null) {
+            session.close();
+        }
+        String token = args.path("token").asText("");
+        if (token.isBlank()) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'token' — the agent refuses unauthenticated requests. "
+                            + "It is the auth-token in the agent's config.yml.");
+        }
+
+        session = new Session(
+                args.path("host").asText("127.0.0.1"),
+                args.path("port").asInt(25565),
+                args.path("mcpPort").asInt(25585),
+                token,
+                args.path("maxBots").asInt(10));
+
+        // Called immediately so a bad host, port or token fails here with a clear message
+        // rather than later inside an unrelated tool.
+        JsonNode info = session.agent().call("server_info", AgentClient.arguments());
+
+        ObjectNode result = MAPPER.createObjectNode();
+        result.put("connected", session.describe());
+        result.set("server", info);
+        return result;
+    }
+
+    private JsonNode sessionReset() {
+        require().reset();
+        ObjectNode result = MAPPER.createObjectNode();
+        result.put("reset", true);
+        result.put("session", session.describe());
+        return result;
+    }
+
+    private JsonNode botSpawn(JsonNode args) {
+        String name = args.path("name").asText("");
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("bot_spawn needs 'name'.");
+        }
+        try {
+            BotSession bot = require().bots().spawn(name, Duration.ofSeconds(30));
+            bot.awaitGrounded(Duration.ofSeconds(15));
+
+            ObjectNode result = MAPPER.createObjectNode();
+            result.put("name", name);
+            result.put("uuid", bot.identity().uuid().toString());
+            result.put("x", bot.blockX());
+            result.put("y", bot.blockY());
+            result.put("z", bot.blockZ());
+            return result;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted spawning " + name, e);
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    private JsonNode runScenario(JsonNode args) {
+        String scenario = args.path("scenario").isTextual()
+                ? args.path("scenario").asText()
+                : args.path("scenario").toString();
+        if (scenario.isBlank() || "null".equals(scenario)) {
+            throw new IllegalArgumentException("bot_run_scenario needs 'scenario'.");
+        }
+
+        ScenarioResult result = require().runner().run(scenario);
+
+        ObjectNode response = MAPPER.createObjectNode();
+        response.put("passed", result.passed());
+        response.put("summary", result.describe());
+
+        ArrayNode steps = response.putArray("steps");
+        for (ScenarioResult.StepResult step : result.steps()) {
+            ObjectNode entry = steps.addObject();
+            entry.put("step", step.index());
+            entry.put("action", step.action());
+            entry.put("passed", step.passed());
+            entry.put("detail", step.detail());
+            if (!step.evidence().isEmpty()) {
+                // Attached here rather than left for a follow-up call: the DoD is that a
+                // failure arrives with what is needed to understand it, and a second round trip
+                // reaches a server whose state has already moved on.
+                entry.put("evidence", step.evidence());
+            }
+        }
+        return response;
+    }
+
+    private Session require() {
+        if (session == null) {
+            throw new IllegalStateException("No session. Call session_start first.");
+        }
+        return session;
+    }
+
+    void close() {
+        if (session != null) {
+            session.close();
+            session = null;
+        }
+    }
+
+    // ---------------------------------------------------------------- schema
+
+    private static ObjectNode tool(
+            String name, String description, java.util.function.Consumer<ObjectNode> properties) {
+        ObjectNode tool = MAPPER.createObjectNode();
+        tool.put("name", name);
+        tool.put("description", description);
+        ObjectNode schema = tool.putObject("inputSchema");
+        schema.put("type", "object");
+        properties.accept(schema.putObject("properties"));
+        schema.set("required", MAPPER.createArrayNode());
+        return tool;
+    }
+
+    private static void string(ObjectNode properties, String name, String description) {
+        ObjectNode property = properties.putObject(name);
+        property.put("type", "string");
+        property.put("description", description);
+    }
+
+    private static void number(ObjectNode properties, String name, String description) {
+        ObjectNode property = properties.putObject(name);
+        property.put("type", "integer");
+        property.put("description", description);
+    }
+}
