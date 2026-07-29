@@ -1,0 +1,151 @@
+package moe.vitamin.minecraft.mcp.orchestrator;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.HexFormat;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Fetches Paper server jars.
+ *
+ * <p>Against {@code fill.papermc.io/v3}. The older {@code api.papermc.io/v2} is sunset and now
+ * answers every request with an error, and {@code api.papermc.io/v3} sits behind bot protection
+ * that refuses non-browser clients — both of which are easy to write against by habit and only
+ * discover at runtime.
+ *
+ * <p>Jars are cached by version and build, because a matrix run starts the same versions
+ * repeatedly and a 50MB download each time would dominate everything else.
+ *
+ * <p>Parsed with regular expressions rather than a JSON library. orchestrator has no other
+ * reason to carry one, and what is needed here is three fields from a known shape. That is a
+ * judgement about these three fields, not a general licence.
+ */
+public final class PaperDownloader {
+
+    private static final String API = "https://fill.papermc.io/v3/projects/paper";
+
+    /** Identifies this client, which the API asks for and its bot protection acts on. */
+    private static final String USER_AGENT = "VitaminMCP/1.0 (minecraft plugin test harness)";
+
+    /** First build entry in the list, which the API returns newest first. */
+    private static final Pattern FIRST_BUILD = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
+
+    private static final Pattern DEFAULT_DOWNLOAD = Pattern.compile(
+            "\"server:default\"\\s*:\\s*\\{.*?\"sha256\"\\s*:\\s*\"([0-9a-f]+)\".*?\"url\"\\s*:\\s*\"([^\"]+)\"",
+            Pattern.DOTALL);
+
+    private final HttpClient http = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+
+    private final Path cacheDirectory;
+
+    public PaperDownloader(Path cacheDirectory) {
+        this.cacheDirectory = cacheDirectory;
+    }
+
+    /**
+     * Returns a Paper jar for {@code version}, downloading it if it is not already cached.
+     *
+     * @param build the build to fetch, or {@code 0} for the latest
+     */
+    public Path fetch(String version, int build) throws IOException, InterruptedException {
+        String listing = get(API + "/versions/" + version + "/builds");
+
+        int resolved = build > 0 ? build : firstBuild(listing, version);
+        Path jar = cacheDirectory.resolve("paper-" + version + "-" + resolved + ".jar");
+        if (Files.exists(jar) && Files.size(jar) > 1_000_000) {
+            return jar;
+        }
+
+        String buildDetail = build > 0
+                ? get(API + "/versions/" + version + "/builds/" + resolved)
+                : listing;
+        Matcher download = DEFAULT_DOWNLOAD.matcher(buildDetail);
+        if (!download.find()) {
+            throw new IOException("Paper " + version + " build " + resolved
+                    + " lists no server:default download");
+        }
+        String expectedSha = download.group(1);
+        String url = download.group(2);
+
+        Files.createDirectories(cacheDirectory);
+
+        // Downloaded beside the target and moved into place, so an interrupted run cannot leave
+        // a truncated jar that looks cached and then fails to start with something unrelated.
+        Path partial = Files.createTempFile(cacheDirectory, "paper-", ".part");
+        HttpResponse<Path> response = http.send(
+                request(url).timeout(Duration.ofMinutes(10)).GET().build(),
+                HttpResponse.BodyHandlers.ofFile(partial));
+
+        if (response.statusCode() != 200) {
+            Files.deleteIfExists(partial);
+            throw new IOException("Paper " + version + " build " + resolved
+                    + " could not be downloaded (HTTP " + response.statusCode() + ")");
+        }
+
+        // Checked because the API publishes it and a corrupt jar otherwise surfaces much later
+        // as a server that will not start, for reasons that look nothing like a bad download.
+        String actualSha = sha256(partial);
+        if (!expectedSha.equalsIgnoreCase(actualSha)) {
+            Files.deleteIfExists(partial);
+            throw new IOException("Downloaded Paper " + version + " build " + resolved
+                    + " does not match its published checksum");
+        }
+
+        Files.move(partial, jar, StandardCopyOption.REPLACE_EXISTING);
+        return jar;
+    }
+
+    private static int firstBuild(String listing, String version) throws IOException {
+        Matcher build = FIRST_BUILD.matcher(listing);
+        if (!build.find()) {
+            throw new IOException("No builds listed for Paper " + version
+                    + ". Is that a version PaperMC publishes?");
+        }
+        return Integer.parseInt(build.group(1));
+    }
+
+    private String get(String url) throws IOException, InterruptedException {
+        HttpResponse<String> response = http.send(
+                request(url).timeout(Duration.ofSeconds(30)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IOException("PaperMC API returned HTTP " + response.statusCode()
+                    + " for " + url);
+        }
+        return response.body();
+    }
+
+    private static HttpRequest.Builder request(String url) {
+        return HttpRequest.newBuilder(URI.create(url))
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json");
+    }
+
+    private static String sha256(Path file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(file)) {
+                byte[] buffer = new byte[1 << 16];
+                int read;
+                while ((read = input.read(buffer)) > 0) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+}

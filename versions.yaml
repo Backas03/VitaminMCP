@@ -1,0 +1,18 @@
+# Versions the matrix runs against.
+#
+# Adding one is a block here and nothing else (CLAUDE.md invariant 7). Every version is started
+# natively from a PaperMC build — there is no translation layer, so an entry does not have to
+# say how it is reached (docs/design.md §4).
+#
+# The floor is 1.21.8; anything below it will not load the agent at all, and the build refuses
+# to produce one for an older floor (docs/design.md §5.4).
+
+versions:
+  # The floor. Whatever else changes, this one must keep working.
+  - id: "1.21.8"
+    paper: { version: "1.21.8", build: 60 }
+
+  # Latest published. Pinned to no build on purpose: this entry exists to notice when a new
+  # Paper build breaks something, which a pin would hide.
+  - id: "1.21.11"
+    paper: { version: "1.21.11" }

@@ -14,9 +14,10 @@
     *서버가 무엇을 로드할 수 있는지*다. 하한을 내리거나 툴체인을 올릴 때 여기가 안전장치다
     (design.md §5.1)
   - 나머지 모듈은 우리 JVM에서 도므로 이 제약과 무관하다
-- 봇: MCProtocolLib (단일 프로토콜 버전) + ViaProxy 임베드로 버전 번역
-- MCP: MCP Java SDK (`io.modelcontextprotocol`), streamable HTTP 전송
-- 서버 기동: Docker (`itzg/minecraft-server`)
+- 봇: MCProtocolLib. **ViaProxy는 쓰지 않는다** — 하한이 1.21.8이라 번역할 구간이 거의 없다 (design.md §4)
+- MCP: 직접 구현. agent는 HTTP(JDK HttpServer), mcp-server는 stdio.
+  MCP Java SDK를 쓰지 않은 이유는 mcp-server 커밋 참조
+- 서버 기동: **네이티브** — PaperMC API에서 jar를 받아 직접 실행 (design.md §15.1)
 
 ## 모듈 구조와 의존 방향
 
@@ -28,8 +29,8 @@ agent/
   agent-mcp/         MCP 서버 (JDK HttpServer)
 bot/
   bot-core/          MCProtocolLib 래퍼, 포워딩 핸드셰이크 주입
-  bot-via/           ViaProxy 임베드, 프로토콜 브리지
-orchestrator/        Docker 서버 기동/월드 리셋/버전 매트릭스
+  bot-via/           (비어 있음 — Via 폐기, design.md §4)
+orchestrator/        네이티브 서버 기동/월드 리셋/버전 매트릭스
 testkit/             시나리오 실행기, wait_for, assertion
 mcp-server/          툴 노출 + 조립 (엔트리포인트)
 ```
@@ -86,5 +87,5 @@ agent-mcp  → agent-core → contract
 ## 작업 시 주의
 
 - 새 모듈 추가나 의존 방향 변경은 임의로 하지 말고 먼저 제안할 것
-- `versions.yaml`에 버전을 추가할 때 네이티브 검증 대상인지 Via 경유인지 반드시 명시
-- Via 번역은 무손실이 아니다. 특정 버전 버그를 다룰 때 Via가 원인일 가능성을 항상 후보에 둘 것
+- `versions.yaml`에 버전을 추가하면 그 버전으로 실제 기동해 확인할 것. 전 버전이 네이티브다
+- 버전별로 갈리는 코드는 실제로 갈릴 때 만든다. 미리 추상화하지 말 것 (design.md §4.2)
