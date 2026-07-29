@@ -34,12 +34,25 @@ class HighFrequencyEventsTest {
     }
 
     @Test
+    void excludesTheTypesThatOnlyAppearWhenSomeoneIsPlaying() {
+        HighFrequencyEvents events = HighFrequencyEvents.defaults();
+
+        // An idle server never shows these, so they survived the first pass. One player for
+        // nine seconds produced 9,694 events, 8,710 of them PreCreatureSpawnEvent alone.
+        assertTrue(events.contains("PreCreatureSpawnEvent"));
+        assertTrue(events.contains("PlayerChunkLoadEvent"));
+        assertTrue(events.contains("PlayerArmSwingEvent"));
+    }
+
+    @Test
     void leavesOrdinaryEventsAlone() {
         HighFrequencyEvents events = HighFrequencyEvents.defaults();
 
         assertFalse(events.contains("PlayerJoinEvent"));
         assertFalse(events.contains("BlockBreakEvent"));
         assertFalse(events.contains("AsyncPlayerChatEvent"));
+        // The pre-spawn check is excluded; what actually spawned is not.
+        assertFalse(events.contains("CreatureSpawnEvent"));
     }
 
     @Test

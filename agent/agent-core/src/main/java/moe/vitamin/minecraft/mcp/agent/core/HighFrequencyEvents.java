@@ -78,7 +78,22 @@ public final class HighFrequencyEvents {
             "EntityPathfindEvent",
             "EntityInsideBlockEvent",
             "EntityJumpEvent",
-            "StriderTemperatureChangeEvent");
+            "EntityPoseChangeEvent",
+            "EntityExhaustionEvent",
+            "StriderTemperatureChangeEvent",
+
+            // Only appear once a player is online, which is why an idle server does not reveal
+            // them. Measured over a ~9 second session with one player: 9,694 events, of which
+            // PreCreatureSpawnEvent alone was 8,710 — it fires for every spawn *attempt*, not
+            // every spawn. CreatureSpawnEvent, which reports what actually spawned, is kept.
+            "PreCreatureSpawnEvent",
+            "PlayerNaturallySpawnCreaturesEvent",
+            "PlayerChunkLoadEvent",
+            "PlayerChunkUnloadEvent",
+            "PlayerTrackEntityEvent",
+            "PlayerUntrackEntityEvent",
+            "PlayerArmSwingEvent",
+            "BlockBreakProgressUpdateEvent");
 
     private final Set<String> excluded;
 
