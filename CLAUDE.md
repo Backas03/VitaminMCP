@@ -8,10 +8,12 @@
 ## 기술 스택
 
 - Java 21, Gradle (Kotlin DSL), 멀티모듈 모노레포
-- 서버 플러그인: Paper API **1.18+** (하한 확정, 변경 시 design.md 갱신 필요)
-  - `agent-*`와 `contract`는 **`--release 17`** 로 컴파일한다. 1.18~1.20.4 서버가 Java 17에서
-    돌기 때문이고, 이걸 어기면 플러그인이 아예 로드되지 않는다 (design.md §5.1)
-  - 나머지 모듈은 우리 JVM에서 도므로 Java 21 그대로
+- 서버 플러그인: Paper API **1.21.8+** (하한 확정, 변경 시 design.md 갱신 필요)
+  - `agent-*`와 `contract`는 `vitaminmcp.server-jvm-target`으로 **`--release 21`** 을 명시한다.
+    지금은 툴체인과 같은 값이지만 **의미가 다르다** — 툴체인은 무엇으로 컴파일하는지, 이쪽은
+    *서버가 무엇을 로드할 수 있는지*다. 하한을 내리거나 툴체인을 올릴 때 여기가 안전장치다
+    (design.md §5.1)
+  - 나머지 모듈은 우리 JVM에서 도므로 이 제약과 무관하다
 - 봇: MCProtocolLib (단일 프로토콜 버전) + ViaProxy 임베드로 버전 번역
 - MCP: MCP Java SDK (`io.modelcontextprotocol`), streamable HTTP 전송
 - 서버 기동: Docker (`itzg/minecraft-server`)

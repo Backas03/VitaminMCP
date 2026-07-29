@@ -171,7 +171,7 @@ public final class CaptureService implements AgentQueries {
         for (Plugin installed : plugin.getServer().getPluginManager().getPlugins()) {
             plugins.add(new ServerInfo.PluginInfo(
                     installed.getName(),
-                    installed.getDescription().getVersion(),
+                    installed.getPluginMeta().getVersion(),
                     installed.isEnabled()));
         }
 

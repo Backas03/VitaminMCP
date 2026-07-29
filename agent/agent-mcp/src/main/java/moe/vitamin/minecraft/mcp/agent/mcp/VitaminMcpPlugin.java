@@ -57,7 +57,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
         AgentTools tools = new AgentTools(
                 capture, mapper, ResponseBudget.DEFAULT, settings.readOnly());
         mcpServer = new McpHttpServer(
-                settings, tools, mapper, getLogger(), getDescription().getVersion());
+                settings, tools, mapper, getLogger(), getPluginMeta().getVersion());
 
         try {
             mcpServer.start();

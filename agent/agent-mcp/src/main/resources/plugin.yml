@@ -3,7 +3,6 @@ version: '${version}'
 main: moe.vitamin.minecraft.mcp.agent.mcp.VitaminMcpPlugin
 description: Exposes server events, logs and exceptions over MCP.
 website: https://github.com/
-# The supported floor (docs/design.md §5). Set by the oldest JVM this plugin can be compiled
-# for, not by the API: 1.18 is the earliest Minecraft that runs on Java 17.
-api-version: '1.18'
+# The supported floor (docs/design.md §5).
+api-version: '1.21'
 load: STARTUP

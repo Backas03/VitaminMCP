@@ -19,10 +19,10 @@ dependencies {
     // a handful of endpoints that answer one JSON-RPC method each (docs/design.md §7).
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
 
-    compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
     compileOnly("org.jetbrains:annotations:24.1.0")
 
-    testImplementation("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
 }
 
 // The shipped plugin jar. Named without the version so server operators can drop in a
