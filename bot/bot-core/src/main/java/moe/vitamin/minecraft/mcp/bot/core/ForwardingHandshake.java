@@ -45,10 +45,17 @@ public final class ForwardingHandshake {
             throw new IllegalArgumentException("host and clientIp must not contain a NUL separator");
         }
 
-        return host
+        String field = host
                 + SEPARATOR + clientIp
-                + SEPARATOR + identity.undashedUuid()
-                + SEPARATOR + identity.propertiesJson();
+                + SEPARATOR + identity.undashedUuid();
+
+        // BungeeCord appends the properties field only when there are properties, and the
+        // backend accepts either three or four. Sending an empty array where the real proxy
+        // sends nothing is a gratuitous difference from the thing being imitated.
+        if (!identity.propertiesJson().equals("[]")) {
+            field += SEPARATOR + identity.propertiesJson();
+        }
+        return field;
     }
 
     /**

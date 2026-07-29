@@ -48,6 +48,24 @@ public final class EventCapture implements Listener {
     public static final List<String> DEFAULT_SCAN_PACKAGES =
             List.of("org.bukkit.event", "io.papermc.paper.event", "com.destroystokyo.paper.event");
 
+    /**
+     * Events that change how the server behaves merely by having a listener registered.
+     *
+     * <p>Distinct from {@link HighFrequencyEvents}, and not configurable, because the reason is
+     * different: those are excluded to protect the buffer, these are excluded because capturing
+     * them breaks the server. An observer that alters what it observes is not an observer.
+     *
+     * <p>{@code PlayerHandshakeEvent} is the known case. Paper fires it only when something is
+     * listening, and takes that as a promise that the plugin will parse the handshake itself —
+     * it then reads the identity out of the event's fields. A MONITOR listener that only
+     * records and returns leaves those fields unset, so Paper rejects every proxy-forwarded
+     * login with "Unknown data in login hostname".
+     *
+     * <p>Found the hard way: bots could not connect at all until the agent was removed from the
+     * server, at which point they connected immediately.
+     */
+    private static final Set<String> NEVER_REGISTER = Set.of("PlayerHandshakeEvent");
+
     private final Plugin plugin;
     private final SequencedRingBuffer<EventRecord> buffer;
     private final HighFrequencyEvents highFrequency;
@@ -91,6 +109,11 @@ public final class EventCapture implements Listener {
         int registered = 0;
         for (Class<? extends Event> eventClass : eventClasses) {
             String simpleName = eventClass.getSimpleName();
+            // Checked before the high-frequency list and not gated on any setting: there is no
+            // configuration under which observing these is acceptable.
+            if (NEVER_REGISTER.contains(simpleName)) {
+                continue;
+            }
             if (!captureHighFrequency && highFrequency.contains(simpleName)) {
                 continue;
             }

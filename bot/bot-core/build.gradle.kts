@@ -21,7 +21,32 @@ dependencies {
     // protocol 772 — 1.21.8 was a bugfix with no wire change — so this is the build that
     // speaks to the supported floor.
     implementation("org.geysermc.mcprotocollib:protocol:1.21.7-1")
+
+    // Disconnect reasons arrive as Adventure components. MCProtocolLib brings the gson
+    // serializer but not the plain-text one, and a kick reason has to become a String to be
+    // any use in an error message. Pinned to the Adventure version MCProtocolLib already uses.
+    implementation("net.kyori:adventure-text-serializer-plain:4.17.0")
 }
 
 // Deliberately not applying vitaminmcp.server-jvm-target: this module runs in our own JVM,
 // never inside a Minecraft server, so the floor's bytecode constraint does not apply to it.
+
+// Tests that need a live server are skipped unless asked for, so `./gradlew build` stays
+// self-contained:
+//   ./gradlew :bot-core:test -Dvitaminmcp.liveServer=true
+tasks.test {
+    listOf(
+        "vitaminmcp.liveServer",
+        "vitaminmcp.host",
+        "vitaminmcp.port",
+        "vitaminmcp.debugHandshake",
+    ).forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+
+    // Diagnostics from a live run are the whole point of these tests; swallowing them means
+    // debugging a protocol handshake through assertion messages alone.
+    testLogging {
+        showStandardStreams = true
+    }
+}

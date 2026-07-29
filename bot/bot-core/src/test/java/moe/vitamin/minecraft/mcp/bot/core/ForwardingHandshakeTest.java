@@ -28,11 +28,12 @@ class ForwardingHandshakeTest {
         // the backend will split out, not how this class concatenated it.
         String[] parts = ForwardingHandshake.parse(field);
 
-        assertEquals(4, parts.length);
+        // Three, not four: a bot with no skin sends what BungeeCord sends, which omits the
+        // properties field entirely rather than sending an empty array.
+        assertEquals(3, parts.length);
         assertEquals("mc.example.com", parts[0]);
         assertEquals("203.0.113.7", parts[1]);
         assertEquals("069a79f444e94726a5befca90e38aaf5", parts[2]);
-        assertEquals("[]", parts[3]);
     }
 
     @Test
@@ -54,6 +55,7 @@ class ForwardingHandshakeTest {
         String[] parts = ForwardingHandshake.parse(
                 ForwardingHandshake.addressField("localhost", "127.0.0.1", skinned));
 
+        assertEquals(4, parts.length);
         assertEquals(textures, parts[3]);
     }
 
