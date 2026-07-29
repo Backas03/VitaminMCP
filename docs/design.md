@@ -100,17 +100,55 @@ Via 번역은 무손실이 아니다. 구버전 고유의 패킷 레벨 버그�
 
 ---
 
-## 5. 지원 버전 하한: 1.13+ (확정)
+## 5. 지원 버전 하한: 1.18+ (확정, 2026-07-29 개정)
 
-1.13 flattening이 진짜 경계선이다. `Material` enum과 `ItemStack` data 처리가 그 전후로 완전히 갈린다.
+> **개정 이력.** 원래 하한은 1.13이었다. flattening(`Material` enum과 `ItemStack` data 처리)이
+> 진짜 경계선이라는 판단이었고, 그 자체는 지금도 맞다. 그러나 **JVM 제약이 먼저 물린다는 것을
+> 실기동에서 확인했다.** 아래 §5.1 참조.
 
-**1.13+로 끊는다.** 결과:
+### 5.1 왜 1.13이 아니라 1.18인가
+
+플러그인 jar는 서버가 고른 JVM에 로드된다. 마인크래프트 버전별 요구 JVM:
+
+| 서버 버전 | 필요 JVM |
+|---|---|
+| 1.13 ~ 1.16.5 | Java 8+ |
+| 1.17 | Java 16+ |
+| 1.18 ~ 1.20.4 | Java 17+ |
+| 1.20.5+ | Java 21+ |
+
+Paper 1.13.2에 Java 21로 컴파일한 에이전트를 넣으면 이렇게 죽는다:
+
+```
+UnsupportedClassVersionError: VitaminMcpPlugin has been compiled by a more recent
+version of the Java Runtime (class file version 65.0), this version of the Java
+Runtime only recognizes class file versions up to 55.0
+```
+
+즉 **Java 21 + 1.13 하한은 애초에 양립 불가**였다. 셋 중 하나를 골라야 한다:
+
+1. Java 8/11 바이트코드로 내려 1.13 유지 — record·패턴매칭·switch 표현식을 전부 포기
+2. Java 17로 내려 하한 1.18 — record와 instanceof 패턴은 유지, Java 21 switch 패턴만 포기
+3. Java 21 유지 — 하한이 1.20.5로 올라감
+
+**2번을 택한다.** 근거는 1.13을 고른 원래 논리와 같다 — 비용 대비 실익:
+
+- 이 에이전트는 `Material`/`ItemStack`을 거의 만지지 않는다. 이벤트 클래스명, 플레이어 이름,
+  블록 좌표만 읽는다. **1.13 하한을 정당화했던 flattening 논거가 이 모듈에는 거의 적용되지 않는다.**
+- 1.13~1.17 서버는 현재 실사용이 희소하고 계속 줄고 있다
+- 1번의 비용(전 모듈 record 제거)은 얻는 것에 비해 과하다
+
+### 5.2 결과
 
 - `agent-legacy` 어댑터 모듈이 통째로 불필요
-- Bukkit API만으로 단일 jar가 전 지원 범위에 동작
-- 1.12 이하 서버는 지원 대상 외
+- Bukkit/Paper API만으로 단일 jar가 전 지원 범위에 동작
+- `io.papermc.paper:paper-api`를 하한(1.18.2)으로 컴파일 — 이후 추가된 API는 클래스패스에
+  아예 없으므로 실수로 쓸 수 없다
+- 1.17 이하 서버는 지원 대상 외
+- `agent-*`와 `contract`는 `--release 17`로 컴파일한다. 나머지 모듈(bot, orchestrator,
+  testkit, mcp-server)은 우리 JVM에서 돌므로 Java 21 그대로다
 
-1.8까지 지원하는 비용은 나머지 전부를 합친 것보다 크다. 실제 요구가 생기면 그때 어댑터 모듈을 추가한다.
+1.13까지 내리는 비용은 나머지 전부를 합친 것보다 크다. 실제 요구가 생기면 그때 어댑터 모듈을 추가한다.
 
 서버 기동은 `itzg/minecraft-server` Docker 이미지에 `VERSION` 환경변수만 바꿔 끼우면 임의 버전이 뜬다.
 

@@ -1,13 +1,11 @@
 plugins {
     id("vitaminmcp.java-conventions")
+    id("vitaminmcp.server-jvm-target")
     id("vitaminmcp.module-rules")
     id("vitaminmcp.shadow-conventions")
 }
 
 repositories {
-    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/") {
-        name = "spigot-snapshots"
-    }
     maven("https://repo.papermc.io/repository/maven-public/") {
         name = "papermc"
     }
@@ -21,10 +19,10 @@ dependencies {
     // a handful of endpoints that answer one JSON-RPC method each (docs/design.md §7).
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
 
-    compileOnly("org.spigotmc:spigot-api:1.13.2-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
     compileOnly("org.jetbrains:annotations:24.1.0")
 
-    testImplementation("org.spigotmc:spigot-api:1.13.2-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:1.18.2-R0.1-SNAPSHOT")
 }
 
 // The shipped plugin jar. Named without the version so server operators can drop in a

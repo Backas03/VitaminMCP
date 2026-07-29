@@ -175,16 +175,18 @@ final class EventDetails {
 
         Object read(Event event) {
             Object value = invoke(method, event);
-            return switch (value) {
-                case null -> null;
-                case String string -> string;
-                case Number number -> number;
-                case Boolean bool -> bool;
-                case Enum<?> constant -> constant.name();
-                // Anything else would need a real serializer, which does not belong on the
-                // main thread. Its type is still a useful hint.
-                default -> value.getClass().getSimpleName();
-            };
+            if (value == null) {
+                return null;
+            }
+            if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+                return value;
+            }
+            if (value instanceof Enum<?> constant) {
+                return constant.name();
+            }
+            // Anything else would need a real serializer, which does not belong on the main
+            // thread. Its type is still a useful hint.
+            return value.getClass().getSimpleName();
         }
     }
 }
