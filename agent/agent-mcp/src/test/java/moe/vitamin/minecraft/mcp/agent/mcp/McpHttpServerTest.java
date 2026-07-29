@@ -54,7 +54,8 @@ class McpHttpServerTest {
     private static AgentSettings settings(String token, String bind) {
         return new AgentSettings(bind, 0, token, true, 1024, 1024, 16, false,
                 List.of(), List.of(), List.of(),
-                moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled());
+                moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled(),
+                moe.vitamin.minecraft.mcp.agent.core.TlsSettings.disabled());
     }
 
     @BeforeEach
@@ -304,7 +305,45 @@ class McpHttpServerTest {
         assertEquals("header", metadata.get("bearer_methods_supported").get(0).asText());
     }
 
-        /** Enough of the query surface to answer the calls these tests make. */
+        @Test
+    void refusesToStartExposedWithoutTransportSecurity() {
+        AgentSettings exposed = settings(TOKEN, "0.0.0.0");
+        McpHttpServer unstarted = new McpHttpServer(
+                exposed,
+                new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, true),
+                mapper, Logger.getLogger("test"), "1.0.0-test");
+
+        // The token grants console access; over plain HTTP across a network anything on the
+        // path can read it. Refusing is the only response that cannot be ignored.
+        IllegalStateException thrown = assertThrows(IllegalStateException.class, unstarted::start);
+        assertTrue(thrown.getMessage().contains("clear text"), thrown.getMessage());
+        assertTrue(thrown.getMessage().contains("tls.enabled"), thrown.getMessage());
+    }
+
+    @Test
+    void startsExposedWhenAProxyTerminatesTls() throws Exception {
+        AgentSettings behindProxy = new AgentSettings(
+                "0.0.0.0", 0, TOKEN, true, 1024, 1024, 16, false,
+                List.of(), List.of(), List.of(),
+                moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled(),
+                new moe.vitamin.minecraft.mcp.agent.core.TlsSettings(false, "", "", true));
+
+        McpHttpServer proxied = new McpHttpServer(
+                behindProxy,
+                new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, true),
+                mapper, Logger.getLogger("test"), "1.0.0-test");
+        try {
+            // An operator asserting a proxy handles TLS is a supported deployment, not a
+            // loophole — many servers already run one, and refusing it would push people to
+            // the genuinely unsafe option instead.
+            proxied.start();
+            assertTrue(proxied.boundPort() > 0);
+        } finally {
+            proxied.stop();
+        }
+    }
+
+    /** Enough of the query surface to answer the calls these tests make. */
     private static final class StubQueries implements AgentQueries {
 
         @Override

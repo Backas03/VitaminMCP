@@ -45,6 +45,10 @@ final class SessionTools {
                     string(properties, "token", "The agent's auth-token from its config.yml.");
                     string(properties, "runnerJar",
                             "Path to the bot runner jar built for this server's protocol.");
+                    string(properties, "tls",
+                            "'true' if the agent serves HTTPS. Required for any server that is "
+                                    + "not on this machine — a remotely reachable agent refuses "
+                                    + "to start without transport security.");
                 }));
 
         tools.add(tool("session_reset",
@@ -120,6 +124,7 @@ final class SessionTools {
                     args.path("port").asInt(25565),
                     args.path("mcpPort").asInt(25585),
                     token,
+                    args.path("tls").asBoolean(false),
                     java.nio.file.Path.of(runnerJar));
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);

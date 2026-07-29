@@ -7,8 +7,8 @@ enabled: true
 
 # ---------------------------------------------------------------------------- endpoint
 
-# Loopback by default. Anything else makes the endpoint reachable from other machines, where a
-# leaked token becomes remote access to your server's internals. Prefer an SSH tunnel.
+# Loopback by default. Set this to 0.0.0.0 (or a specific interface) to let another machine
+# reach the agent — that is a supported setup, not a hack, but it requires the tls block below.
 bind-address: "127.0.0.1"
 port: 25585
 
@@ -22,6 +22,32 @@ auth-token: ""
 # default install cannot alter the server even with a valid token. Leave this on unless you
 # specifically need otherwise.
 read-only: true
+
+# --------------------------------------------------------------------------------- tls
+
+# Required once bind-address is anything other than loopback. The agent refuses to start
+# otherwise, and that is deliberate: the auth token above grants console access, and over plain
+# HTTP it crosses the network in clear text where anything on the path can read it.
+#
+# Two ways to satisfy it.
+#
+# 1. The agent serves HTTPS itself. Point it at a PKCS#12 keystore holding your certificate and
+#    key. If you already have a certificate for this host (Let's Encrypt, your panel, your
+#    host's wildcard), convert it once:
+#
+#      openssl pkcs12 -export -out agent.p12 -inkey privkey.pem -in fullchain.pem
+#
+# 2. Something in front already terminates TLS — nginx, Caddy, a load balancer. Set
+#    terminated-upstream and the agent serves plain HTTP to that proxy only. You are asserting
+#    the hop between them is not the public internet; if it is, nothing is protecting the token.
+#
+# No self-signed certificate is generated for you. It would be convenient and it would train
+# every client to skip verification, which removes the point of having a certificate.
+tls:
+  enabled: false
+  keystore: ""
+  keystore-password: ""
+  terminated-upstream: false
 
 # ------------------------------------------------------------------------------- oauth
 

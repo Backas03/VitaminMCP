@@ -85,7 +85,9 @@ public final class McpHttpServer {
 
         InetSocketAddress address =
                 new InetSocketAddress(InetAddress.getByName(settings.bindAddress()), settings.port());
-        server = HttpServer.create(address, 0);
+        server = settings.tls().enabled()
+                ? createHttpsServer(address)
+                : HttpServer.create(address, 0);
         server.createContext(ENDPOINT, this::handle);
 
         // RFC 9728. How a client that has no credentials discovers where to get some: it gets
@@ -102,15 +104,58 @@ public final class McpHttpServer {
         server.setExecutor(executor);
         server.start();
 
-        logger.info("MCP endpoint listening on http://" + settings.bindAddress() + ":"
+        logger.info("MCP endpoint listening on " + scheme() + "://" + settings.bindAddress() + ":"
                 + settings.port() + ENDPOINT + (settings.readOnly() ? " (read-only)" : ""));
 
         if (settings.isExternallyReachable()) {
-            logger.warning("The MCP endpoint is bound to " + settings.bindAddress()
-                    + ", which is reachable from outside this machine. Anyone with the token can "
-                    + "read server internals. Bind to 127.0.0.1 and tunnel instead unless you "
-                    + "have a specific reason not to.");
+            logger.warning("The MCP endpoint is reachable from outside this machine. Anyone "
+                    + "holding the token can read server internals"
+                    + (settings.readOnly() ? "" : " and run console commands")
+                    + ". Keep the token secret and rotate it if it leaks.");
+            if (settings.tls().terminatedUpstream()) {
+                logger.warning("tls.terminated-upstream is set, so this agent is serving plain "
+                        + "HTTP and trusting whatever is in front of it to terminate TLS. If "
+                        + "nothing is, the token is crossing the network in clear text.");
+            }
         }
+    }
+
+    /**
+     * An HTTPS server backed by the configured keystore.
+     *
+     * <p>The JDK's own HttpsServer, for the same reason the plain one is used: MCP over HTTP is
+     * a POST carrying one JSON-RPC message, and nothing a servlet container adds is needed to
+     * answer it (docs/design.md §7).
+     */
+    private HttpServer createHttpsServer(InetSocketAddress address) throws IOException {
+        try {
+            char[] password = settings.tls().keystorePassword().toCharArray();
+            java.security.KeyStore keystore = java.security.KeyStore.getInstance("PKCS12");
+            try (var in = java.nio.file.Files.newInputStream(
+                    java.nio.file.Path.of(settings.tls().keystore()))) {
+                keystore.load(in, password);
+            }
+
+            var keyManagers = javax.net.ssl.KeyManagerFactory.getInstance(
+                    javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm());
+            keyManagers.init(keystore, password);
+
+            javax.net.ssl.SSLContext ssl = javax.net.ssl.SSLContext.getInstance("TLS");
+            ssl.init(keyManagers.getKeyManagers(), null, null);
+
+            com.sun.net.httpserver.HttpsServer https =
+                    com.sun.net.httpserver.HttpsServer.create(address, 0);
+            https.setHttpsConfigurator(new com.sun.net.httpserver.HttpsConfigurator(ssl));
+            return https;
+        } catch (java.security.GeneralSecurityException e) {
+            throw new IOException("Could not load the TLS keystore at "
+                    + settings.tls().keystore() + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** The scheme this endpoint is reachable on, for messages and metadata. */
+    private String scheme() {
+        return settings.tls().enabled() ? "https" : "http";
     }
 
     /** The port actually bound, which differs from the configured one when that was 0. */
@@ -139,7 +184,7 @@ public final class McpHttpServer {
                 // obtain a token rather than simply failing.
                 exchange.getResponseHeaders().add("WWW-Authenticate",
                         "Bearer error=\"invalid_token\", error_description=\"" + refusal
-                                + "\", resource_metadata=\"http://" + settings.bindAddress()
+                                + "\", resource_metadata=\"" + scheme() + "://" + settings.bindAddress()
                                 + ":" + boundPort() + PROTECTED_RESOURCE_METADATA + "\"");
                 respond(exchange, 401,
                         "{\"error\":\"unauthorized\",\"reason\":\"" + refusal + "\"}");
@@ -310,7 +355,7 @@ public final class McpHttpServer {
         try (exchange) {
             ObjectNode metadata = mapper.createObjectNode();
             metadata.put("resource", settings.oauth().resourceUrl().isEmpty()
-                    ? "http://" + settings.bindAddress() + ":" + boundPort() + ENDPOINT
+                    ? scheme() + "://" + settings.bindAddress() + ":" + boundPort() + ENDPOINT
                     : settings.oauth().resourceUrl());
 
             if (settings.oauth().enabled()) {

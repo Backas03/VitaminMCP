@@ -9,6 +9,7 @@ import java.util.logging.Level;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.CaptureService;
 import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
+import moe.vitamin.minecraft.mcp.agent.core.TlsSettings;
 import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -97,7 +98,8 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 stringList(config, "extra-high-frequency"),
                 stringList(config, "reinstate-types"),
                 stringList(config, "scan-packages"),
-                readOAuth(config));
+                readOAuth(config),
+                readTls(config));
     }
 
     /**
@@ -119,6 +121,21 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 config.getString("oauth.client-secret", ""),
                 config.getString("oauth.resource-url", ""),
                 stringList(config, "oauth.required-scopes"));
+    }
+
+    /**
+     * Reads the TLS block.
+     *
+     * <p>Off by default, which is correct on loopback where nothing leaves the machine. Once
+     * bind-address points anywhere else, {@link AgentSettings#validate()} refuses to start
+     * without one of these routes.
+     */
+    private static TlsSettings readTls(FileConfiguration config) {
+        return new TlsSettings(
+                config.getBoolean("tls.enabled", false),
+                config.getString("tls.keystore", ""),
+                config.getString("tls.keystore-password", ""),
+                config.getBoolean("tls.terminated-upstream", false));
     }
 
     private static List<String> stringList(FileConfiguration config, String path) {

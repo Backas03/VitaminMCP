@@ -22,6 +22,7 @@ import java.util.Objects;
  * @param reinstatedTypes      simple type names to drop from the high-frequency list
  * @param scanPackages         packages searched for event classes
  * @param oauth                OAuth 2.1 settings for the HTTP endpoint
+ * @param tls                  transport security, required once reachable remotely
  */
 public record AgentSettings(
         String bindAddress,
@@ -35,7 +36,8 @@ public record AgentSettings(
         List<String> extraHighFrequency,
         List<String> reinstatedTypes,
         List<String> scanPackages,
-        OAuthSettings oauth) {
+        OAuthSettings oauth,
+        TlsSettings tls) {
 
     /**
      * Loopback. Exposing the agent externally has to be a deliberate edit, never a default
@@ -51,6 +53,7 @@ public record AgentSettings(
         reinstatedTypes = reinstatedTypes == null ? List.of() : List.copyOf(reinstatedTypes);
         scanPackages = scanPackages == null ? List.of() : List.copyOf(scanPackages);
         oauth = oauth == null ? OAuthSettings.disabled() : oauth;
+        tls = tls == null ? TlsSettings.disabled() : tls;
     }
 
     /** Whether a usable token was configured. */
@@ -80,6 +83,23 @@ public record AgentSettings(
      */
     public void validate() {
         oauth.validate();
+        tls.validate();
+
+        // The rule that makes remote installs safe by default. A bearer token granting
+        // command_exec is a console password; sent over plaintext HTTP across a network it is
+        // readable by anything on the path. Refusing to start is the only response that cannot
+        // be ignored — a warning at startup is read by nobody, and this is software other
+        // people install on servers we will never see (docs/design.md §14).
+        if (isExternallyReachable() && !tls.isProtected()) {
+            throw new IllegalStateException(String.join(System.lineSeparator(),
+                    "The agent is bound to " + bindAddress + ", which is reachable from other "
+                            + "machines, but nothing is protecting the connection. The auth token "
+                            + "would cross the network in clear text, and that token grants "
+                            + "console access.",
+                    "  Either set tls.enabled with a keystore so the agent serves HTTPS itself,",
+                    "  or set tls.terminated-upstream if a proxy in front already terminates TLS,",
+                    "  or leave bind-address at 127.0.0.1."));
+        }
         if (!hasAuthToken()) {
             throw new IllegalStateException(
                     "No auth token is configured. The MCP endpoint grants access to server "

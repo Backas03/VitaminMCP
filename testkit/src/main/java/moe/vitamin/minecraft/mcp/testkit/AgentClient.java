@@ -32,7 +32,15 @@ public final class AgentClient {
     private final String token;
 
     public AgentClient(String host, int port, String token) {
-        this.endpoint = URI.create("http://" + host + ":" + port + "/mcp");
+        this(host, port, token, false);
+    }
+
+    /**
+     * @param tls whether the agent is serving HTTPS. A remotely reachable agent refuses to start
+     *            without transport security, so this is on for anything but a local server.
+     */
+    public AgentClient(String host, int port, String token, boolean tls) {
+        this.endpoint = URI.create((tls ? "https://" : "http://") + host + ":" + port + "/mcp");
         this.token = Objects.requireNonNull(token, "token");
     }
 
