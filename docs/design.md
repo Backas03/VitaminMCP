@@ -198,6 +198,12 @@ MC↔Java 대응표가 코드로 박혀 있으므로 **불가능한 조합은 �
 `agent-core`의 `EventDetails`가 `PlayerEvent`·`BlockEvent`·`EntityEvent` 셋만 직접 호출하고
 나머지를 리플렉션으로 우회하는 이유가 이것이다. 하한이 올라갔다고 이 방침을 풀지 말 것.
 
+**실측 확인 (2026-07-29, Paper 1.21.8).** 인벤토리 경로를 실제로 태워 확인했다 — 상자·작업대를
+열고 클릭하는 세션에서 `InventoryOpenEvent`·`InventoryClickEvent`·`InventoryCloseEvent` 모두
+플레이어가 정상 해석됐고 `IncompatibleClassChangeError`는 0건이었다. 이 셋은 `getWhoClicked`/
+`getPlayer`를 리플렉션으로 부르기 때문에 `InventoryView`가 인터페이스로 바뀐 것과 무관하다.
+같은 코드를 직접 호출로 바꿨다면 이 지점에서 깨졌을 것이다.
+
 서버 기동은 `itzg/minecraft-server` Docker 이미지에 `VERSION` 환경변수만 바꿔 끼우면 임의 버전이 뜬다.
 
 ---
