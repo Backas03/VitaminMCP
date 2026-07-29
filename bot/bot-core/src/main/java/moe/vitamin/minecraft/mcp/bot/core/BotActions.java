@@ -1,5 +1,6 @@
 package moe.vitamin.minecraft.mcp.bot.core;
 
+import java.time.Duration;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
@@ -16,6 +17,12 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.Serv
  * machinery in Stage 3, driven by what the agent actually observed.
  */
 public final class BotActions {
+
+    /**
+     * Long enough for soft blocks with bare hands in survival, and harmless in creative where
+     * the block is already gone before it elapses.
+     */
+    public static final Duration DEFAULT_DIG_TIME = Duration.ofMillis(1500);
 
     private final BotSession bot;
 
@@ -55,10 +62,38 @@ public final class BotActions {
      * time to elapse, which is a Stage 3 concern rather than something to sleep through here.
      */
     public BotActions breakBlock(int x, int y, int z) {
+        return breakBlock(x, y, z, DEFAULT_DIG_TIME);
+    }
+
+    /**
+     * Breaks a block, allowing {@code digTime} for it.
+     *
+     * <p>The wait is the part that matters. In creative the server breaks the block on
+     * START_DIGGING alone, so sending both immediately looks like it works — but in survival
+     * the server measures how long the client spent digging and rejects a FINISH that arrives
+     * too early. It rejects it silently: no event, no error, nothing in the log. A bot that
+     * sends both back to back therefore appears to do nothing at all, which is exactly how
+     * this first showed up.
+     *
+     * <p>Waiting here rather than in the caller keeps the failure mode out of every test that
+     * breaks a block. It is a fixed wait, which Stage 3 will replace with a predicate on what
+     * the server actually reports — the honest fix, once there is machinery for it.
+     */
+    public BotActions breakBlock(int x, int y, int z, Duration digTime) {
         require();
         Vector3i position = Vector3i.from(x, y, z);
+
+        // Face UP: the top face of the block, which is the one reachable from standing on it.
         bot.session().send(new ServerboundPlayerActionPacket(
                 PlayerAction.START_DIGGING, position, Direction.UP, ++sequence));
+
+        try {
+            Thread.sleep(digTime.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while breaking a block", e);
+        }
+
         bot.session().send(new ServerboundPlayerActionPacket(
                 PlayerAction.FINISH_DIGGING, position, Direction.UP, ++sequence));
         return this;
