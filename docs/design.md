@@ -165,7 +165,30 @@ Java 17로 내리면서 포기했던 것들(switch 패턴 매칭, record 패턴)
   툴체인이 25로 올라가도 에이전트는 로드 가능한 상태로 남는다
 - 나머지 모듈(bot, orchestrator, testkit, mcp-server)은 우리 JVM에서 돌므로 이 제약과 무관하다
 
-### 5.4 남은 함정 — 신버전에서 깨지는 것은 컴파일이 아니다
+### 5.4 하한을 다시 내리려면
+
+하한 관련 값은 **`build-logic/.../SupportedVersions.kt`의 `FLOOR` 한 곳**에서 파생된다.
+`paper-api` 좌표, `plugin.yml`의 `api-version`, `--release` 값 모두 여기서 나온다.
+
+```kotlin
+const val FLOOR = "1.21.8"   // 여기만 고치면 된다
+```
+
+MC↔Java 대응표가 코드로 박혀 있으므로 **불가능한 조합은 빌드가 거부한다.** `FLOOR = "1.13.2"`로
+두면 `release 8`이 도출되고 `records are not supported in -source 8`로 컴파일이 실패한다.
+과거에는 이 조합이 조용히 빌드돼서 서버 기동 시점에 `UnsupportedClassVersionError`로 터졌다.
+
+따라서 하한을 내릴 때 실제로 드는 비용은 **그 Java 버전에 없는 문법을 걷어내는 작업**뿐이고,
+그 범위는 빌드가 정확히 알려준다.
+
+| 하한 | 도출되는 release | 포기해야 하는 것 |
+|---|---|---|
+| 1.20.5+ | 21 | (없음) |
+| 1.18 ~ 1.20.4 | 17 | switch 패턴 매칭, record 패턴 |
+| 1.17 | 16 | 위 + sealed |
+| 1.13 ~ 1.16.5 | 8 | **record 전부**, var, instanceof 패턴 — 사실상 전면 재작성 |
+
+### 5.5 남은 함정 — 신버전에서 깨지는 것은 컴파일이 아니다
 
 하한을 올려도 **상위 버전 호환은 여전히 수동으로 지켜야 한다.** 대표 사례가 1.21의
 `InventoryView`로, 추상 클래스에서 인터페이스로 바뀌었다. 구버전으로 컴파일한 직접 호출은

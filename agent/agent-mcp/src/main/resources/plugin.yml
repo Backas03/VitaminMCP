@@ -3,6 +3,6 @@ version: '${version}'
 main: moe.vitamin.minecraft.mcp.agent.mcp.VitaminMcpPlugin
 description: Exposes server events, logs and exceptions over MCP.
 website: https://github.com/
-# The supported floor (docs/design.md §5).
-api-version: '1.21'
+# Derived from SupportedVersions.FLOOR at build time (docs/design.md §5) — do not hand-edit.
+api-version: '${apiVersion}'
 load: STARTUP

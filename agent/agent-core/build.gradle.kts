@@ -1,3 +1,5 @@
+import moe.vitamin.build.SupportedVersions
+
 plugins {
     id("vitaminmcp.java-conventions")
     id("vitaminmcp.server-jvm-target")
@@ -16,7 +18,7 @@ dependencies {
     // Compiled against the supported floor, which is what lets one jar run across the whole
     // range: API added later is simply not on the classpath, so it cannot be used by accident
     // and then fail at runtime on an older server.
-    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly(SupportedVersions.paperApiCoordinate)
 
     // Bukkit has no "subscribe to every event" API, so the event classes are discovered by
     // scanning. Relocated into the plugin jar by vitaminmcp.shadow-conventions.
@@ -32,5 +34,5 @@ dependencies {
     // type touched, which buries real warnings.
     compileOnly("org.jetbrains:annotations:24.1.0")
 
-    testImplementation("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    testImplementation(SupportedVersions.paperApiCoordinate)
 }
