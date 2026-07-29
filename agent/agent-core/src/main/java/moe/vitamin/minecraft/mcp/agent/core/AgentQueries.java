@@ -73,4 +73,14 @@ public interface AgentQueries {
      * @param asPlayer player to run as, or {@code null} for the console
      */
     CommandResult executeCommand(String command, String asPlayer, java.time.Duration timeout);
+
+    /**
+     * Blocks until a condition holds, or the timeout elapses.
+     *
+     * <p>The alternative every caller reaches for otherwise is sleeping, which is a guess about
+     * timing that is right on one machine and wrong on another — the mechanism that produces
+     * flaky tests (docs/roadmap.md Stage 3).
+     */
+    moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(
+            moe.vitamin.minecraft.mcp.contract.WaitCondition condition, java.time.Duration timeout);
 }

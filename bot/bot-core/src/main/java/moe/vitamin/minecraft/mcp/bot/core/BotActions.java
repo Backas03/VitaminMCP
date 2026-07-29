@@ -18,12 +18,6 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.Serv
  */
 public final class BotActions {
 
-    /**
-     * Long enough for soft blocks with bare hands in survival, and harmless in creative where
-     * the block is already gone before it elapses.
-     */
-    public static final Duration DEFAULT_DIG_TIME = Duration.ofMillis(1500);
-
     private final BotSession bot;
 
     /**
@@ -55,29 +49,30 @@ public final class BotActions {
     }
 
     /**
-     * Breaks a block.
+     * Breaks a block and returns immediately.
      *
-     * <p>Sent as start-then-finish with no wait between. In creative, and for instantly
-     * breakable blocks, the server completes it immediately; anything slower needs the dig
-     * time to elapse, which is a Stage 3 concern rather than something to sleep through here.
+     * <p>Does not wait, and deliberately does not confirm. Whether the block actually went is a
+     * question about server state, and the answer belongs to {@code wait_for} on the agent —
+     * asking for the outcome rather than assuming a duration is what keeps a scenario from
+     * being calibrated to the machine it was written on (docs/roadmap.md Stage 3).
+     *
+     * <p>Correct as-is in creative, where the server breaks on START_DIGGING alone. In survival
+     * the server measures how long the client spent digging, so use
+     * {@link #breakBlock(int, int, int, Duration)} with the block's break time.
      */
     public BotActions breakBlock(int x, int y, int z) {
-        return breakBlock(x, y, z, DEFAULT_DIG_TIME);
+        return breakBlock(x, y, z, Duration.ZERO);
     }
 
     /**
-     * Breaks a block, allowing {@code digTime} for it.
+     * Breaks a block, spending {@code digTime} on it first.
      *
-     * <p>The wait is the part that matters. In creative the server breaks the block on
-     * START_DIGGING alone, so sending both immediately looks like it works — but in survival
-     * the server measures how long the client spent digging and rejects a FINISH that arrives
-     * too early. It rejects it silently: no event, no error, nothing in the log. A bot that
-     * sends both back to back therefore appears to do nothing at all, which is exactly how
-     * this first showed up.
+     * <p>In survival the server measures how long the client spent digging and silently
+     * discards a FINISH that arrives too early — no event, no error, nothing logged. The
+     * duration is a property of the block and the tool, which a real client computes locally
+     * because the protocol carries no "you may finish now" signal.
      *
-     * <p>Waiting here rather than in the caller keeps the failure mode out of every test that
-     * breaks a block. It is a fixed wait, which Stage 3 will replace with a predicate on what
-     * the server actually reports — the honest fix, once there is machinery for it.
+     * <p>Pass {@link Duration#ZERO} in creative, where START_DIGGING alone breaks the block.
      */
     public BotActions breakBlock(int x, int y, int z, Duration digTime) {
         require();
@@ -87,11 +82,16 @@ public final class BotActions {
         bot.session().send(new ServerboundPlayerActionPacket(
                 PlayerAction.START_DIGGING, position, Direction.UP, ++sequence));
 
-        try {
-            Thread.sleep(digTime.toMillis());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while breaking a block", e);
+        if (!digTime.isZero() && !digTime.isNegative()) {
+            // Only when the caller knows the block needs it. This is a lower bound on how soon
+            // FINISH may be sent, computed from the block, not a guess about whether the break
+            // worked — that is still answered by waiting for the outcome.
+            try {
+                Thread.sleep(digTime.toMillis());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while breaking a block", e);
+            }
         }
 
         bot.session().send(new ServerboundPlayerActionPacket(

@@ -70,23 +70,29 @@ final class AgentProbe {
     }
 
     /**
-     * Polls until an event of the given type appears, or gives up.
+     * Waits for an event, on the server rather than here.
      *
-     * <p>A bounded poll rather than a sleep: the bot's packet, the server tick, the MONITOR
-     * listener and the buffer append all happen on different threads, so a query fired straight
-     * after an action can legitimately arrive first.
+     * <p>This used to poll every 250ms from the test process. The agent now checks once per
+     * tick, inside the server, and answers when the condition holds — one request instead of
+     * dozens, and it cannot miss something that happened between two polls. On timeout the
+     * response carries the events and log lines from that moment, so a failure arrives with
+     * its own explanation.
+     *
+     * @param sinceSequence event sequence to count from, so an event that lands between the
+     *                      action and this call still counts
      */
-    String awaitEvent(String type, Duration timeout) throws Exception {
-        long deadline = System.nanoTime() + timeout.toNanos();
-        String last = "";
-        while (System.nanoTime() < deadline) {
-            last = call("events_query", "{\"types\":[\"%s\"],\"limit\":50}".formatted(type));
-            if (last.contains("\\\"type\\\" : \\\"" + type)) {
-                return last;
-            }
-            Thread.sleep(250);
-        }
-        return last;
+    String awaitEvent(String type, String player, long sinceSequence, Duration timeout)
+            throws Exception {
+        return call("wait_for", ("""
+                {"condition":"event","eventType":"%s","player":"%s",                "sinceSequence":%d,"timeoutMillis":%d}""")
+                .formatted(type, player, sinceSequence, timeout.toMillis()));
+    }
+
+    /** The event sequence as of now, to be passed to {@link #awaitEvent}. */
+    long eventSequence() throws Exception {
+        String response = call("server_info", "{}");
+        String cursor = extract(response, "latestEventCursor");
+        return cursor == null ? 0 : Long.parseLong(cursor.substring(cursor.indexOf(':') + 1));
     }
 
     /**

@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -19,6 +21,7 @@ import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
 import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import moe.vitamin.minecraft.mcp.contract.Sequenced;
+import moe.vitamin.minecraft.mcp.contract.WaitCondition;
 
 /**
  * The tools this agent exposes, and what they do.
@@ -122,6 +125,34 @@ final class AgentTools {
                     numberProperty(properties, "z", "Block Z, for kind='block'.");
                 }));
 
+        tools.add(tool("wait_for",
+                "Blocks until something becomes true, then returns. Use this instead of "
+                        + "waiting or retrying yourself — a fixed wait is a guess about timing "
+                        + "that is right on an idle server and wrong on a busy one. On timeout "
+                        + "the response carries the events and log lines from that moment, "
+                        + "which usually explain it. Condition types: ticks (count), block_is / "
+                        + "block_is_not (world,x,y,z,material), event (eventType, player), "
+                        + "player_online / player_offline (name), player_near (name,x,y,z,distance).",
+                properties -> {
+                    stringProperty(properties, "condition",
+                            "Condition type, e.g. 'block_is_not' or 'event'.");
+                    numberProperty(properties, "timeoutMillis",
+                            "How long to wait before giving up. Default 10000, capped at 60000.");
+                    stringProperty(properties, "eventType", "For condition='event'.");
+                    stringProperty(properties, "player", "Player name, where the condition takes one.");
+                    stringProperty(properties, "name", "Player name, for player_* conditions.");
+                    stringProperty(properties, "material", "For block_is / block_is_not.");
+                    stringProperty(properties, "world", "World name. Defaults to the main world.");
+                    numberProperty(properties, "x", "Coordinate, where the condition takes one.");
+                    numberProperty(properties, "y", "Coordinate, where the condition takes one.");
+                    numberProperty(properties, "z", "Coordinate, where the condition takes one.");
+                    numberProperty(properties, "count", "Ticks to advance, for condition='ticks'.");
+                    numberProperty(properties, "distance", "Radius, for condition='player_near'.");
+                    numberProperty(properties, "sinceSequence",
+                            "For condition='event': only count events at or after this sequence. "
+                                    + "Omit to count only events that happen during the wait.");
+                }));
+
         // Everything above only reads. The line below is the boundary: with read-only left on,
         // which is the default, there is no exposed way to change the server at all — not
         // restricted, absent. An operator has to opt in deliberately (docs/design.md §14).
@@ -160,6 +191,7 @@ final class AgentTools {
             case "exceptions_recent" -> exceptionsRecent(args);
             case "state_query" -> stateQuery(args);
             case "command_exec" -> commandExec(args);
+            case "wait_for" -> waitFor(args);
             default -> throw new ToolException("Unknown tool: " + name);
         };
     }
@@ -224,6 +256,49 @@ final class AgentTools {
         ObjectNode result = mapper.createObjectNode();
         result.set("items", mapper.valueToTree(capture.recentExceptions(limit)));
         return result;
+    }
+
+    /** Longest a caller may block a request thread. */
+    private static final long MAX_WAIT_MILLIS = 60_000;
+
+    private JsonNode waitFor(JsonNode args) {
+        String type = text(args.path("condition"));
+        if (type == null) {
+            throw new ToolException("wait_for needs 'condition'.");
+        }
+
+        // Every argument is forwarded rather than matched against the condition type: the
+        // agent knows which ones each condition needs and says so, and duplicating that
+        // knowledge here would mean two places to update for every new condition.
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        args.fields().forEachRemaining(field -> {
+            if (field.getKey().equals("condition") || field.getKey().equals("timeoutMillis")) {
+                return;
+            }
+            JsonNode value = field.getValue();
+            if (value.isNumber()) {
+                parameters.put(field.getKey(), value.numberValue());
+            } else if (value.isBoolean()) {
+                parameters.put(field.getKey(), value.booleanValue());
+            } else if (value.isTextual()) {
+                parameters.put(field.getKey(), value.asText());
+            }
+        });
+
+        long millis = args.path("timeoutMillis").asLong(10_000);
+        if (millis < 1) {
+            throw new ToolException("timeoutMillis must be positive.");
+        }
+        // Capped rather than rejected: an over-long wait is a reasonable request badly sized,
+        // and failing it just costs a round trip. Holding a request thread for an hour is not.
+        millis = Math.min(millis, MAX_WAIT_MILLIS);
+
+        try {
+            return mapper.valueToTree(capture.waitFor(
+                    new WaitCondition(type, parameters), java.time.Duration.ofMillis(millis)));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ToolException(String.valueOf(e.getMessage()));
+        }
     }
 
     private JsonNode stateQuery(JsonNode args) {

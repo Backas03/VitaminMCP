@@ -65,7 +65,7 @@ class AgentToolsTest {
 
         assertEquals(
                 List.of("server_info", "events_summary", "events_query", "logs_query",
-                        "exceptions_recent", "state_query"),
+                        "exceptions_recent", "state_query", "wait_for"),
                 names);
         // command_exec is absent, not merely restricted — see writeToolsAreAbsentWhenReadOnly.
         assertFalse(names.contains("command_exec"));
@@ -381,6 +381,14 @@ class AgentToolsTest {
                     "world", 1, 2, 3, List.of());
         }
 
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(
+                moe.vitamin.minecraft.mcp.contract.WaitCondition condition,
+                java.time.Duration timeout) {
+            return moe.vitamin.minecraft.mcp.contract.WaitResult.matched(
+                    condition.describe(), 5L, 1);
+        }
         @Override
         public String blockAt(String world, int x, int y, int z) {
             return "world".equals(world) || world == null ? "STONE" : null;

@@ -144,8 +144,8 @@ class McpHttpServerTest {
     void listsTools() throws Exception {
         JsonNode result = resultOf(post("tools/list", "{}", TOKEN));
 
-        // Six read-only tools; command_exec is not among them by default.
-        assertEquals(6, result.get("tools").size());
+        // Seven read-only tools; command_exec is not among them by default.
+        assertEquals(7, result.get("tools").size());
     }
 
     @Test
@@ -332,6 +332,14 @@ class McpHttpServerTest {
                     "world", 1, 2, 3, List.of());
         }
 
+
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(
+                moe.vitamin.minecraft.mcp.contract.WaitCondition condition,
+                java.time.Duration timeout) {
+            return moe.vitamin.minecraft.mcp.contract.WaitResult.matched(
+                    condition.describe(), 5L, 1);
+        }
         @Override
         public String blockAt(String world, int x, int y, int z) {
             return "world".equals(world) || world == null ? "STONE" : null;

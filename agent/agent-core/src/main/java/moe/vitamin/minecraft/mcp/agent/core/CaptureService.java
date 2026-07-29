@@ -37,6 +37,7 @@ public final class CaptureService implements AgentQueries {
     private final HighFrequencyEvents highFrequency;
     private final EventCapture eventCapture;
     private final LogCapture logCapture;
+    private final WaitForService waitForService;
     private final Plugin plugin;
     private final long startedAt = System.currentTimeMillis();
 
@@ -51,6 +52,7 @@ public final class CaptureService implements AgentQueries {
         this.eventCapture = new EventCapture(
                 plugin, events, highFrequency, settings.captureHighFrequency(), settings.scanPackages());
         this.logCapture = new LogCapture(logs, exceptions, plugin.getLogger());
+        this.waitForService = new WaitForService(plugin, events, logs, highFrequency);
     }
 
     public void start() {
@@ -228,6 +230,12 @@ public final class CaptureService implements AgentQueries {
         status.put("distinctExceptions", exceptions.size());
         status.put("highFrequencyExcluded", List.copyOf(highFrequency.excluded()));
         return status;
+    }
+
+    @Override
+    public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(
+            moe.vitamin.minecraft.mcp.contract.WaitCondition condition, Duration timeout) {
+        return waitForService.await(condition, timeout);
     }
 
     // ------------------------------------------------------------ world state

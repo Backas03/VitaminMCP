@@ -134,9 +134,14 @@ class BotConnectionLiveTest {
             String gameMode = agent.gameModeOf("Tester1");
             String before = agent.blockAt("world", x, y, z);
 
+            // Taken before acting, so an event landing between the break and the wait still
+            // counts. Without it the wait could start after the thing it is waiting for.
+            long since = agent.eventSequence();
+
             bot.actions().breakBlock(x, y, z);
 
-            String events = agent.awaitEvent("BlockBreakEvent", Duration.ofSeconds(10));
+            String events = agent.awaitEvent(
+                    "BlockBreakEvent", "Tester1", since, Duration.ofSeconds(10));
             String after = agent.blockAt("world", x, y, z);
 
             String diagnosis = "gameMode=" + gameMode
@@ -144,8 +149,54 @@ class BotConnectionLiveTest {
 
             assertNotEquals("AIR", before,
                     "the bot was not standing on anything, so there was nothing to break. " + diagnosis);
-            assertTrue(events.contains("Tester1"),
-                    "agent reported no BlockBreakEvent by Tester1. " + diagnosis);
+            assertTrue(events.contains("\\\"matched\\\" : true"),
+                    "agent never saw a BlockBreakEvent by Tester1. " + diagnosis
+                            + " waitResult=" + events);
         }
+    }
+
+    /**
+     * The same scenario, many times over.
+     *
+     * <p>Flakiness is invisible in a single run by definition — the run that passes tells you
+     * nothing about the one that will not. Repetition is the only way to see it, so this is the
+     * test that decides whether the timing work actually worked (docs/roadmap.md Stage 3 DoD).
+     *
+     * <p>Iterations default low so an ordinary live run stays quick; the DoD figure is passed
+     * in deliberately:
+     *
+     * <pre>
+     *   -Dvitaminmcp.repeat=50
+     * </pre>
+     */
+    @Test
+    void theSameScenarioSucceedsEveryTime() throws Exception {
+        int iterations = Integer.getInteger("vitaminmcp.repeat", 5);
+        AgentProbe agent = AgentProbe.fromSystemProperties();
+        List<String> failures = new ArrayList<>();
+
+        for (int run = 1; run <= iterations; run++) {
+            try (BotSession bot = connect("Tester1")) {
+                bot.awaitGrounded(Duration.ofSeconds(15));
+
+                var at = bot.position();
+                int x = (int) Math.floor(at.getX());
+                int y = (int) Math.floor(at.getY()) - 1;
+                int z = (int) Math.floor(at.getZ());
+
+                long since = agent.eventSequence();
+                bot.actions().breakBlock(x, y, z);
+
+                String result = agent.awaitEvent(
+                        "BlockBreakEvent", "Tester1", since, Duration.ofSeconds(10));
+                if (!result.contains("\\\"matched\\\" : true")) {
+                    failures.add("run " + run + " at (" + x + "," + y + "," + z + "): " + result);
+                }
+            }
+        }
+
+        assertTrue(failures.isEmpty(),
+                failures.size() + " of " + iterations + " runs failed: "
+                        + String.join(" | ", failures));
     }
 }
