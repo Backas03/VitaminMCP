@@ -3,15 +3,6 @@ plugins {
     id("vitaminmcp.module-rules")
 }
 
-repositories {
-    // MCProtocolLib and its cloudburstmc/nukkitx transitives.
-    maven("https://repo.opencollab.dev/maven-releases/") {
-        name = "opencollab-releases"
-    }
-    maven("https://repo.opencollab.dev/maven-snapshots/") {
-        name = "opencollab-snapshots"
-    }
-}
 
 dependencies {
     api(project(":contract"))

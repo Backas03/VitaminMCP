@@ -209,6 +209,46 @@ public final class BotSession implements AutoCloseable {
         return position;
     }
 
+    /**
+     * The bot's position as plain numbers.
+     *
+     * <p>Separate from {@link #position()} because that returns a MCProtocolLib type, and
+     * callers outside this module have no business resolving one. Keeping the protocol library
+     * inside bot-core is what allows it to be swapped without touching anything above.
+     */
+    public double x() {
+        org.cloudburstmc.math.vector.Vector3d at = position;
+        return at == null ? 0 : at.getX();
+    }
+
+    public double y() {
+        org.cloudburstmc.math.vector.Vector3d at = position;
+        return at == null ? 0 : at.getY();
+    }
+
+    public double z() {
+        org.cloudburstmc.math.vector.Vector3d at = position;
+        return at == null ? 0 : at.getZ();
+    }
+
+    /** The block position the bot is standing in. */
+    public int blockX() {
+        return (int) Math.floor(x());
+    }
+
+    public int blockY() {
+        return (int) Math.floor(y());
+    }
+
+    public int blockZ() {
+        return (int) Math.floor(z());
+    }
+
+    /** A readable position, for failure messages. */
+    public String describePosition() {
+        return position == null ? "unknown" : x() + ", " + y() + ", " + z();
+    }
+
     /** Actions this bot can perform. */
     public BotActions actions() {
         return new BotActions(this);

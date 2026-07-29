@@ -7,11 +7,6 @@ plugins {
     id("vitaminmcp.shadow-conventions")
 }
 
-repositories {
-    maven("https://repo.papermc.io/repository/maven-public/") {
-        name = "papermc"
-    }
-}
 
 dependencies {
     implementation(project(":agent-core"))

@@ -8,6 +8,26 @@ dependencies {
     implementation(project(":bot-core"))
     implementation(project(":bot-via"))
     implementation(project(":orchestrator"))
+
+    // Scenarios are JSON, and so is the MCP conversation with the agent.
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
 }
 
-// Scenario runner, wait_for, assertions (Stage 3). No fixed sleeps, ever.
+// Note the absence of agent-* here, enforced by vitaminmcp.module-rules. testkit reaches the
+// agent the same way any other client does — over MCP — which is what keeps the agent
+// swappable per server version without this module knowing (CLAUDE.md invariant 1).
+
+// Live scenarios are skipped unless asked for, so `./gradlew build` needs no server:
+//   ./gradlew :testkit:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.token=...
+tasks.test {
+    listOf(
+        "vitaminmcp.liveServer",
+        "vitaminmcp.host",
+        "vitaminmcp.port",
+        "vitaminmcp.mcpPort",
+        "vitaminmcp.token",
+    ).forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+    testLogging { showStandardStreams = true }
+}

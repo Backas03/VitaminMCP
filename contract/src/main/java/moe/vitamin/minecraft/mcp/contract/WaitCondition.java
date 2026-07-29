@@ -39,6 +39,17 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
     /** A player is within a distance of a point. */
     public static final String PLAYER_NEAR = "player_near";
 
+    /**
+     * A player's state matches the fields given — any of {@code online}, {@code gameMode},
+     * {@code op}.
+     *
+     * <p>One condition for the family rather than one per attribute, because the reason to wait
+     * is the same in every case: these change asynchronously. {@code /op} resolves a name to a
+     * UUID before it takes effect, so a check fired immediately after the command sees the old
+     * value and fails for reasons that have nothing to do with what was being tested.
+     */
+    public static final String PLAYER_STATE = "player_state";
+
     public WaitCondition {
         Objects.requireNonNull(type, "type");
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);
@@ -57,6 +68,19 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
     public double decimal(String key, double fallback) {
         Object value = parameters.get(key);
         return value instanceof Number number ? number.doubleValue() : fallback;
+    }
+
+    /** Whether a key was supplied at all, so absent and false stay distinguishable. */
+    public boolean has(String key) {
+        return parameters.containsKey(key);
+    }
+
+    public boolean bool(String key, boolean fallback) {
+        Object value = parameters.get(key);
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        return value == null ? fallback : Boolean.parseBoolean(String.valueOf(value));
     }
 
     /** A short human description, used in failure messages so a timeout says what it wanted. */

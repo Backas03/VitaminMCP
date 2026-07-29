@@ -6,11 +6,6 @@ plugins {
     id("vitaminmcp.module-rules")
 }
 
-repositories {
-    maven("https://repo.papermc.io/repository/maven-public/") {
-        name = "papermc"
-    }
-}
 
 dependencies {
     api(project(":contract"))

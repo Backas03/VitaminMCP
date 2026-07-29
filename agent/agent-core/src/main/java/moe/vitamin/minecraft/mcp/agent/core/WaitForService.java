@@ -152,6 +152,25 @@ public final class WaitForService {
             case WaitCondition.PLAYER_OFFLINE ->
                     Bukkit.getPlayerExact(required(condition, "name")) == null;
 
+            case WaitCondition.PLAYER_STATE -> {
+                Player player = Bukkit.getPlayerExact(required(condition, "name"));
+                if (condition.has("online") && !condition.bool("online", true)) {
+                    yield player == null;
+                }
+                if (player == null) {
+                    yield false;
+                }
+                if (condition.has("gameMode")
+                        && !player.getGameMode().name().equalsIgnoreCase(
+                                condition.string("gameMode", ""))) {
+                    yield false;
+                }
+                if (condition.has("op") && player.isOp() != condition.bool("op", false)) {
+                    yield false;
+                }
+                yield true;
+            }
+
             case WaitCondition.PLAYER_NEAR -> {
                 Player player = Bukkit.getPlayerExact(required(condition, "name"));
                 if (player == null) {
@@ -170,7 +189,7 @@ public final class WaitForService {
                             + List.of(WaitCondition.TICKS, WaitCondition.BLOCK_IS,
                             WaitCondition.BLOCK_IS_NOT, WaitCondition.EVENT,
                             WaitCondition.PLAYER_ONLINE, WaitCondition.PLAYER_OFFLINE,
-                            WaitCondition.PLAYER_NEAR));
+                            WaitCondition.PLAYER_NEAR, WaitCondition.PLAYER_STATE));
         };
     }
 
