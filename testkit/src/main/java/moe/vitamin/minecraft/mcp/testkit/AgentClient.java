@@ -54,10 +54,38 @@ public final class AgentClient {
         params.put("name", tool);
         params.set("arguments", arguments == null ? MAPPER.createObjectNode() : arguments);
 
+        JsonNode result = rpc("tools/call", params, tool);
+
+        // Tool-level failures come back as content with isError rather than as a transport
+        // error, which is the MCP convention — so they have to be unpacked, not assumed absent.
+        if (result.path("isError").asBoolean()) {
+            throw new AgentException(tool + ": " + textContent(result));
+        }
+        return parse(textContent(result));
+    }
+
+    /**
+     * The agent's own tool definitions, schemas and all.
+     *
+     * <p>Exists so that the parameters of a proxied tool can be published by whoever is proxying
+     * it without restating them. Restating them would mean two descriptions of one tool, and the
+     * copy is the one that goes stale — silently, because nothing compares them.
+     */
+    public JsonNode listTools() {
+        return rpc("tools/list", MAPPER.createObjectNode(), "tools/list").path("tools");
+    }
+
+    /**
+     * One JSON-RPC round trip.
+     *
+     * @param label what to name in an error message
+     * @return the {@code result} object
+     */
+    private JsonNode rpc(String method, ObjectNode params, String label) {
         ObjectNode request = MAPPER.createObjectNode();
         request.put("jsonrpc", "2.0");
         request.put("id", 1);
-        request.put("method", "tools/call");
+        request.put("method", method);
         request.set("params", params);
 
         // Generous, because wait_for legitimately blocks for as long as the caller asked it to.
@@ -78,7 +106,7 @@ public final class AgentClient {
                     + ". Is the plugin installed and the token correct?", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new AgentException("Interrupted calling " + tool, e);
+            throw new AgentException("Interrupted calling " + label, e);
         }
 
         if (response.statusCode() == 401) {
@@ -91,16 +119,10 @@ public final class AgentClient {
 
         JsonNode body = parse(response.body());
         if (body.has("error")) {
-            throw new AgentException(tool + " failed: " + body.get("error").path("message").asText());
+            throw new AgentException(
+                    label + " failed: " + body.get("error").path("message").asText());
         }
-
-        JsonNode result = body.path("result");
-        // Tool-level failures come back as content with isError rather than as a transport
-        // error, which is the MCP convention — so they have to be unpacked, not assumed absent.
-        if (result.path("isError").asBoolean()) {
-            throw new AgentException(tool + ": " + textContent(result));
-        }
-        return parse(textContent(result));
+        return body.path("result");
     }
 
     private static String textContent(JsonNode result) {

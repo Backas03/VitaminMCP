@@ -81,11 +81,19 @@ final class SessionTools {
 
         // Proxied verbatim: one definition of each tool, living where it is implemented.
         //
+        // The parameters are not restated here, and the schema says so by accepting any
+        // property rather than declaring one. An earlier version declared a single string
+        // called "arguments", which was worse than saying nothing: a caller that believed it
+        // sent {"arguments": "{...}"}, the agent saw no parameters at all, and the failure came
+        // back as "state_query needs 'kind'" — blaming the caller for following the schema.
+        //
+        // What the parameters actually are comes from the agent itself, in session_start's
+        // response. That keeps one definition of each tool, in the module that implements it.
         for (String name : PROXIED) {
-            tools.add(tool(name,
-                    "Forwarded to the agent on the connected server. Call session_start first.",
-                    properties -> string(properties, "arguments",
-                            "Passed through unchanged; see the agent's own schema.")));
+            tools.add(passthroughTool(name,
+                    "Forwarded to the agent on the connected server. Call session_start first — "
+                            + "its response lists this tool's parameters, as the agent defines "
+                            + "them. Pass them as top-level properties, not wrapped."));
         }
         return tools;
     }
@@ -145,6 +153,12 @@ final class SessionTools {
         ObjectNode result = MAPPER.createObjectNode();
         result.put("connected", session.describe());
         result.set("server", info);
+
+        // The proxied tools' real parameters, straight from the agent that implements them.
+        // They cannot be in this server's own tool list: that list is published at startup,
+        // before any agent is connected, and which tools exist depends on the agent — a
+        // read-only one does not expose command_exec at all.
+        result.set("agentTools", session.agent().listTools());
         return result;
     }
 
@@ -236,6 +250,25 @@ final class SessionTools {
         schema.set("required", MAPPER.createArrayNode());
         return tool;
     }
+
+    /**
+     * A tool whose arguments belong to something else.
+     *
+     * <p>Declares an object with no named properties and {@code additionalProperties} allowed,
+     * which is the accurate description of a passthrough: whatever arrives is forwarded as-is.
+     */
+    private static ObjectNode passthroughTool(String name, String description) {
+        ObjectNode tool = MAPPER.createObjectNode();
+        tool.put("name", name);
+        tool.put("description", description);
+
+        ObjectNode schema = tool.putObject("inputSchema");
+        schema.put("type", "object");
+        schema.putObject("properties");
+        schema.put("additionalProperties", true);
+        return tool;
+    }
+
     private static void string(ObjectNode properties, String name, String description) {
         ObjectNode property = properties.putObject(name);
         property.put("type", "string");
