@@ -44,11 +44,19 @@ final class SessionTools {
                     number(properties, "mcpPort", "Agent's MCP port. Defaults to 25585.");
                     string(properties, "token", "The agent's auth-token from its config.yml.");
                     string(properties, "runnerJar",
-                            "Path to the bot runner jar built for this server's protocol.");
+                            "Path to the bot runner jar. Optional: defaults to the "
+                                    + "bot-runner-*.jar sitting beside this server's own jar, "
+                                    + "which is where 'gradlew dist' puts it.");
                     string(properties, "tls",
                             "'true' if the agent serves HTTPS. Required for any server that is "
                                     + "not on this machine — a remotely reachable agent refuses "
                                     + "to start without transport security.");
+                    string(properties, "tlsFingerprint",
+                            "SHA-256 of the agent's certificate, printed in its startup log. "
+                                    + "Needed when the agent uses a self-signed certificate; "
+                                    + "pins that exact certificate so nothing has to be "
+                                    + "installed on this machine. Omit for a certificate signed "
+                                    + "by a public authority.");
                 }));
 
         tools.add(tool("session_reset",
@@ -130,12 +138,9 @@ final class SessionTools {
         }
 
         String runnerJar = args.path("runnerJar").asText("");
-        if (runnerJar.isBlank()) {
-            throw new IllegalArgumentException(
-                    "session_start needs 'runnerJar' — the bot runner built for this server's "
-                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
-                            + "bots run in a child process.");
-        }
+        java.nio.file.Path runner = runnerJar.isBlank()
+                ? runnerBesideThisJar()
+                : java.nio.file.Path.of(runnerJar);
 
         try {
             session = new Session(
@@ -144,7 +149,8 @@ final class SessionTools {
                     args.path("mcpPort").asInt(25585),
                     token,
                     args.path("tls").asBoolean(false),
-                    java.nio.file.Path.of(runnerJar));
+                    args.path("tlsFingerprint").asText(null),
+                    runner);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
@@ -224,6 +230,55 @@ final class SessionTools {
             }
         }
         return response;
+    }
+
+    /**
+     * Finds the bot runner next to this server's own jar.
+     *
+     * <p>{@code gradlew dist} puts the three jars in one directory, so the caller knowing where
+     * this one is means they already know where the runner is. Asking them to type an absolute
+     * path to a file we can see from here was friction for nothing.
+     *
+     * <p>Refuses to guess when there is more than one. Runners are named for the protocol they
+     * speak, and picking the wrong one produces "Outdated client!" from the server — a failure
+     * far enough from the cause to be worth avoiding.
+     */
+    private static java.nio.file.Path runnerBesideThisJar() {
+        java.nio.file.Path here;
+        try {
+            here = java.nio.file.Path.of(SessionTools.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI()).getParent();
+        } catch (RuntimeException | java.net.URISyntaxException e) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': this server could not work out where its "
+                            + "own jar is, so it cannot find the runner beside it.");
+        }
+
+        List<java.nio.file.Path> found = new java.util.ArrayList<>();
+        try (var entries = java.nio.file.Files.list(here)) {
+            entries.filter(path -> {
+                String name = path.getFileName().toString();
+                return name.startsWith("bot-runner-") && name.endsWith(".jar");
+            }).forEach(found::add);
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': could not look in " + here + " (" + e + ")");
+        }
+
+        if (found.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar' — the bot runner built for this server's "
+                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
+                            + "bots run in a child process. No bot-runner-*.jar was found in "
+                            + here + ", so pass its path.");
+        }
+        if (found.size() > 1) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': " + here + " holds more than one runner "
+                            + found.stream().map(p -> p.getFileName().toString()).toList()
+                            + ". Name the one that speaks this server's protocol.");
+        }
+        return found.get(0);
     }
 
     private Session require() {

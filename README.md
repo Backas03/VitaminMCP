@@ -123,8 +123,27 @@ claude mcp add vitaminmcp -- java -jar /절대/경로/mcp-server.jar
 }
 ```
 
-다른 기계의 서버라면 `host`를 그쪽으로 두고 `"tls": "true"`를 넣는다 — 원격에서 닿는 에이전트는
-TLS 없이는 애초에 뜨지 않으므로, 이 경우 평문으로 붙을 대상 자체가 없다.
+`runnerJar`는 생략해도 된다 — `mcp-server.jar` 옆의 `bot-runner-*.jar`를 찾는다. `dist`가 셋을
+한 폴더에 두므로 보통은 적을 일이 없다.
+
+### 다른 기계의 서버라면
+
+`bind-address`를 루프백 밖으로 옮기면 에이전트가 TLS 없이는 뜨지 않는다. 인증서를 준비하고
+기동하면, **붙는 데 필요한 걸 에이전트가 통째로 찍어준다**:
+
+```
+[VitaminMCP] MCP endpoint listening on https://203.0.113.10:25585/mcp
+[VitaminMCP] Connect with session_start:
+  "host": "203.0.113.10", "mcpPort": 25585, "tls": "true",
+  "token": "YLwNyFij...",
+  "tlsFingerprint": "sha256:ffb61d8f...f163"
+```
+
+그대로 붙여넣으면 끝이다. **자체 서명 인증서라도 클라이언트에 아무것도 설치하지 않는다** —
+`tlsFingerprint`가 그 인증서 하나만 신뢰하도록 고정하기 때문이다. 인증서를 내보내고 옮기고
+truststore를 만들 필요가 없다.
+
+정식 인증서(Let's Encrypt 등)를 쓴다면 `tlsFingerprint`를 빼면 평소대로 검증한다.
 
 잘 붙었으면 서버 버전·TPS·플러그인 목록이 돌아온다. 그다음은:
 

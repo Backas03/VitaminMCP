@@ -155,11 +155,28 @@ exceptions_recent(hash="...")      # 그 하나만 전체 스택과 함께
   "host": "127.0.0.1",
   "port": 25565,          // 마인크래프트 포트
   "mcpPort": 25585,       // 에이전트 포트
-  "token": "config.yml의 auth-token",
-  "runnerJar": "/절대/경로/bot-runner-772.jar",
-  "tls": "true"           // 다른 기계의 서버일 때만
+  "token": "config.yml의 auth-token"
 }
 ```
+
+`runnerJar`는 생략하면 `mcp-server.jar` 옆의 `bot-runner-*.jar`를 찾는다. 여러 개면 어느 걸
+쓸지 말해달라고 한다 — 프로토콜이 안 맞는 러너를 고르면 서버가 `Outdated client!`로 거절하는데,
+원인에서 한참 떨어진 실패라 추측하지 않는다.
+
+**다른 기계의 서버라면** 에이전트가 기동 로그에 붙여넣을 블록을 찍어준다:
+
+```jsonc
+{
+  "host": "203.0.113.10", "mcpPort": 25585, "tls": "true",
+  "token": "YLwNyFij...",
+  "tlsFingerprint": "sha256:ffb61d8f...f163",   // 자체 서명 인증서일 때
+  "port": 25565
+}
+```
+
+`tlsFingerprint`는 **그 인증서 하나만** 신뢰하도록 고정한다. 클라이언트에 아무것도 설치하지
+않아도 되고, 검증을 끄는 것도 아니다 — CA 검증보다 오히려 좁다 (CA는 그 CA가 서명한 전부를
+믿지만, 지문은 그 인증서 하나만 믿는다). 정식 인증서면 생략한다.
 
 여기서 바로 `server_info`를 한 번 부른다. 호스트·포트·토큰이 틀렸으면 나중에 엉뚱한 툴 안에서
 터지는 대신 여기서 그 이유를 말하고 끝난다.
@@ -389,6 +406,8 @@ wait_for inventory_open first.
 | 이벤트가 안 잡힌다 | 고빈도 목록에 있는 타입이다. `types`에 명시하고, 필요하면 `capture-high-frequency`도 켤 것 |
 | `command_exec`이 없다 | `read-only: true` (기본값). `session_start`의 `agentTools`에 실제로 있는 툴이 나온다 |
 | 프록시 툴이 `... needs 'kind'` 같은 걸로 거절 | 파라미터를 감쌌다. 최상위에 평평하게 넣을 것 |
+| `presented a certificate that no trusted authority signed` | 자체 서명 서버다. 기동 로그의 `tlsFingerprint`를 넣을 것 |
+| `did not present the pinned certificate` | 인증서가 다시 만들어졌다. 새 지문을 로그에서 가져올 것 |
 | 메뉴가 비었다고 나온다 | `wait_for inventory_open`을 안 했다. 아니면 `view`를 볼 것 — `CREATIVE`/`CRAFTING`이면 애초에 안 열린 것이다 |
 | 상자가 안 열린다 | 바로 위에 불투명 블록이 있다 (게임 규칙) |
 | `click_slot`이 `has no menu open`으로 실패 | 열리기 전에 클릭했다. `wait_for inventory_open` 먼저 |

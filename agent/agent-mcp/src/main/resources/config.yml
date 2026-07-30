@@ -41,8 +41,16 @@ read-only: true
 #    terminated-upstream and the agent serves plain HTTP to that proxy only. You are asserting
 #    the hop between them is not the public internet; if it is, nothing is protecting the token.
 #
-# No self-signed certificate is generated for you. It would be convenient and it would train
-# every client to skip verification, which removes the point of having a certificate.
+# No domain, no certificate authority? Make a self-signed one and let the client pin it:
+#
+#   keytool -genkeypair -alias agent -keyalg RSA -keysize 2048 -storetype PKCS12 \
+#     -keystore agent.p12 -storepass CHANGEME -validity 825 -dname "CN=vitaminmcp-agent"
+#
+# On startup the agent prints that certificate's SHA-256 next to everything else a client needs.
+# Passing it as session_start's 'tlsFingerprint' trusts that one certificate and nothing else —
+# no truststore, no files to copy. Note this is not the same as skipping verification: a pin is
+# narrower than a certificate authority, since it matches one certificate rather than anything
+# an authority chooses to sign.
 tls:
   enabled: false
   keystore: ""
