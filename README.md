@@ -82,8 +82,8 @@ Every action below is a real step. Type the prompt and let the agent build it, o
 > the same player, click again, and confirm it is refused this time because the cooldown is still
 > running.
 
-Rejoining and checking the *refusal* is the interesting half — and the refusal is usually one chat
-message with no log line behind it.
+The second half tests the refusal, which is the part that usually goes unverified: a cooldown
+rejection is often one chat message with nothing behind it — no exception, no log line, no event.
 
 ```json
 [
@@ -222,7 +222,7 @@ assertion — permission nodes can be tested but not enumerated, so you have to 
 about. **Anything plugin-specific** (an economy balance, a scoreboard value) is reached through
 `command_exec` and its output, which is where those plugins put the answer.
 
-Two things that catch people out:
+Two notes on calling them:
 
 - **Pass proxied parameters flat, at the top level** — `{"kind": "player", "target": "Tester1"}`,
   not wrapped in an `arguments` object.
@@ -302,7 +302,7 @@ from the log into `auth-token` in `plugins/VitaminMCP/config.yml` and start agai
 
 That is the minimum install. Every other setting is documented in
 [config.yml](agent/agent-mcp/src/main/resources/config.yml), alongside why each default is what it
-is. Two worth knowing up front:
+is. Two defaults to know before you change anything:
 
 - **`read-only: true` is the default.** State-changing tools like `command_exec` are not exposed at
   all — a default install cannot alter the server even with a valid token. Turn it off only when
