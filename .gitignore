@@ -111,6 +111,11 @@ gradle-app.setting
 
 **/build/
 
+# ...but a Gradle output directory is a sibling of build.gradle.kts, never inside src/. Without
+# this, build-logic's `moe.vitamin.build` package matched the rule above and SupportedVersions.kt
+# was silently never committed — the build passed here and failed for everyone else.
+!**/src/**/build/
+
 # Common working directory
 run/
 runs/
