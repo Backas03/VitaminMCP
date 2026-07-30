@@ -77,6 +77,16 @@ public record InventorySnapshot(
      * @param lore        custom lore lines, same encoding, empty if none
      * @param enchanted   whether it carries any enchantment, which is what gives a menu button
      *                    its glow
+     * @param customModelData the integer view of {@code custom_model_data}, or {@code null} if
+     *                    unset. Reported because a resource-pack menu is drawn by it: two
+     *                    buttons can be the same material with the same name and render as
+     *                    completely different icons, and this is what tells them apart.
+     *                    <p><b>Lossy for anything set the 1.21.4 way.</b> The API derives this
+     *                    from the first float, so 2.5 arrives as 2 — and two buttons at 2.0 and
+     *                    2.5 look identical here. Use {@link #modelData} when it is present
+     * @param modelData   the full {@code custom_model_data} component (1.21.4+), or {@code null}
+     *                    if the item does not carry one. The only place string-keyed icons —
+     *                    now the usual way to build a pack — are visible at all
      */
     public record Item(
             int slot,
@@ -84,11 +94,51 @@ public record InventorySnapshot(
             int amount,
             String displayName,
             List<String> lore,
-            boolean enchanted) {
+            boolean enchanted,
+            Integer customModelData,
+            ModelData modelData) {
 
         public Item {
             Objects.requireNonNull(material, "material");
             lore = lore == null ? List.of() : List.copyOf(lore);
+        }
+    }
+
+    /**
+     * The {@code custom_model_data} component, as four parallel lists.
+     *
+     * <p>Kept in the shape the game uses rather than flattened into something friendlier: a
+     * pack selects a model by indexing into these, so the position of a value is as meaningful
+     * as the value, and collapsing them would lose exactly what a test is checking.
+     *
+     * @param floats  numeric selectors — the modern form of the old integer
+     * @param flags   boolean selectors
+     * @param strings string selectors, how most packs key their icons
+     * @param colors  colour selectors, as {@code #RRGGBB}
+     */
+    public record ModelData(
+            List<Float> floats,
+            List<Boolean> flags,
+            List<String> strings,
+            List<String> colors) {
+
+        public ModelData {
+            floats = floats == null ? List.of() : List.copyOf(floats);
+            flags = flags == null ? List.of() : List.copyOf(flags);
+            strings = strings == null ? List.of() : List.copyOf(strings);
+            colors = colors == null ? List.of() : List.copyOf(colors);
+        }
+
+        /**
+         * Whether the component carries nothing, in which case it is not worth reporting.
+         *
+         * <p>Deliberately not called {@code isEmpty}. A serializer treats an {@code isX()} on a
+         * record as another field and puts {@code "empty": false} on every item — which it did,
+         * until this was renamed. contract takes no dependency on a JSON library (CLAUDE.md
+         * invariant 2), so there is no annotation to suppress it with; the name is the fix.
+         */
+        public boolean carriesNothing() {
+            return floats.isEmpty() && flags.isEmpty() && strings.isEmpty() && colors.isEmpty();
         }
     }
 }

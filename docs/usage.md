@@ -99,10 +99,32 @@ exceptions_recent(hash="...")      # 그 하나만 전체 스택과 함께
   "occupiedSlots": 2,
   "items": [
     {"slot": 11, "material": "EMERALD", "amount": 1,
-     "displayName": "§aBuy", "lore": ["§7Costs 10"], "enchanted": false}
+     "displayName": "§aBuy", "lore": ["§7Costs 10"], "enchanted": false,
+     "customModelData": 1,
+     "modelData": {"floats": [1.0], "flags": [], "strings": ["icon_a"], "colors": ["#FF8800"]}}
   ],
   "truncated": false
 }
+```
+
+### CustomModelData — 두 가지 형태
+
+리소스팩 메뉴는 이걸로 아이콘이 갈린다. 같은 재질·같은 이름이어도 완전히 다른 버튼이므로, **재질과 이름만 검사하면 아이콘 버그를 놓친다.**
+
+| 필드 | 무엇 |
+|---|---|
+| `customModelData` | 정수 형태. `setCustomModelData(1)`로 넣은 값 |
+| `modelData` | 1.21.4에서 추가된 컴포넌트 — `floats`/`flags`/`strings`/`colors` |
+
+**둘은 같은 것의 두 가지 뷰다.** 1.21.8에서 `setCustomModelData(1)`은 실제로 `floats: [1.0]`을 쓴다.
+
+**`customModelData`는 손실이 있다.** 컴포넌트의 첫 float을 정수로 자르기 때문에 `2.5`가 `2`로 온다 — 즉 `2.0`짜리 버튼과 `2.5`짜리 버튼이 여기서는 구분되지 않는다. 그리고 **문자열 키는 아예 안 보인다.** 요즘 팩이 주로 쓰는 방식이 문자열인데, 정수 뷰로는 없는 것처럼 보인다.
+
+정수로 넣었으면 `customModelData`로, 문자열 키를 쓰면 `modelDataString`으로 검사할 것:
+
+```json
+{"slot": 7, "material": "PAPER", "customModelData": 1}
+{"slot": 8, "material": "PAPER", "modelDataString": "icon_a"}
 ```
 
 - **빈 슬롯은 빠진다.** 54칸 메뉴는 대부분 공기라 다 넣으면 예산만 먹는다. `size`와
@@ -221,6 +243,8 @@ bot_spawn {"name": "Tester1"}
 | `name` | 표시 이름에 이 문자열이 포함되는지. **색 코드는 무시하고 비교**하므로 `"Buy"`로 `§aBuy`가 맞는다 |
 | `amount` | 개수 |
 | `lore` | lore 어딘가에 이 문자열이 포함되는지 |
+| `customModelData` | 정수 CustomModelData |
+| `modelDataString` | 컴포넌트의 `strings`에 이 값이 있는지 (문자열 키 팩용) |
 | `empty` | `true`면 그 슬롯이 비어 있어야 한다 |
 
 몇 가지 알아둘 것:

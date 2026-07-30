@@ -367,6 +367,40 @@ public final class ScenarioRunner {
                                 + actual.path("lore"),
                         snapshot.toString());
             }
+
+            // A pack keyed on strings is the modern idiom, and the integer view cannot see one
+            // at all — so it gets its own check rather than being folded into the number.
+            String modelString = expected.path("modelDataString").asText(null);
+            if (modelString != null) {
+                JsonNode strings = actual.path("modelData").path("strings");
+                boolean found = false;
+                for (JsonNode candidate : strings) {
+                    found = found || candidate.asText().equals(modelString);
+                }
+                if (!found) {
+                    return ScenarioResult.StepResult.failed(index, action,
+                            "slot " + slot + " expected model data string '" + modelString
+                                    + "' but the item has " + (strings.isMissingNode()
+                                            ? "no custom_model_data component" : strings.toString()),
+                            snapshot.toString());
+                }
+            }
+
+            if (expected.hasNonNull("customModelData")) {
+                JsonNode found = actual.path("customModelData");
+                if (found.isNull() || found.isMissingNode()
+                        || found.asInt() != expected.path("customModelData").asInt()) {
+                    // Called out separately when there is none at all: an item with no
+                    // custom_model_data renders as the plain vanilla icon, which is a different
+                    // bug from one rendering the wrong icon.
+                    return ScenarioResult.StepResult.failed(index, action,
+                            "slot " + slot + " expected customModelData "
+                                    + expected.path("customModelData").asInt() + " but "
+                                    + (found.isNull() || found.isMissingNode()
+                                            ? "the item has none" : "it was " + found.asInt()),
+                            snapshot.toString());
+                }
+            }
         }
 
         return ScenarioResult.StepResult.ok(index, action,

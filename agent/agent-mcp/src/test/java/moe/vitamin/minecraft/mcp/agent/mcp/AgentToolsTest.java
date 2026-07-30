@@ -392,7 +392,7 @@ class AgentToolsTest {
             return new moe.vitamin.minecraft.mcp.contract.InventorySnapshot(
                     "CHEST", "§aShop", 27, 1,
                     List.of(new moe.vitamin.minecraft.mcp.contract.InventorySnapshot.Item(
-                            11, "EMERALD", 1, "§aBuy", List.of("§7Click me"), false)),
+                            11, "EMERALD", 1, "§aBuy", List.of("§7Click me"), false, 7, null)),
                     false);
         }
 

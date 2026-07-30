@@ -358,6 +358,8 @@ public final class CaptureService implements AgentQueries {
         String displayName = null;
         List<String> lore = List.of();
         boolean enchanted = !stack.getEnchantments().isEmpty();
+        Integer customModelData = null;
+        InventorySnapshot.ModelData modelData = null;
 
         if (stack.hasItemMeta()) {
             org.bukkit.inventory.meta.ItemMeta meta = stack.getItemMeta();
@@ -371,10 +373,37 @@ public final class CaptureService implements AgentQueries {
                 // An enchanted-looking button need not carry a real enchantment; menus often
                 // fake the glow. Either way the player sees a glint, so either counts.
                 enchanted = enchanted || meta.hasEnchants();
+                if (meta.hasCustomModelData()) {
+                    customModelData = meta.getCustomModelData();
+                }
+                if (meta.hasCustomModelDataComponent()) {
+                    modelData = describe(meta.getCustomModelDataComponent());
+                }
             }
         }
-        return new InventorySnapshot.Item(
-                slot, stack.getType().name(), stack.getAmount(), displayName, lore, enchanted);
+        return new InventorySnapshot.Item(slot, stack.getType().name(), stack.getAmount(),
+                displayName, lore, enchanted, customModelData, modelData);
+    }
+
+    /**
+     * Flattens the custom model data component.
+     *
+     * @return the component, or {@code null} if it carries nothing — an empty one says the same
+     *         as no component at all, and reporting it would put four empty lists on every item
+     */
+    private static InventorySnapshot.ModelData describe(
+            org.bukkit.inventory.meta.components.CustomModelDataComponent component) {
+        InventorySnapshot.ModelData data = new InventorySnapshot.ModelData(
+                component.getFloats(),
+                component.getFlags(),
+                component.getStrings(),
+                component.getColors().stream().map(CaptureService::hex).toList());
+        return data.carriesNothing() ? null : data;
+    }
+
+    /** A colour as {@code #RRGGBB}, which is how a pack author writes it. */
+    private static String hex(org.bukkit.Color color) {
+        return String.format("#%06X", color.asRGB());
     }
 
     /**

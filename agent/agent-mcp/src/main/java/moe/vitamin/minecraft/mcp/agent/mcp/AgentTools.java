@@ -117,8 +117,11 @@ final class AgentTools {
                         + "'permissions'; kind='block' needs 'x','y','z' and optionally 'world'; "
                         + "kind='inventory' needs 'target' and reads the menu that player has "
                         + "open — the only way to check a plugin GUI, since its contents exist "
-                        + "nowhere else. Empty slots are omitted; 'size' and 'occupiedSlots' "
-                        + "describe the whole inventory. A 'view' of CRAFTING means no menu is "
+                        + "nowhere else. Each slot reports material, amount, display name, lore "
+                        + "and customModelData — the last is what a resource pack draws, so two "
+                        + "buttons of the same material and name can still be different icons. "
+                        + "Empty slots are omitted; 'size' and 'occupiedSlots' describe the "
+                        + "whole inventory. A 'view' of CRAFTING or CREATIVE means no menu is "
                         + "open.",
                 properties -> {
                     enumProperty(properties, "kind", "What to read.",
