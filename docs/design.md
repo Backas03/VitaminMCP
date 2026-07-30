@@ -1,137 +1,160 @@
-# VitaminMCP 설계 문서
+# VitaminMCP design notes
 
-마인크래프트 플러그인 자동화를 위한 MCP 서버 + 프로토콜 봇 테스트 하네스의 설계 결정과 근거.
+Design decisions and their reasons, for an MCP server plus protocol-bot test harness aimed at
+Minecraft plugin automation.
 
-이 문서는 **왜 그렇게 했는지**를 담는다. 규칙과 불변 조건은 `CLAUDE.md`, 구현 순서는 `roadmap.md`.
-
----
-
-## 1. 프로젝트가 푸는 문제
-
-두 가지 목표가 있고, 우선순위가 다르다.
-
-1. **플러그인 자동 테스트** — 실제 플레이어 관점에서 플러그인 동작을 검증. 여러 봇을 붙여 멀티플레이어 시나리오까지.
-2. **서버 관측** — 로그, 이벤트 이력, 예외를 MCP로 노출해 LLM이 직접 조회. 테스트 환경뿐 아니라 운영 서버 디버깅에도 사용.
-
-2번이 1번의 하위 부품처럼 보이지만, **독립적인 가치가 더 클 수 있다.** 개발 서버에 플러그인 하나만 꽂아도 "어젯밤 왜 죽었는지 봐줘"가 되기 때문이다. 그래서 에이전트 플러그인은 처음부터 단독으로 성립하도록 설계한다.
+This document holds the **why**. Rules and invariants are in `CLAUDE.md`, implementation order in
+`roadmap.md`.
 
 ---
 
-## 2. 클라이언트 조작 방식: NMS fake player를 쓰지 않는 이유
+## 1. The problem this project solves
 
-서버 내부에 가짜 `ServerPlayer`와 fake `Connection`을 꽂는 방식은 언뜻 간단해 보이지만 채택하지 않는다.
+There are two goals, and they are not equally important.
 
-- 버전마다 `ServerPlayer`/`Connection` 시그니처가 바뀌어 유지보수 비용이 지속 발생한다
-- 가짜 connection은 패킷을 실제로 태우지 않는다. 로그인 흐름, 인벤토리 GUI 동기화, plugin message 채널이 검증에서 빠진다
-- 정작 버그가 자주 나는 구간(패킷 왕복, 클라이언트가 실제로 관측하는 상태)을 놓친다
+1. **Automated plugin testing** — verify plugin behaviour from a real player's point of view,
+   multiplayer scenarios included, by attaching several bots.
+2. **Server observability** — expose logs, event history and exceptions over MCP so an LLM can query
+   them directly. Useful for debugging production servers, not just test environments.
 
-대신 **실제 프로토콜로 접속하는 봇**을 쓴다. 로그인부터 패킷까지 진짜 경로를 타고, 봇이 관측한 월드 상태가 곧 "플레이어가 보는 것"이므로 테스트의 의미가 명확하다.
-
-Java 스택이므로 **MCProtocolLib**을 봇 구현체로 사용한다.
-
-### 한계 (알고 시작할 것)
-
-리소스팩, 클라이언트 렌더링, 셰이더 관련은 이 방식으로 검증 불가능하다. 해당 패킷이 전송되었는지까지만 확인된다.
+The second looks like a component of the first, but **its standalone value may be greater.** Drop
+one plugin into a development server and "look at why it died last night" starts working. So the
+agent plugin is designed from the start to stand on its own.
 
 ---
 
-## 3. 온라인 모드 대응
+## 2. Driving the client: why not an NMS fake player
 
-`online-mode=true`인 서버에는 세션 검증 때문에 임의의 봇이 붙지 못한다. 세 계층으로 대응한다.
+Injecting a fake `ServerPlayer` and a fake `Connection` inside the server looks simpler at a glance.
+It is not adopted.
 
-### 3.1 기본 전략 — 오프라인 + 포워딩 핸드셰이크 (95% 커버)
+- `ServerPlayer` and `Connection` signatures change per version, so maintenance cost never stops
+- A fake connection does not actually put packets on the wire. The login flow, inventory GUI
+  synchronisation and plugin message channels all drop out of verification
+- It misses exactly the areas where bugs concentrate: packet round-trips, and the state a client
+  actually observes
 
-플러그인 로직은 online-mode 여부를 거의 타지 않는다. 실제로 달라지는 것은 네 가지뿐이다.
+Instead we use **bots that connect over the real protocol**. They take the real path from login
+through packets, and the world state a bot observes *is* "what the player sees", which makes the
+meaning of a test unambiguous.
 
-| 항목 | online-mode=true | online-mode=false |
+Being a Java stack, **MCProtocolLib** is the bot implementation.
+
+### Limits (know them going in)
+
+Resource packs, client rendering and shaders cannot be verified this way. Only that the relevant
+packet was sent.
+
+---
+
+## 3. Handling online mode
+
+A server with `online-mode=true` will not accept an arbitrary bot, because of session verification.
+Three layers of response.
+
+### 3.1 Default strategy — offline plus a forwarding handshake (covers 95%)
+
+Plugin logic barely depends on online mode. Only four things actually differ.
+
+| | online-mode=true | online-mode=false |
 |---|---|---|
-| UUID 출처 | Mojang 발급 | `OfflinePlayer:<name>` MD5 해시 |
-| textures 프로퍼티 | Mojang 서명됨 | 없음 |
-| 연결 암호화 | 활성 | 비활성 |
-| 채팅 서명 (1.19+) | 강제 가능 | 없음 |
+| Source of the UUID | issued by Mojang | MD5 of `OfflinePlayer:<name>` |
+| textures property | signed by Mojang | absent |
+| Connection encryption | on | off |
+| Chat signing (1.19+) | can be enforced | absent |
 
-따라서 **프록시 포워딩 핸드셰이크를 흉내내는 것**이 가장 실용적이다.
+So **imitating a proxy's forwarding handshake** is the practical answer.
 
-백엔드를 `online-mode=false` + `spigot.yml`의 `settings.bungeecord: true`로 두면, 핸드셰이크 패킷의 server address 필드에 다음을 붙여 보내는 것만으로 임의의 프리미엄 UUID와 서명된 skin 프로퍼티를 주입할 수 있다.
+Put the backend on `online-mode=false` with `settings.bungeecord: true` in `spigot.yml`, and
+appending the following to the handshake packet's server address field is enough to inject an
+arbitrary premium UUID and signed skin properties:
 
 ```
 <host>\0<clientIP>\0<uuid>\0<properties-json>
 ```
 
-인증 없이 프리미엄 환경을 재현하는 셈이다. UUID를 고정할 수 있으므로 퍼미션/LuckPerms 테스트도 재현 가능해진다.
+It reproduces a premium environment without authenticating. Because the UUID can be fixed,
+permission and LuckPerms tests become reproducible.
 
-Velocity modern forwarding을 쓰는 환경이면 HMAC 서명이 붙지만, 테스트 환경에서는 시크릿을 보유하므로 동일하게 구현 가능하다.
+In an environment using Velocity modern forwarding there is an HMAC signature as well, but a test
+environment holds the secret, so the same approach works.
 
-### 3.2 online-mode 자체를 검증해야 할 때 — 자체 Yggdrasil
+### 3.2 When online mode itself is under test — our own Yggdrasil
 
-`authlib-injector` + `Drasl`(Yggdrasil 호환 API 서버)을 띄우면, 서버는 `online-mode=true`를 유지한 채 자체 발급 계정으로 정상 인증이 된다. 암호화·세션 검증·프로필 서명 경로가 모두 실제로 동작하므로 채팅 서명 같은 것도 검증된다.
+Running `authlib-injector` with `Drasl` (a Yggdrasil-compatible API server) lets the server keep
+`online-mode=true` and authenticate normally with self-issued accounts. Encryption, session
+verification and profile signing all genuinely run, so things like chat signing get verified too.
 
-**주의**: 런처·클라이언트·서버·봇이 **모두 같은 Yggdrasil API를 바라봐야** 한다. 하나라도 어긋나면 인증이 실패한다.
+**Careful**: launcher, client, server and bot must **all point at the same Yggdrasil API.** One
+mismatch and authentication fails.
 
-이 경로는 필요해질 때 도입한다. 초기 구현 범위에 넣지 않는다.
+This path is introduced when it becomes necessary. It is out of the initial scope.
 
-### 3.3 실계정 — 최종 스모크 전용
+### 3.3 Real accounts — final smoke only
 
-MCProtocolLib은 MSA 인증을 지원하지만, 계정 비용과 자동화 플래그 위험 때문에 다수 봇을 이렇게 운영할 수 없다. 스테이징 최종 확인용으로 1~2개만.
-
----
-
-## 4. 전 버전 지원 — 버전별 코드 (개정, 2026-07-30)
-
-> **개정.** 원래는 ViaProxy 번역 계층을 끼우는 설계였다. 하한이 1.21.8로 올라가면서 전제가
-> 무너져 폐기한다. 원문 논거는 §4.3에 남긴다.
-
-### 4.1 왜 Via를 뺐는가
-
-Via의 가치는 "봇은 프로토콜 하나만 알고, 나머지 버전 대응은 Via 업스트림이 진다"였다. 그 계산은
-지원 범위가 1.13~최신처럼 넓을 때 성립한다.
-
-하한이 1.21.8이 되면서 실제 매트릭스는 **1.21.8 ~ 최신**이라는 좁은 띠가 됐다. 이 구간은
-프로토콜 차이가 거의 없다 — 예를 들어 1.21.7과 1.21.8은 **프로토콜 번호가 772로 동일**하다.
-번역할 것이 거의 없는 구간에 번역 계층을 두면, 얻는 것 없이 §4.3의 위험만 떠안는다.
-
-### 4.2 대신 하는 것
-
-**버전별로 필요한 코드를 각각 만들어 유지보수한다.** 프로토콜이 실제로 갈리는 지점에서만
-분기하고, 갈리지 않는 구간은 한 구현이 그대로 덮는다.
-
-- 봇은 지원 범위의 프로토콜을 직접 말한다 (현재 MCProtocolLib `1.21.7-1`, 프로토콜 772)
-- 서버는 네이티브로 띄운다 (§15)
-- 버전이 실제로 갈리면 그때 분기를 만든다. 미리 추상화하지 않는다
-
-`bot-via` 모듈은 비워 둔다. 구버전 지원 요구가 실제로 생기면 그때 Via를 다시 검토한다 —
-그 시점에는 하한을 내리는 비용(§5.4)도 같이 계산해야 한다.
-
-### 4.3 원 설계의 논거 (보존)
-
-Via 번역은 무손실이 아니다. 구버전 고유의 패킷 레벨 버그가 가려지거나, 반대로 Via가 없던 문제를
-만들 수 있다. 그래서 원 설계도 "정말 보증해야 하는 2~3개 버전은 네이티브로 이중 검증"을 전제로
-했다. 지금은 **전 구간이 네이티브**이므로 이 위험이 통째로 사라진다 — Via를 뺀 부수 효과 중
-가장 큰 것이다.
+MCProtocolLib supports MSA authentication, but account cost and automation-flag risk rule out
+running many bots this way. One or two, for a final check on staging.
 
 ---
 
-## 5. 지원 버전 하한: 1.21.8+ (확정, 2026-07-29 개정 2차)
+## 4. Supporting every version — per-version code (revised 2026-07-30)
 
-> **개정 이력.**
-> 1. 최초: **1.13**. flattening(`Material` enum과 `ItemStack` data 처리)이 진짜 경계선이라는
->    판단이었고, 그 자체는 지금도 맞다. 그러나 **JVM 제약이 먼저 물린다는 것을 실기동에서
->    확인했다** (§5.1).
-> 2. → **1.18**. Java 17 바이트코드로 내려 1.13~1.17을 포기.
-> 3. → **1.21.8** (현재). 아래 §5.2.
+> **Revised.** The original design inserted a ViaProxy translation layer. Raising the floor to
+> 1.21.8 removed its premise, so it is dropped. The original argument is preserved in §4.3.
 
-### 5.1 왜 1.13이 불가능했는가
+### 4.1 Why Via was removed
 
-플러그인 jar는 서버가 고른 JVM에 로드된다. 마인크래프트 버전별 요구 JVM:
+Via's value was "the bot knows one protocol, and Via upstream carries the rest". That calculation
+holds when the supported range is wide, like 1.13 through latest.
 
-| 서버 버전 | 필요 JVM |
+With the floor at 1.21.8 the real matrix became a narrow band: **1.21.8 through latest.** There is
+almost no protocol difference across it — 1.21.7 and 1.21.8, for instance, **share protocol number
+772**. Putting a translation layer over a range with nothing to translate buys nothing and takes on
+all of §4.3's risk.
+
+### 4.2 What we do instead
+
+**Write and maintain per-version code where versions actually differ.** Branch only at the points
+where the protocol genuinely diverges; where it does not, one implementation covers the range.
+
+- The bot speaks the supported range's protocol directly (currently MCProtocolLib `1.21.7-1`,
+  protocol 772)
+- Servers are started natively (§15)
+- When a version really diverges, that is when a branch gets written. No abstracting in advance
+
+The `bot-via` module is left empty. If a real demand for older versions appears, Via gets
+re-examined then — and at that point the cost of lowering the floor (§5.4) has to be counted too.
+
+### 4.3 The original argument (preserved)
+
+Via translation is not lossless. It can mask packet-level bugs specific to an old version, or
+introduce problems that were not there. So even the original design assumed "the two or three
+versions we actually guarantee get double-checked natively". Now that **the entire range is
+native**, that risk disappears wholesale — the largest side benefit of dropping Via.
+
+---
+
+## 5. Supported floor: 1.21.8+ (settled, second revision 2026-07-29)
+
+> **Revision history.**
+> 1. Originally **1.13**. The judgement was that flattening (the `Material` enum and `ItemStack`
+>    data handling) is the real boundary, which is still true in itself. But **a live startup showed
+>    that the JVM constraint bites first** (§5.1).
+> 2. → **1.18**. Dropped to Java 17 bytecode, giving up 1.13–1.17.
+> 3. → **1.21.8** (current). See §5.2.
+
+### 5.1 Why 1.13 was impossible
+
+A plugin jar loads into whatever JVM the server chose. Required JVM per Minecraft version:
+
+| Server version | Required JVM |
 |---|---|
-| 1.13 ~ 1.16.5 | Java 8+ |
+| 1.13 – 1.16.5 | Java 8+ |
 | 1.17 | Java 16+ |
-| 1.18 ~ 1.20.4 | Java 17+ |
+| 1.18 – 1.20.4 | Java 17+ |
 | 1.20.5+ | Java 21+ |
 
-Paper 1.13.2에 Java 21로 컴파일한 에이전트를 넣으면 이렇게 죽는다:
+Put an agent compiled with Java 21 into Paper 1.13.2 and it dies like this:
 
 ```
 UnsupportedClassVersionError: VitaminMcpPlugin has been compiled by a more recent
@@ -139,193 +162,225 @@ version of the Java Runtime (class file version 65.0), this version of the Java
 Runtime only recognizes class file versions up to 55.0
 ```
 
-즉 **Java 21 + 1.13 하한은 애초에 양립 불가**였다. 셋 중 하나를 골라야 한다:
+So **Java 21 and a 1.13 floor were never compatible.** One of three had to be chosen:
 
-1. Java 8/11 바이트코드로 내려 1.13 유지 — record·패턴매칭·switch 표현식을 전부 포기
-2. Java 17로 내려 하한 1.18 — record와 instanceof 패턴은 유지, Java 21 switch 패턴만 포기
-3. Java 21 유지 — 하한이 1.20.5로 올라감
+1. Drop to Java 8/11 bytecode and keep 1.13 — giving up records, pattern matching and switch
+   expressions entirely
+2. Drop to Java 17 and floor at 1.18 — keeping records and instanceof patterns, giving up only Java
+   21 switch patterns
+3. Keep Java 21 — the floor rises to 1.20.5
 
-근거는 1.13을 고른 원래 논리와 같다 — 비용 대비 실익:
+The reasoning is the same one that picked 1.13 in the first place — cost against benefit:
 
-- 이 에이전트는 `Material`/`ItemStack`을 거의 만지지 않는다. 이벤트 클래스명, 플레이어 이름,
-  블록 좌표만 읽는다. **1.13 하한을 정당화했던 flattening 논거가 이 모듈에는 거의 적용되지 않는다.**
-- 1.13~1.17 서버는 현재 실사용이 희소하고 계속 줄고 있다
-- 1번의 비용(전 모듈 record 제거)은 얻는 것에 비해 과하다
+- This agent barely touches `Material` or `ItemStack`. It reads event class names, player names and
+  block coordinates. **The flattening argument that justified a 1.13 floor hardly applies to this
+  module.**
+- 1.13–1.17 servers are rare in practice and getting rarer
+- Option 1's cost (stripping records from every module) is out of proportion to what it buys
 
-### 5.2 왜 1.18이 아니라 1.21.8인가
+### 5.2 Why 1.21.8 and not 1.18
 
-1.18로 내린 직후, 실제 운영 대상이 1.21.8이라는 점이 확인됐다. 하한을 거기에 맞춘다.
+Right after dropping to 1.18, it turned out the actual target in production is 1.21.8. The floor
+follows.
 
-1.20.5부터 Java 21을 요구하므로 **하한을 1.21.8로 올리면 `--release 17` 제약이 사라진다.**
-Java 17로 내리면서 포기했던 것들(switch 패턴 매칭, record 패턴)이 그대로 돌아온다. 즉 이 개정은
-지원 범위를 좁히는 대신 코드 제약을 없애는 교환이다.
+Since 1.20.5 requires Java 21, **raising the floor to 1.21.8 removes the `--release 17`
+constraint.** Everything given up in the move to Java 17 (switch pattern matching, record patterns)
+comes straight back. So this revision trades supported range for the removal of a code constraint.
 
-1.18~1.20.4를 포기하는 비용은, 그 구간을 실제로 쓸 계획이 없는 한 0이다. 계획이 생기면 그때
-`--release 17`로 되돌리면 된다 — 그 경우 잃는 것은 Java 21 문법뿐이고, 되돌리는 지점은
-`vitaminmcp.server-jvm-target` 한 곳이다.
+The cost of giving up 1.18–1.20.4 is zero unless there is a plan to use that range. If a plan
+appears, go back to `--release 17` — all that is lost then is Java 21 syntax, and the place to
+revert is the single `vitaminmcp.server-jvm-target`.
 
-### 5.3 결과
+### 5.3 Consequences
 
-- `agent-legacy` 어댑터 모듈이 통째로 불필요
-- Bukkit/Paper API만으로 단일 jar가 전 지원 범위에 동작
-- `io.papermc.paper:paper-api`를 하한(1.21.8)으로 컴파일 — 이후 추가된 API는 클래스패스에
-  아예 없으므로 실수로 쓸 수 없다
-- 1.21.7 이하 서버는 지원 대상 외
-- `agent-*`와 `contract`는 `--release 21`을 **명시**한다. 지금은 툴체인과 값이 같지만 의미가
-  다르다: 툴체인은 무엇으로 컴파일하는지, `release`는 서버가 무엇을 로드할 수 있는지다.
-  툴체인이 25로 올라가도 에이전트는 로드 가능한 상태로 남는다
-- 나머지 모듈(bot, orchestrator, testkit, mcp-server)은 우리 JVM에서 돌므로 이 제약과 무관하다
+- The `agent-legacy` adapter module is unnecessary in its entirety
+- A single jar works across the whole supported range on the Bukkit/Paper API alone
+- `io.papermc.paper:paper-api` compiles against the floor (1.21.8) — API added later is simply not
+  on the classpath, so it cannot be used by accident
+- Servers below 1.21.7 are out of scope
+- `agent-*` and `contract` state `--release 21` **explicitly**. It currently equals the toolchain
+  value but means something different: the toolchain is what we compile with, `release` is what the
+  server can load. If the toolchain moves to 25, the agent stays loadable
+- The remaining modules (bot, orchestrator, testkit, mcp-server) run on our JVM and are unaffected
 
-### 5.4 하한을 다시 내리려면
+### 5.4 To lower the floor again
 
-하한 관련 값은 **`build-logic/.../SupportedVersions.kt`의 `FLOOR` 한 곳**에서 파생된다.
-`paper-api` 좌표, `plugin.yml`의 `api-version`, `--release` 값 모두 여기서 나온다.
+Everything floor-related derives from **one place — `FLOOR` in
+`build-logic/.../SupportedVersions.kt`.** The `paper-api` coordinate, `plugin.yml`'s `api-version`
+and the `--release` value all come from it.
 
 ```kotlin
-const val FLOOR = "1.21.8"   // 여기만 고치면 된다
+const val FLOOR = "1.21.8"   // the only line to change
 ```
 
-MC↔Java 대응표가 코드로 박혀 있으므로 **불가능한 조합은 빌드가 거부한다.** `FLOOR = "1.13.2"`로
-두면 `release 8`이 도출되고 `records are not supported in -source 8`로 컴파일이 실패한다.
-과거에는 이 조합이 조용히 빌드돼서 서버 기동 시점에 `UnsupportedClassVersionError`로 터졌다.
+The MC↔Java table is encoded, so **an impossible combination is rejected by the build.** Set
+`FLOOR = "1.13.2"` and it derives `release 8`, then fails compilation with
+`records are not supported in -source 8`. That combination used to build quietly and explode at
+server startup with `UnsupportedClassVersionError`.
 
-따라서 하한을 내릴 때 실제로 드는 비용은 **그 Java 버전에 없는 문법을 걷어내는 작업**뿐이고,
-그 범위는 빌드가 정확히 알려준다.
+So the real cost of lowering the floor is only **removing syntax that Java version lacks**, and the
+build says exactly how much of it there is.
 
-| 하한 | 도출되는 release | 포기해야 하는 것 |
+| Floor | Derived release | What must go |
 |---|---|---|
-| 1.20.5+ | 21 | (없음) |
-| 1.18 ~ 1.20.4 | 17 | switch 패턴 매칭, record 패턴 |
-| 1.17 | 16 | 위 + sealed |
-| 1.13 ~ 1.16.5 | 8 | **record 전부**, var, instanceof 패턴 — 사실상 전면 재작성 |
+| 1.20.5+ | 21 | (nothing) |
+| 1.18 – 1.20.4 | 17 | switch pattern matching, record patterns |
+| 1.17 | 16 | the above plus sealed |
+| 1.13 – 1.16.5 | 8 | **all records**, var, instanceof patterns — effectively a rewrite |
 
-### 5.5 남은 함정 — 신버전에서 깨지는 것은 컴파일이 아니다
+### 5.5 The remaining trap — what breaks on newer versions is not compilation
 
-하한을 올려도 **상위 버전 호환은 여전히 수동으로 지켜야 한다.** 대표 사례가 1.21의
-`InventoryView`로, 추상 클래스에서 인터페이스로 바뀌었다. 구버전으로 컴파일한 직접 호출은
-`invokevirtual`로 굳어 있어 신버전에서 `IncompatibleClassChangeError`가 난다. 컴파일러는
-아무것도 잡아주지 않는다.
+Raising the floor does not help: **forward compatibility still has to be maintained by hand.** The
+canonical case is 1.21's `InventoryView`, which changed from an abstract class to an interface. A
+direct call compiled against the older shape is frozen as `invokevirtual` and throws
+`IncompatibleClassChangeError` on the newer version. The compiler catches nothing.
 
-`agent-core`의 `EventDetails`가 `PlayerEvent`·`BlockEvent`·`EntityEvent` 셋만 직접 호출하고
-나머지를 리플렉션으로 우회하는 이유가 이것이다. 하한이 올라갔다고 이 방침을 풀지 말 것.
+That is why `EventDetails` in `agent-core` calls only `PlayerEvent`, `BlockEvent` and `EntityEvent`
+directly and routes the rest through reflection. Do not relax this because the floor went up.
 
-**실측 확인 (2026-07-29, Paper 1.21.8).** 인벤토리 경로를 실제로 태워 확인했다 — 상자·작업대를
-열고 클릭하는 세션에서 `InventoryOpenEvent`·`InventoryClickEvent`·`InventoryCloseEvent` 모두
-플레이어가 정상 해석됐고 `IncompatibleClassChangeError`는 0건이었다. 이 셋은 `getWhoClicked`/
-`getPlayer`를 리플렉션으로 부르기 때문에 `InventoryView`가 인터페이스로 바뀐 것과 무관하다.
-같은 코드를 직접 호출로 바꿨다면 이 지점에서 깨졌을 것이다.
-
+**Measured (2026-07-29, Paper 1.21.8).** The inventory path was exercised for real — in a session
+opening and clicking chests and crafting tables, `InventoryOpenEvent`, `InventoryClickEvent` and
+`InventoryCloseEvent` all resolved their player correctly, with zero `IncompatibleClassChangeError`.
+Those three call `getWhoClicked` / `getPlayer` reflectively, which is why the `InventoryView` change
+does not reach them. The same code written as direct calls would have broken here.
 
 ---
 
-## 6. 모듈 구조
+## 6. Module structure
 
 ```
-build-logic/         convention plugin
-contract/            MCP 툴 스키마 + DTO. 순수 Java, 의존성 0
+build-logic/         convention plugins
+contract/            MCP tool schemas + DTOs. Pure Java, zero dependencies
 agent/
-  agent-core/        캡처 엔진, 상태 조회 (Bukkit API)
-  agent-mcp/         MCP 서버 (JDK 내장 HttpServer)
+  agent-core/        capture engine, state queries (Bukkit API)
+  agent-mcp/         MCP server (the JDK's built-in HttpServer)
 bot/
-  bot-core/          MCProtocolLib 래퍼, 포워딩 핸드셰이크
-  bot-via/           (비어 있음 — §4.2)
-orchestrator/        네이티브 서버 기동/월드 리셋/버전 매트릭스
-testkit/             시나리오 실행기, wait_for, assertion
-mcp-server/          툴 노출 + 조립 (엔트리포인트)
+  bot-core/          MCProtocolLib wrapper, forwarding handshake
+  bot-via/           (empty — §4.2)
+orchestrator/        native server startup / world reset / version matrix
+testkit/             scenario runner, wait_for, assertions
+mcp-server/          tool exposure + assembly (entry point)
 ```
 
-### 왜 모노레포인가
+### Why a monorepo
 
-봇·플러그인·MCP가 동일한 DTO를 공유한다. 레포를 쪼개면 계약 동기화 비용이 지속 발생한다.
+Bot, plugin and MCP share the same DTOs. Splitting the repository would create a permanent cost of
+keeping the contract in sync.
 
-### 의존 방향
+### Dependency direction
 
 ```
 mcp-server → testkit → {bot-core, bot-via, orchestrator, contract}
 agent-mcp  → agent-core → contract
 ```
 
-핵심은 **`mcp-server`가 `agent-*`를 컴파일 의존하지 않는다**는 점이다. 에이전트는 런타임에 jar로 서버에 주입될 뿐이고, 둘을 잇는 것은 오직 `contract`다. 이를 지키면 에이전트를 여러 버전으로 분리해도 상위 모듈이 흔들리지 않는다.
+The essential point is that **`mcp-server` does not compile against `agent-*`**. The agent is only
+injected into a server as a jar at runtime, and the sole thing joining the two is `contract`. Hold
+this and the agent can be split across versions without disturbing the modules above.
 
 ### shadow / relocate
 
-`agent-*`는 서버 내부에서 도는 플러그인이므로 Netty·Jackson·Guava가 서버 본체 및 타 플러그인과 충돌한다. **모든 의존성을 relocate한다.** 특히 Netty는 서버 자체가 사용 중이라 relocate 누락 시 원인 파악이 어려운 크래시가 발생한다.
+`agent-*` runs as a plugin inside the server, so Netty, Jackson and Guava collide with the server
+itself and with other plugins. **Relocate every dependency.** Netty especially — the server is using
+it, and a missed relocation produces a crash that is hard to trace back.
 
 ---
 
-## 7. 에이전트 플러그인을 MCP 서버로
+## 7. The agent plugin as an MCP server
 
-에이전트가 자체 RPC 프로토콜 대신 **MCP를 직접 말하게** 한다. 두 가지 사용 모드가 자연스럽게 나온다.
+The agent **speaks MCP directly** rather than a bespoke RPC protocol. Two usage modes fall out
+naturally.
 
-- **단독 모드** — 개발/운영 서버에 플러그인 하나만 설치하고 Claude가 직접 연결. 진입장벽이 거의 없다
-- **매트릭스 모드** — orchestrator가 여러 서버의 MCP를 툴 네임스페이스로 묶어 하나로 노출
+- **Standalone mode** — install one plugin on a development or production server and let Claude
+  connect directly. Almost no barrier to entry
+- **Matrix mode** — the orchestrator bundles several servers' MCP endpoints behind tool namespaces
+  and exposes them as one
 
-### 전송 계층
+### Transport
 
-**JDK 내장 `com.sun.net.httpserver`** 를 사용한다. Javalin이나 undertow를 도입하면 relocate 대상이 늘고 jar가 비대해진다. MCP streamable HTTP는 내장 서버로 충분하며 의존성이 0이라 충돌 위험이 사라진다.
-
----
-
-## 8. 이벤트 캡처 — 볼륨이 최대 리스크
-
-여기서 설계 성패가 갈린다.
-
-`PlayerMoveEvent`는 플레이어당 초당 약 20회, `BlockPhysicsEvent`는 틱당 수천 건도 발생한다. `get_events()`를 순진하게 노출하면 **컨텍스트가 즉시 소진되고 LLM이 무용지물이 된다.**
-
-### 대응 원칙
-
-1. **캡처는 전부, 조회는 화이트리스트.** 고빈도 이벤트(Move, BlockPhysics, ChunkLoad, 엔티티 이동 계열)는 기본 제외 목록에 두고 명시 요청 시에만 반환
-2. **집계를 먼저 준다.** `events_summary`로 타입별 카운트를 보여준 뒤, 필요한 타입만 상세 조회하도록 유도. 이 2단계 구조가 핵심이다
-3. **응답 토큰 예산 상한을 툴 레벨에 박는다.** 기본 200건 / 50KB + 커서 페이지네이션
-4. **링 버퍼 + 비동기 직렬화.** MONITOR 리스너에서는 경량 레코드만 만들어 lock-free 큐에 넣고, 직렬화는 별도 스레드가 담당. 메인 스레드에서 JSON을 만들면 TPS가 죽는다
-5. **드롭 카운터를 노출한다.** 링 버퍼 오버플로 시 응답에 드롭 수를 포함해야 LLM이 "데이터가 잘렸다"를 인지한다
-
-### catch-all 구현
-
-Bukkit에는 "모든 이벤트 구독" API가 없다. ClassGraph로 `org.bukkit.event.Event` 서브클래스를 스캔해 `registerEvent`를 동적으로 거는 방식이 표준적이다.
-
-- `EventPriority.MONITOR`로 등록 — 다른 플러그인의 처리 결과까지 관측
-- `ignoreCancelled = false` — **취소된 이벤트가 디버깅에 가장 중요하다**
+**The JDK's built-in `com.sun.net.httpserver`.** Bringing in Javalin or Undertow would grow the
+relocation surface and bloat the jar. MCP streamable HTTP is fine on the built-in server, and with
+zero dependencies the risk of collision disappears.
 
 ---
 
-## 9. 로그 수집 — 파일 tail 금지
+## 8. Event capture — volume is the biggest risk
 
-Paper는 Log4j2를 사용한다. **커스텀 Appender를 부착**하면 레벨·로거 이름·throwable을 구조화된 상태로 그대로 받는다. 파일에서 정규식으로 파싱하는 것과 품질 차이가 크다.
+This is where the design succeeds or fails.
 
-### 예외 그룹핑
+`PlayerMoveEvent` fires around 20 times a second per player; `BlockPhysicsEvent` can fire thousands
+of times per tick. Naively exposing `get_events()` **burns the context window immediately and leaves
+the LLM useless.**
 
-스택트레이스는 별도 저장하고, 목록 조회 시에는 첫 줄 + 스택 해시만 반환한다. 동일 예외가 수백 번 반복되는 것이 흔하므로 **`이 예외 ×342, 최초 발생 시각` 형태로 접어주는 것**이 실사용에서 가장 유용하다.
+### Principles
 
-전체 스택트레이스는 명시적 요청 시에만 반환한다.
+1. **Capture everything, query from a whitelist.** High-frequency events (Move, BlockPhysics,
+   ChunkLoad, entity movement) sit on a default-excluded list and come back only when explicitly
+   requested
+2. **Give the aggregate first.** Show counts by type via `events_summary`, then steer toward
+   querying only the types that matter. This two-step structure is the core of it
+3. **Nail a response token budget into the tool itself.** 200 records / 50KB by default, plus cursor
+   pagination
+4. **Ring buffer plus asynchronous serialization.** The MONITOR listener builds only a lightweight
+   record and pushes it onto a lock-free queue; a separate thread serializes. Building JSON on the
+   main thread kills TPS
+5. **Expose a drop counter.** On ring buffer overflow the response must carry the drop count, or the
+   LLM cannot tell that the data was truncated
+
+### Implementing catch-all
+
+Bukkit has no "subscribe to all events" API. The standard approach is scanning
+`org.bukkit.event.Event` subclasses with ClassGraph and calling `registerEvent` dynamically.
+
+- Register at `EventPriority.MONITOR` — observing the outcome after other plugins have handled it
+- `ignoreCancelled = false` — **cancelled events matter most for debugging**
 
 ---
 
-## 10. MCP 툴 목록
+## 9. Log collection — no file tailing
+
+Paper uses Log4j2. **Attaching a custom Appender** delivers level, logger name and throwable already
+structured. The quality gap against regex-parsing a file is large.
+
+### Exception grouping
+
+Stack traces are stored separately; a list query returns only the first line and a stack hash. The
+same exception repeating hundreds of times is common, so **folding it into `this exception ×342,
+first seen at`** is what turns out to be most useful in practice.
+
+The full stack trace is returned only on explicit request.
+
+---
+
+## 10. The MCP tool list
 
 ```
-server_info()                              버전, 플러그인, TPS, 온라인 인원
-events_summary(since, until)               타입별 카운트 ← 항상 여기서 시작
-events_query(types[], player?, cursor)     상세 조회
-logs_query(level, pattern, since, cursor)  regex 검색
-exceptions_recent(limit)                   그룹핑된 예외 ← 실사용 빈도 1위
-state_query(kind, target)                  스코어보드/퍼미션/인벤토리
-command_exec(cmd, as)                      콘솔/플레이어 커맨드 (기본 비활성)
+server_info()                              version, plugins, TPS, players online
+events_summary(since, until)               counts by type ← always start here
+events_query(types[], player?, cursor)     detail
+logs_query(level, pattern, since, cursor)  regex search
+exceptions_recent(limit)                   grouped exceptions ← most used in practice
+state_query(kind, target)                  scoreboard / permissions / inventory
+command_exec(cmd, as)                      console or player command (off by default)
 ```
 
-### 설계 규칙
+### Design rules
 
-- **마이크로 툴을 만들지 않는다.** 수십 개의 세밀한 툴은 LLM이 오히려 못 쓴다. 파라미터로 해결하고, 새 툴 추가 전 기존 툴 확장을 먼저 검토
-- **`logs_tail(n)`은 만들지 않는다.** "마지막 N줄"보다 패턴 검색이 항상 낫고, tail은 컨텍스트만 소비한다
-- **커서 개념을 처음부터 넣는다.** `events_since(cursor)` / `logs_since(cursor)`. 나중에 넣으려면 전부 뜯어야 한다
+- **No micro tools.** Dozens of fine-grained tools make an LLM worse, not better. Solve it with a
+  parameter, and consider extending an existing tool before adding one
+- **Never build `logs_tail(n)`.** Pattern search always beats "the last N lines", and a tail only
+  consumes context
+- **Put cursors in from the beginning.** `events_since(cursor)` / `logs_since(cursor)`. Adding them
+  later means tearing everything apart
 
 ---
 
-## 11. 봇 시나리오 표현 방식
+## 11. How bot scenarios are expressed
 
-Java에서는 `eval(js)` 전략을 쓸 수 없다. 두 가지 선택지 중 **선언적 액션 시퀀스를 1차로** 한다.
+An `eval(js)` strategy is not available in Java. Of the two options, **the declarative action
+sequence comes first.**
 
-### 채택: 선언적 JSON DSL
+### Adopted: a declarative JSON DSL
 
 ```json
 [
@@ -335,129 +390,147 @@ Java에서는 `eval(js)` 전략을 쓸 수 없다. 두 가지 선택지 중 **�
 ]
 ```
 
-LLM이 생성하기 쉽고, 실패 시 어느 스텝에서 중단됐는지 그대로 드러난다.
+Easy for an LLM to generate, and on failure it shows plainly which step stopped.
 
-### 탈출구: 스크립트 엔진
+### Escape hatch: a script engine
 
-Groovy나 GraalJS를 봇 컨텍스트에 임베드해 복잡한 케이스만 스크립트로 처리한다.
+Embed Groovy or GraalJS in the bot context and handle only the complicated cases as scripts.
 
-**처음부터 넣지 않는다.** 선언 DSL로 커버되지 않는 실제 사례가 축적된 뒤에 도입한다.
-
----
-
-## 12. 결정성 — 틱 동기화
-
-봇 액션은 비동기이고 서버는 20 TPS로 돈다. `sleep(500)` 기반으로 작성하면 플래키 테스트가 된다.
-
-- 에이전트 플러그인에 **"N틱 진행 후 응답" 배리어**를 둔다
-- 모든 assertion은 `wait_for(predicate, timeout)`을 거치도록 강제한다
-- 고정 대기(sleep)를 시나리오 DSL에서 제공하지 않는다 — 제공하면 반드시 쓰인다
+**Not included from the start.** It gets introduced once real cases that the declarative DSL cannot
+cover have accumulated.
 
 ---
 
-## 13. 상태 격리
+## 12. Determinism — tick synchronisation
 
-테스트마다 컨테이너와 월드를 리셋한다. 하지 않으면 원인을 추적할 수 없는 실패가 누적된다.
+Bot actions are asynchronous and the server runs at 20 TPS. Writing on top of `sleep(500)` produces
+flaky tests.
 
-- 월드 템플릿을 두고 매 실행마다 복원
-- 봇 UUID는 고정값 사용 — 퍼미션 재현성 확보
+- Put an **"advance N ticks, then respond" barrier** in the agent plugin
+- Force every assertion through `wait_for(predicate, timeout)`
+- Do not offer a fixed wait (sleep) in the scenario DSL — offer it and it will be used
 
 ---
 
-## 14. 보안
+## 13. State isolation
 
-**MCP 엔드포인트가 뚫리면 콘솔 권한이 통째로 넘어간다.** `command_exec` 하나로 op 부여가 가능하다. 운영 서버에 설치될 것을 전제로 설계한다.
+Reset the container and the world per test. Without it, failures nobody can trace accumulate.
 
-- 기본 bind `127.0.0.1`, 외부 노출은 명시적 설정으로만
-- 토큰 인증 필수 — 미설정 시 **기동 거부** (경고 후 계속 진행 금지)
-- **read-only가 기본 모드.** `command_exec` 및 상태 변경 계열은 config에서 명시적으로 활성화해야 동작
-- 테스트 편의를 이유로 위 기본값을 완화하지 않는다
+- Keep a world template and restore it on every run
+- Use fixed bot UUIDs — that is what makes permissions reproducible
 
-read-only 모드만으로도 독립 배포 가치가 있다. 이 경계를 흐리지 말 것.
+---
 
-### 14.1 콘솔 활동 로그 (2026-07-31)
+## 14. Security
 
-캡처한 이벤트와 로그는 **MCP 클라이언트만 읽을 수 있는 버퍼**에 쌓인다. 그래서 에이전트는 서버에서
-유일하게 흔적 없이 동작하는 구성요소였다 — 콘솔에는 플러그인 로드 한 줄이 찍히고, 그 뒤로 무슨 일이
-일어나든 아무것도 남지 않는다. 콘솔 명령을 실행할 수 있는 소프트웨어의 기본값으로는 틀렸다.
+**Breach the MCP endpoint and console authority goes with it.** `command_exec` alone can grant op.
+The design assumes installation on a production server.
 
-호출 하나당 두 줄을 남긴다. **도착 시 한 줄**(누가, 어떤 툴을, 어떤 인자로)과 **응답 시 한 줄**(소요
-시간과 돌려준 데이터). 두 줄인 이유는 `wait_for`가 요청을 최대 1분까지 붙잡을 수 있어서다 — 끝난
-뒤에만 찍으면 진행 중에는 콘솔이 조용하고, 멈춘 호출과 없는 호출을 구분할 수 없다.
+- Default bind `127.0.0.1`; external exposure only through explicit configuration
+- Token authentication is mandatory — with none configured, **refuse to start** (never warn and
+  continue)
+- **read-only is the default mode.** `command_exec` and other state-changing tools work only when
+  explicitly enabled in config
+- Do not relax any of these defaults for the convenience of a test
 
-인자와 응답은 잘라서 찍는다. 응답 예산이 50KB이고 콘솔은 그걸 읽는 곳이 아니다. 전체 페이로드는
-이미 클라이언트가 갖고 있다.
+read-only mode alone is worth shipping independently. Do not blur that boundary.
 
-`activity-log: full | summary | off`로 조절한다. **`off`여도 거부된 토큰과 상태 변경 툴은 남는다.**
-콘솔을 조용하게 만드는 것과 에이전트가 서버에 무엇을 했는지의 기록을 포기하는 것은 다른 요구다.
+### 14.1 Console activity log (2026-07-31)
 
-### 14.2 자체 서명 인증서 — 지문 고정으로 개정 (2026-07-31)
+Captured events and logs accumulate in **a buffer only the MCP client can read.** That made the
+agent the one component on the server that operated without a trace — one line at plugin load, and
+then nothing however much happened afterwards. Wrong default for software that can run console
+commands.
 
-원래 방침은 **"자체 서명 인증서를 지원하지 않는다"** 였다. 근거는 그것이 *모든 클라이언트에
-검증 생략을 가르친다*는 것이었다 — 자체 서명을 쓰게 하면 결국 클라이언트가 검증을 끄게 되고,
-그러면 인증서를 둔 의미가 사라진다.
+It writes two lines per call. **One on arrival** (who, which tool, which arguments) and **one on
+response** (how long it took, what came back). Two, because `wait_for` can hold a request for up to
+a minute — log only on completion and the console is silent while it runs, leaving a stuck call
+indistinguishable from no call at all.
 
-**그 근거는 클라이언트가 검증을 끌 때만 성립한다.** 지문을 고정하면 반대가 된다:
+Arguments and responses are truncated. The response budget is 50KB and the console is not where you
+read it; the client already has the full payload.
 
-| | 신뢰하는 대상 |
+Controlled by `activity-log: full | summary | off`. **Even at `off`, refused tokens and
+state-changing tools are still logged.** Wanting a quiet console and giving up the record of what
+the agent did to your server are different requests.
+
+### 14.2 Self-signed certificates — revised to fingerprint pinning (2026-07-31)
+
+The original policy was **"self-signed certificates are not supported"**, on the grounds that
+supporting them *teaches every client to skip verification* — allow self-signed and clients end up
+turning verification off, at which point having a certificate is pointless.
+
+**That reasoning only holds when the client turns verification off.** Pin the fingerprint and it
+inverts:
+
+| | Trusts |
 |---|---|
-| 검증 생략 | 무엇이든 |
-| CA 검증 | 그 CA가 서명한 모든 것 |
-| **지문 고정** | **그 인증서 하나** |
+| Verification off | anything |
+| CA verification | everything that CA signs |
+| **Fingerprint pinning** | **that one certificate** |
 
-지문 고정은 CA 검증보다 **좁다**. 그래서 자체 서명을 허용하되 지문으로만 붙게 한다.
+Pinning is **narrower** than CA verification. So self-signed is allowed, but only reachable by
+fingerprint.
 
-- `session_start`의 `tlsFingerprint` — 그 인증서 하나만 신뢰
-- 지문을 고정하면 호스트명 검증은 끈다. 이름 일치는 "내가 입력한 호스트용으로 발급됐나"를 묻고
-  지문은 "내가 받은 바로 그 인증서인가"를 묻는데, 후자가 더 강한 질문이고 자체 서명이 답할 수
-  있는 유일한 질문이다. 둘 다 요구하면 SAN까지 맞춰야 하는데 얻는 게 없다
-- 지문 없이 자체 서명 서버에 붙으면 **실패한다.** "검증 끄기"는 선택지에 없다
+- `session_start`'s `tlsFingerprint` — trusts that one certificate only
+- With a pin, hostname verification is off. Name matching asks "was this issued for the host I
+  typed", a pin asks "is this the exact certificate I was given" — the stronger question, and the
+  only one a self-signed certificate can answer. Requiring both means matching SANs for no gain
+- Connecting to a self-signed server without a fingerprint **fails.** "Skip verification" is not an
+  option
 
-**왜 바꿨나.** 도메인 없는 사용자의 원격 연결이 8단계였다 — keytool 두 번, 인증서 전송,
-truststore 구성, MCP 클라이언트에 `-D` 플래그 두 개. 그중 넷이 "클라이언트가 이 인증서를 믿게
-하기" 하나에서 나왔고, 지문 고정이 그 넷을 통째로 없앤다. 보안 속성은 그대로다.
+**Why this changed.** A remote connection for a user without a domain took eight steps — keytool
+twice, transferring the certificate, building a truststore, two `-D` flags on the MCP client. Four
+of those came from the single problem of "make the client trust this certificate", and pinning
+removes all four. The security properties are unchanged.
 
-에이전트는 기동 시 `session_start`에 붙여넣을 블록(host/port/token/fingerprint)을 찍는다.
+At startup the agent prints the block to paste into `session_start`
+(host / port / token / fingerprint).
 
 ---
 
-## 15. 설정 파일과 서버 기동 (개정, 2026-07-30)
+## 15. Configuration and server startup (revised 2026-07-30)
 
-버전 매트릭스는 코드가 아니라 `versions.yaml`이다. 버전 추가가 설정 한 블록으로 끝나야 한다.
+The version matrix is `versions.yaml`, not code. Adding a version must be one configuration block
+and nothing else.
 
 ```yaml
 versions:
   - id: "1.21.8"
-    paper: { version: "1.21.8", build: 60 }   # build 생략 시 최신
+    paper: { version: "1.21.8", build: 60 }   # omit build for latest
   - id: "1.21.11"
     paper: { version: "1.21.11" }
 ```
 
-### 15.1 왜 Docker가 아닌가 (개정)
+### 15.1 Why not Docker (revised)
 
-원 설계는 `itzg/minecraft-server` Docker 이미지였다. 폐기한다.
+The original design used the `itzg/minecraft-server` Docker image. Dropped.
 
-기동에 실제로 필요한 것은 "버전 X를 깨끗한 월드로 띄우기" 하나이고, 그건 **PaperMC API에서 jar를
-받아 새 디렉터리에서 실행**하면 끝난다. Docker는 그 위에 데몬과 이미지 계층을 얹는데, 개발
-환경이 Windows면 그 계층이 WSL2 VM이라 월드 파일 I/O가 경계를 넘나들며 느려진다. 실측으로도
-네이티브 기동은 2~3초다.
+What startup actually needs is one thing: "bring up version X with a clean world", and that is
+**download the jar from the PaperMC API and run it in a fresh directory.** Docker layers a daemon
+and image layers on top, and when the development environment is Windows those layers are a WSL2 VM,
+so world file I/O crosses a boundary and slows down. Measured, native startup is two to three
+seconds.
 
-Docker가 이기는 지점은 CI/Linux 동일성 하나뿐이고, 지금 그 요구가 없다. 생기면 그때
-`ServerLauncher` 뒤에 구현을 하나 더 두면 된다 — 지금 쓰지도 않을 추상화를 먼저 만들지는 않는다.
+Docker wins on exactly one point — parity with CI/Linux — and there is no such requirement now. If
+one appears, add another implementation behind `ServerLauncher`. We do not build an abstraction
+before there is a use for it.
 
-### 15.2 격리
+### 15.2 Isolation
 
-월드 템플릿을 두고 매 실행마다 복원한다(§13). 네이티브 기동에서는 이게 오히려 단순하다 —
-디렉터리 복사이기 때문이다. Docker 볼륨 수명주기를 다룰 필요가 없다.
+Keep a world template and restore it every run (§13). Native startup makes this simpler rather than
+harder, because it is a directory copy. No Docker volume lifecycle to manage.
 
-**이건 실제로 필요하다.** Stage 3 검증 중, 앞선 진단이 `op`한 봇이 `ops.json`에 남아 시나리오가
-두 번째 실행에서 깨졌다. §13이 경고한 "추적 불가능하게 누적되는 실패"가 그대로 재현된 것이다.
+**This is genuinely needed.** During Stage 3 verification, a bot that an earlier diagnostic had
+`op`ed persisted in `ops.json` and broke the scenario on its second run — exactly the "failures that
+accumulate untraceably" that §13 warned about.
 
 ---
 
-## 미결 사항
+## Open questions
 
-- MCP 툴 네임스페이스 규칙 (매트릭스 모드에서 서버별 prefix 형식)
-- 봇 다중 인스턴스의 리소스 상한 (동시 몇 개까지 현실적인지 측정 필요)
-- 자체 Yggdrasil(3.2) 도입 시점 판단 기준
-- Via 번역 오차를 자동 탐지할 방법이 있는지 (현재는 네이티브 교차 검증 수동)
+- Naming rules for MCP tool namespaces (the per-server prefix format in matrix mode)
+- Resource ceiling for multiple bot instances (how many concurrently is realistic — needs measuring)
+- Criteria for deciding when to bring in our own Yggdrasil (3.2)
+- Whether Via translation error can be detected automatically (currently native cross-checking, by
+  hand)

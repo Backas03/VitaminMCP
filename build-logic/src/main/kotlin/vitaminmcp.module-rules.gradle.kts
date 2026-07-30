@@ -7,7 +7,7 @@ plugins {
     `java-library`
 }
 
-// Dependency direction, from CLAUDE.md ("의존은 한 방향으로만 흐른다") and docs/design.md §6:
+// Dependency direction, from CLAUDE.md ("dependencies flow one way only") and docs/design.md §6:
 //
 //     mcp-server → testkit → {bot-core, orchestrator, contract}
 //     bot-runner-* → bot-core → contract

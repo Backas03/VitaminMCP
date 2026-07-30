@@ -13,9 +13,9 @@ import java.util.Set;
  * exhaust a response budget and lap the ring buffer within seconds, evicting the handful of
  * records anyone actually wanted.
  *
- * <p>The exclusion is applied in two places, which is what reconciles design.md §8 ("캡처는
- * 전부, 조회는 화이트리스트") with roadmap 1b (which lists the exclusion under the capture
- * engine):
+ * <p>The exclusion is applied in two places, which is what reconciles design.md §8 ("capture
+ * everything, query from a whitelist") with roadmap 1b (which lists the exclusion under the
+ * capture engine):
  *
  * <ul>
  *   <li><b>Capture</b> — skipped by default. Capturing BlockPhysicsEvent would evict the whole
