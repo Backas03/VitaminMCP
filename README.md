@@ -1,52 +1,234 @@
 # VitaminMCP
 
-Expose what happens inside a Minecraft server over MCP, and test plugins with real protocol bots.
+**Minecraft automation testing MCP server for AI agents.**
 
-- The **agent** is a plugin that runs inside the server. It captures events, logs and exceptions,
-  and answers MCP tool calls. It is useful on its own — install only this and you can ask a live
-  server what just happened.
-- The **MCP server** is a process your client (Claude Code, etc.) launches. It attaches bots and
-  runs scenarios.
+Drive a real Minecraft server and real players through MCP tools, and run end-to-end plugin tests
+without opening the game.
 
-Once installed, [docs/usage.md](docs/usage.md) covers actually using it.
-Design rationale is in [docs/design.md](docs/design.md), contribution rules in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+- Spawn and control test players — real protocol clients, not mock `Player` objects
+- Execute commands as the console or as a player
+- Open, read, click and assert on inventories and plugin GUIs
+- Move players, break and use blocks, chat
+- Wait for events and conditions instead of sleeping
+- Assert on blocks, players, events, inventories and the messages a player received
+- Read live server state: events, logs, exceptions, permissions
+- Paper / Purpur 1.21.8+
 
-## What you can do with it
+Full usage is in [docs/usage.md](docs/usage.md), design rationale in
+[docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Ask a running server what happened.** Events by type over a window, logs by regex, exceptions
-collapsed by occurrence, the current state of a player or a block. No restart, no debug build, no
-`println` added and redeployed. This works on a production server — the read-only default cannot
-change anything.
+---
 
-**Reproduce a bug with a real player.** `bot_spawn` connects an actual protocol client, not a fake
-`Player` object. It has an inventory, a position, a gamemode, permissions and an IP. Its UUID is
-derived from its name, so `Tester1` is the same player today as yesterday and permission-dependent
-behaviour repeats instead of drifting.
+## Why
 
-**Test a plugin GUI, including how it looks.** Open a menu, read every slot's material, display
-name, lore and CustomModelData, click a slot, assert on what came back. CustomModelData is the part
-that usually goes untested — with a resource pack, two buttons of the same material and name can be
-completely different icons, so checking material and name alone misses icon bugs.
+**Without VitaminMCP**, verifying a plugin change means:
 
-**See what the server cannot tell you.** A plugin drawing its GUI with ProtocolLib or packetevents
-leaves the server-side inventory empty while the player sees a full menu; `bot_inspect` reads what
-the client was actually sent. It also returns the messages the server sent that bot — which is
-where a refusal like "you lack permission" lives. Those never reach the console, so from the
-server's side a declined command and one that silently did nothing look identical.
+- Launch Minecraft, join the server
+- Click through the GUI by hand
+- Read the chat and eyeball whether it did the right thing
+- Repeat for every permission level, every edge case, every version
 
-**Run the same scenario across versions.** The matrix is [versions.yaml](versions.yaml), and each
-server is started natively from a PaperMC build.
+**With VitaminMCP**, you ask:
 
-A concrete session looks like: spawn a bot, op it, run the command that opens your menu, wait for
-the menu to open, read the slots, assert the buttons are what you shipped, deop, and you have the
-whole trace of what the server did in between.
+> Spawn a bot, op it, open the `/shop` GUI, check slot 11 is a diamond sword listed at 100 coins,
+> buy it, confirm the sword is in the bot's inventory, then deop.
+
+and the agent drives it, verifies each step, and tells you which one failed and what the server was
+doing at that moment.
+
+The difference that matters for an AI agent is not the automation — it is that **failures are
+attributable.** A scenario stops at the first failing step and returns the events and log lines from
+that instant, so there is no second round-trip to find out why.
+
+---
+
+## What a test looks like
+
+Every action below is a real step. Ask in natural language, or hand `bot_run_scenario` the array
+directly.
+
+### Buying from a shop GUI
+
+```json
+[
+  {"action": "spawn",         "bot": "Tester1"},
+  {"action": "console",       "command": "op Tester1"},
+  {"action": "assert_player", "bot": "Tester1", "op": true},
+
+  {"action": "command",       "bot": "Tester1", "command": "shop"},
+  {"action": "wait_for",      "condition": "inventory_open", "name": "Tester1", "title": "Shop"},
+  {"action": "assert_inventory", "bot": "Tester1", "size": 27, "slots": [
+      {"slot": 11, "material": "DIAMOND_SWORD", "name": "Diamond Sword", "lore": "100 coins"}
+  ]},
+
+  {"action": "click_slot",    "bot": "Tester1", "slot": 11},
+  {"action": "assert_event",  "eventType": "InventoryClickEvent", "player": "Tester1"},
+  {"action": "wait_for",      "condition": "inventory_contains",
+                              "name": "Tester1", "material": "DIAMOND_SWORD", "which": "player"},
+
+  {"action": "close_menu",    "bot": "Tester1"},
+  {"action": "console",       "command": "deop Tester1"}
+]
+```
+
+### A login reward, and its cooldown
+
+Rejoining and checking the *refusal* is the interesting half — and the refusal is usually one chat
+message with no log line behind it.
+
+```json
+[
+  {"action": "spawn",    "bot": "Newcomer"},
+  {"action": "wait_for", "condition": "inventory_open", "name": "Newcomer", "title": "Daily Reward"},
+  {"action": "assert_inventory", "bot": "Newcomer", "slots": [
+      {"slot": 13, "material": "CHEST", "name": "Claim"}
+  ]},
+  {"action": "click_slot",     "bot": "Newcomer", "slot": 13},
+  {"action": "assert_message", "bot": "Newcomer", "contains": "claimed"},
+
+  {"action": "despawn", "bot": "Newcomer"},
+  {"action": "spawn",   "bot": "Newcomer"},
+  {"action": "wait_for","condition": "inventory_open", "name": "Newcomer"},
+  {"action": "click_slot",     "bot": "Newcomer", "slot": 13},
+  {"action": "assert_message", "bot": "Newcomer", "contains": "already"}
+]
+```
+
+That second run works because **a bot's UUID is derived from its name.** `Newcomer` is the same
+player across runs, so anything keyed on identity — permissions, cooldowns, stored data —
+reproduces instead of drifting.
+
+A failure comes back naming the step, the reason, and the evidence:
+
+```jsonc
+{"step": 5, "action": "assert_inventory", "passed": false,
+ "detail": "slot 11 expected DIAMOND_SWORD but held AIR",
+ "evidence": "events=[...] logs=[...]"}
+```
+
+---
+
+## Tools
+
+Two groups. **Session tools** live in `mcp-server` and are always present. **Agent tools** are
+proxied from the plugin, so which ones exist is decided by the server you connected to —
+`session_start` returns their real definitions in `agentTools`.
+
+### Connection
+
+| | |
+|---|---|
+| `session_start` | Connect to a server and its agent. Every other tool needs it |
+| `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests. World state is **not** rolled back |
+
+### Players
+
+| | |
+|---|---|
+| `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
+| `bot_inspect` | What the bot's client was actually sent — menu contents and the messages the server gave it |
+| `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
+
+### Server
+
+| | |
+|---|---|
+| `server_info` | Version, TPS, players online, installed plugins, capture statistics |
+| `command_exec` | Run a command as the console or as a player. **Changes the server** — absent entirely unless `read-only: false` |
+
+### World and state
+
+| | |
+|---|---|
+| `state_query` `kind="player"` | Position, gamemode, op, IP, and any permission nodes you name |
+| `state_query` `kind="block"` | The block at a coordinate |
+| `state_query` `kind="inventory"` | The menu a player has open — the only place a plugin GUI's contents exist |
+
+### Events and logs
+
+| | |
+|---|---|
+| `events_summary` | Counts by event type. Call this before `events_query` — it stays small however busy the server is |
+| `events_query` | Individual events, filtered by type and player, paged by cursor |
+| `logs_query` | Logs by minimum severity and regular expression |
+| `exceptions_recent` | Distinct exceptions with occurrence counts and first-seen times. Pass `hash` for a stack trace |
+
+### Waiting
+
+`wait_for` blocks until a condition holds, checked every tick inside the server.
+
+| Condition | |
+|---|---|
+| `inventory_open` | a menu opened, optionally matching a title |
+| `inventory_contains` | an item reached a slot — for GUIs filled after they open |
+| `event` | an event fired, optionally for one player |
+| `player_online` / `player_offline` | a player joined or left |
+| `player_state` | `online` / `gameMode` / `op` reached a value |
+| `player_near` | a player came within a radius |
+| `block_is` / `block_is_not` | a block became, or stopped being, a material |
+| `ticks` | the server advanced N ticks |
+
+**There is no sleep, and there will not be one.** A fixed wait is a guess about timing that is right
+on an idle server and wrong on a busy one — that is the entire mechanism by which flaky tests are
+made. On timeout, `wait_for` returns the events and logs from that moment.
+
+### Actions — scenario steps
+
+Available inside `bot_run_scenario`.
+
+| | |
+|---|---|
+| `spawn` / `despawn` | connect or disconnect a bot |
+| `move_to` | move to coordinates |
+| `break_block` / `use_block` | break, or right-click — `use_block` is how you open a chest |
+| `click_slot` | click a slot: `left`, `right`, `shift_left`, `shift_right` |
+| `close_menu` | close the open menu |
+| `chat` / `command` | say something, or run a command as the bot |
+| `console` | run a command as the console |
+| `wait_for` | any condition above |
+
+### Assertions — scenario steps
+
+Verification is the point, so this is where the surface is widest.
+
+| | Checks |
+|---|---|
+| `assert_inventory` | per slot: `material`, `name`, `amount`, `lore`, `customModelData`, `modelDataString`, `empty` — plus the menu's `title` and `size` |
+| `assert_player` | `online`, `gameMode`, `op`. Waits rather than reads, because `/op` resolves asynchronously |
+| `assert_block` | the material at a coordinate |
+| `assert_event` | an event fired, optionally for one player, since the scenario began |
+| `assert_message` | the server told this bot something containing a string |
+
+Two of these exist because the server alone cannot answer the question:
+
+- **`assert_message`** — a plugin's refusal is usually one chat message and nothing else. No
+  exception, no console line, no event. Without it, "denied for lack of permission" and "silently
+  did nothing" are indistinguishable.
+- **`assert_inventory` with `customModelData`** — with a resource pack, two buttons of the same
+  material and name can be entirely different icons. Checking material and name alone misses icon
+  bugs.
+
+**Permissions** are tested through `state_query` with `permissions: [...]` rather than a dedicated
+assertion — permission nodes can be tested but not enumerated, so you have to name the ones you care
+about. **Anything plugin-specific** (an economy balance, a scoreboard value) is reached through
+`command_exec` and its output, which is where those plugins put the answer.
+
+Two things that catch people out:
+
+- **Pass proxied parameters flat, at the top level** — `{"kind": "player", "target": "Tester1"}`,
+  not wrapped in an `arguments` object.
+- The usual GUI loop is `command_exec` → `wait_for inventory_open` → `state_query kind="inventory"`,
+  falling back to `bot_inspect` when the menu reads empty because the plugin draws it with packets.
+
+Full parameters and the complete step reference are in [docs/usage.md](docs/usage.md).
+
+---
 
 ## Requirements
 
 | | |
 |---|---|
-| Minecraft server | **Paper 1.21.8 or later**. Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
+| Minecraft server | **Paper 1.21.8 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
 | Java | 21, for both building and running |
 
 ### Version support
@@ -62,11 +244,15 @@ the harness at a version outside it fails honestly rather than quietly — an un
 refuses to load the agent, and a bot without a runner for its protocol is rejected with
 `Outdated client!`.
 
-The two halves can move independently. The agent's floor is what Paper API it compiles against; the
+The two halves move independently. The agent's floor is what Paper API it compiles against; the
 bot's reach is which protocol runners exist. A version can be readable by the agent before any bot
 can connect to it, and that is a useful state — investigation works without bots.
 
-## Three artifacts
+---
+
+## Install
+
+### Three artifacts
 
 ```bash
 ./gradlew dist
@@ -84,9 +270,7 @@ The number in the runner's filename is a **protocol number**, not a Minecraft ve
 772 runner covers both 1.21.7 and 1.21.8. A server speaking a different protocol needs its own
 runner (see [versions.yaml](versions.yaml)).
 
----
-
-## 1. Install the agent
+### 1. Install the agent
 
 Drop `VitaminMCP.jar` into the server's `plugins/` and start it once. **The first startup fails** —
 that is intended.
@@ -119,7 +303,7 @@ is. Two worth knowing up front:
   agent will not generate a self-signed certificate for you — convenient, but it would teach every
   client to skip verification.
 
-## 2. Server setup, if you want bots
+### 2. Server setup, if you want bots
 
 Skip this section if you only need the agent.
 
@@ -158,7 +342,7 @@ With `allow-flight=true` the check is off and `move_to` behaves like a teleport.
 a test server. Leave it alone on a real one — and note this is another reason not to point bots at
 production.
 
-## 3. Connect an MCP client
+### 3. Connect an MCP client
 
 For Claude Code:
 
@@ -183,7 +367,7 @@ Or directly in `.mcp.json`:
 the trust relationship already exists. Only the agent side crosses a network, which is why only the
 agent side authenticates.
 
-## 4. Connect
+### 4. Connect
 
 Call `session_start` first. Every other tool depends on it.
 
@@ -200,12 +384,16 @@ Call `session_start` first. Every other tool depends on it.
 `runnerJar` can be omitted — it looks for a `bot-runner-*.jar` next to `mcp-server.jar`. Since
 `dist` puts all three in one folder, you rarely need to write it.
 
-### A server on another machine
+A successful connection returns the server version, TPS and plugin list.
+
+---
+
+## A server on another machine
 
 Two ways: forward the ports over SSH, or expose the agent with TLS. If you already have SSH to the
 box, the tunnel is less work and exposes nothing.
 
-#### Over an SSH tunnel
+### Over an SSH tunnel
 
 Leave the agent on its loopback default and forward both ports:
 
@@ -227,7 +415,7 @@ forwarding only the first gives you a working `server_info` and a `bot_spawn` th
 > on 25585 rejects your token, so it reads as a wrong token rather than a wrong destination. When
 > in doubt map to a distinct local port (`-L 25685:127.0.0.1:25585`) and pass that as `mcpPort`.
 
-#### Exposing the agent with TLS
+### Exposing the agent with TLS
 
 Once `bind-address` leaves loopback the agent will not start without TLS. Set up a certificate and
 start it, and **the agent prints everything needed to connect**:
@@ -246,51 +434,7 @@ client** — `tlsFingerprint` pins that one certificate. No exporting, no copyin
 With a real certificate (Let's Encrypt and friends), drop `tlsFingerprint` and verification
 proceeds normally.
 
-A successful connection returns the server version, TPS and plugin list.
-
-## Tools
-
-Two groups, and the difference matters. **Session tools** live in `mcp-server` and are always
-present. **Agent tools** are proxied from the plugin — which ones exist is decided by the server
-you connected to, so `session_start` returns their real definitions in `agentTools` rather than
-`mcp-server` guessing at startup.
-
-### Session tools — bots and the connection
-
-| Tool | What it does |
-|---|---|
-| `session_start` | Connect to a server and its agent. Every other tool needs it. `host`, `port`, `mcpPort`, `token`, `runnerJar`, `tls`, `tlsFingerprint` |
-| `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests so one does not inherit the other's players. World state is **not** rolled back |
-| `bot_spawn` | Connect a bot and wait until it is standing in the world. The UUID is derived from the name, so the same name is the same player every run. `name`, `clientIp` |
-| `bot_inspect` | What the bot's client was actually told. Use when the server-side menu reads empty but a player would see a full one, and to read the messages the server sent that bot — a refusal like "you lack permission" appears nowhere else |
-| `bot_run_scenario` | Run a declarative scenario. Stops at the first failure and reports which step failed, why, and what the server was doing at that moment |
-
-### Agent tools — reading the server
-
-| Tool | What it does |
-|---|---|
-| `server_info` | Implementation, version, TPS, online players, installed plugins, capture statistics. Start here when you do not know what you are looking at |
-| `events_summary` | Counts captured events by type over a window. **Always call this before `events_query`** — it stays small however busy the server is, and it tells you which types are worth asking for |
-| `events_query` | Individual captured events. High-frequency types are excluded unless you name them in `types`. Page with `cursor` |
-| `logs_query` | Search logs by minimum severity and regular expression. There is no "last N lines" tool — search for what you are looking for |
-| `exceptions_recent` | Distinct exceptions, most recent first, collapsed with occurrence count and first-seen time. Pass `hash` for one full stack trace |
-| `state_query` | Read current state instead of inferring it: `kind="player"` (position, gamemode, op, and permission nodes you name), `kind="block"`, `kind="inventory"` (the menu a player has open — the only place a plugin GUI's contents exist) |
-| `wait_for` | Block until something becomes true. Conditions: `ticks`, `block_is` / `block_is_not`, `event`, `player_online` / `player_offline`, `player_near`, `inventory_open`, `inventory_contains`. On timeout the response carries the events and logs from that moment |
-| `command_exec` | Run a command, as the console by default. **Changes the server**, so it is absent entirely unless `read-only: false` |
-
-Two things that catch people out:
-
-- **Pass proxied parameters flat, at the top level** — `{"kind": "player", "target": "Tester1"}`,
-  not wrapped in an `arguments` object.
-- **`wait_for` exists because there is no sleep step, and there will not be one.** A fixed wait is
-  a guess about timing that is right on an idle server and wrong on a busy one. Name the thing you
-  are waiting for and the agent checks every tick inside the server.
-
-The usual GUI-testing loop is `command_exec` → `wait_for inventory_open` → `state_query` with
-`kind="inventory"`, falling back to `bot_inspect` if the menu reads empty because the plugin draws
-it with packets.
-
-Full parameters and the scenario step reference are in [docs/usage.md](docs/usage.md).
+---
 
 ## Running against several versions
 
@@ -300,6 +444,8 @@ Server jars are downloaded from the PaperMC API and started natively (no Docker,
 
 Every version needs a runner that speaks its protocol. Without one the server rejects the bot with
 an honest `Outdated client!`.
+
+---
 
 ## License
 
