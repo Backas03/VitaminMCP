@@ -28,12 +28,12 @@ Full usage is in [docs/usage.md](docs/usage.md), design rationale in
 - Read the chat and eyeball whether it did the right thing
 - Repeat for every permission level, every edge case, every version
 
-**With VitaminMCP**, you ask:
+**With VitaminMCP**, you type this to your agent:
 
-> Spawn a bot, op it, open the `/shop` GUI, check slot 11 is a diamond sword listed at 100 coins,
-> buy it, confirm the sword is in the bot's inventory, then deop.
+> **Prompt:** Spawn a bot, op it, open the `/shop` GUI, check slot 11 is a diamond sword listed at
+> 100 coins, buy it, confirm the sword is in the bot's inventory, then deop.
 
-and the agent drives it, verifies each step, and tells you which one failed and what the server was
+and it drives the server, verifies each step, and tells you which one failed and what the server was
 doing at that moment.
 
 The difference that matters for an AI agent is not the automation — it is that **failures are
@@ -44,10 +44,14 @@ that instant, so there is no second round-trip to find out why.
 
 ## What a test looks like
 
-Every action below is a real step. Ask in natural language, or hand `bot_run_scenario` the array
-directly.
+Every action below is a real step. Type the prompt and let the agent build it, or hand
+`bot_run_scenario` the array yourself.
 
 ### Buying from a shop GUI
+
+> **Prompt:** Spawn a bot called `Tester1` and op it. Open the `/shop` GUI and check slot 11 holds a
+> diamond sword named "Diamond Sword" with "100 coins" in its lore. Buy it, then confirm the sword
+> ended up in the bot's own inventory. Deop when you are done.
 
 ```json
 [
@@ -73,9 +77,10 @@ directly.
 
 ### A login reward, and its cooldown
 
-> Test the daily reward plugin. Join as `Newcomer`, wait for the reward menu, check slot 13 is the
-> claim button, click it and confirm the bot was told it claimed something. Then rejoin as the same
-> player, click again, and confirm it is refused this time because the cooldown is still running.
+> **Prompt:** Test the daily reward plugin. Join as `Newcomer`, wait for the reward menu, check slot
+> 13 is the claim button, click it and confirm the bot was told it claimed something. Then rejoin as
+> the same player, click again, and confirm it is refused this time because the cooldown is still
+> running.
 
 Rejoining and checking the *refusal* is the interesting half — and the refusal is usually one chat
 message with no log line behind it.
@@ -394,21 +399,24 @@ A successful connection returns the server version, TPS and plugin list.
 
 #### Or just ask
 
-You do not have to write the JSON. Give the agent the same facts in a sentence:
+You do not have to write that JSON. Type the same facts to your agent instead — these are prompts,
+copy one and fill in your own values.
 
-> Connect to the Minecraft server on this machine. Minecraft is on port 25565, the VitaminMCP agent
-> on 25585, and the token is `kQ8s…` from `plugins/VitaminMCP/config.yml`. Once you are in, tell me
-> the server version and which plugins are loaded.
+**A server on this machine**
 
-If the server is behind an SSH tunnel, say which local ports the tunnel forwards:
+> **Prompt:** Connect to the Minecraft server on this machine. Minecraft is on port 25565, the
+> VitaminMCP agent on 25585, and the token is `kQ8s…` from `plugins/VitaminMCP/config.yml`. Once you
+> are in, tell me the server version and which plugins are loaded.
 
-> The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent on
-> localhost:25685. Token is `kQ8s…`. Connect and confirm it is alive.
+**Behind an SSH tunnel** — say which local ports the tunnel forwards
 
-For a remote agent over TLS, paste the block the agent printed at startup:
+> **Prompt:** The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent
+> on localhost:25685. Token is `kQ8s…`. Connect and confirm it is alive.
 
-> Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`, fingerprint
-> `sha256:ffb61d8f…f163`. Minecraft is on 25565.
+**Remote, over TLS** — paste the block the agent printed at startup
+
+> **Prompt:** Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`,
+> fingerprint `sha256:ffb61d8f…f163`. Minecraft is on 25565.
 
 **Include the port numbers and the token.** Without them the agent has to guess at defaults, and a
 wrong guess surfaces as a rejected token rather than a wrong address — the same failure whichever
