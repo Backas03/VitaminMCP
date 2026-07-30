@@ -1,5 +1,13 @@
 # Contributing
 
+**Thank you for being here.** Every contribution is appreciated — a pull request, a bug report, a
+question that shows a document was unclear, or a note that something did not work on your server.
+Small ones count: a typo fix, a sentence that reads better, a version this was never tried on.
+
+Much of what follows is strict, because a tool that can run console commands on a production server
+has to be. None of it is aimed at you. If a rule here blocks something reasonable, say so — that is
+worth knowing, and the rule can be wrong.
+
 Design rationale is in [docs/design.md](docs/design.md), implementation order and definition of
 done in [docs/roadmap.md](docs/roadmap.md), and the rules and invariants in [CLAUDE.md](CLAUDE.md).
 When a design intent is unclear, read design.md rather than guessing — most of what looks arbitrary
