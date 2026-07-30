@@ -12,6 +12,36 @@ Once installed, [docs/usage.md](docs/usage.md) covers actually using it.
 Design rationale is in [docs/design.md](docs/design.md), contribution rules in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## What you can do with it
+
+**Ask a running server what happened.** Events by type over a window, logs by regex, exceptions
+collapsed by occurrence, the current state of a player or a block. No restart, no debug build, no
+`println` added and redeployed. This works on a production server — the read-only default cannot
+change anything.
+
+**Reproduce a bug with a real player.** `bot_spawn` connects an actual protocol client, not a fake
+`Player` object. It has an inventory, a position, a gamemode, permissions and an IP. Its UUID is
+derived from its name, so `Tester1` is the same player today as yesterday and permission-dependent
+behaviour repeats instead of drifting.
+
+**Test a plugin GUI, including how it looks.** Open a menu, read every slot's material, display
+name, lore and CustomModelData, click a slot, assert on what came back. CustomModelData is the part
+that usually goes untested — with a resource pack, two buttons of the same material and name can be
+completely different icons, so checking material and name alone misses icon bugs.
+
+**See what the server cannot tell you.** A plugin drawing its GUI with ProtocolLib or packetevents
+leaves the server-side inventory empty while the player sees a full menu; `bot_inspect` reads what
+the client was actually sent. It also returns the messages the server sent that bot — which is
+where a refusal like "you lack permission" lives. Those never reach the console, so from the
+server's side a declined command and one that silently did nothing look identical.
+
+**Run the same scenario across versions.** The matrix is [versions.yaml](versions.yaml), and each
+server is started natively from a PaperMC build.
+
+A concrete session looks like: spawn a bot, op it, run the command that opens your menu, wait for
+the menu to open, read the slots, assert the buttons are what you shipped, deop, and you have the
+whole trace of what the server did in between.
+
 ## Requirements
 
 | | |
@@ -136,6 +166,33 @@ Call `session_start` first. Every other tool depends on it.
 `dist` puts all three in one folder, you rarely need to write it.
 
 ### A server on another machine
+
+Two ways: forward the ports over SSH, or expose the agent with TLS. If you already have SSH to the
+box, the tunnel is less work and exposes nothing.
+
+#### Over an SSH tunnel
+
+Leave the agent on its loopback default and forward both ports:
+
+```bash
+ssh -L 25585:127.0.0.1:25585 -L 25565:127.0.0.1:25565 user@your-server
+```
+
+Then connect as if everything were local — `host: "127.0.0.1"`, no `tls`, no `tlsFingerprint`. The
+agent sees a loopback connection because, from its side, that is what it is. Nothing on the server
+is published to the network, and the token never crosses it in the clear: SSH is the transport
+security that TLS would otherwise have to provide.
+
+Forward **both** ports. `mcpPort` is how tools reach the agent, and `port` is where bots connect —
+forwarding only the first gives you a working `server_info` and a `bot_spawn` that cannot connect.
+
+> **Pick local ports that are actually free.** `ssh -L` binds the local side, and if something on
+> your machine already holds that port, the tunnel does not take it — your requests reach the other
+> program instead. The failure that produces is misleading: a different VitaminMCP agent answering
+> on 25585 rejects your token, so it reads as a wrong token rather than a wrong destination. When
+> in doubt map to a distinct local port (`-L 25685:127.0.0.1:25585`) and pass that as `mcpPort`.
+
+#### Exposing the agent with TLS
 
 Once `bind-address` leaves loopback the agent will not start without TLS. Set up a certificate and
 start it, and **the agent prints everything needed to connect**:
