@@ -53,6 +53,30 @@ public final class BotSession implements AutoCloseable {
     private volatile java.util.concurrent.ScheduledExecutorService ticker;
     private volatile boolean loadedSent;
 
+    /**
+     * The menu the server has opened for this bot, if any.
+     *
+     * <p>Tracked because a click has to name the container it is in, and the id is assigned by
+     * the server when it opens the screen — there is no way to ask for it later.
+     */
+    private volatile int containerId = NO_CONTAINER;
+
+    /**
+     * The server's synchronisation counter for the open container.
+     *
+     * <p>Sent back with every click. The server uses it to notice that the client acted on a
+     * stale view of the container, and a click carrying an old value is applied but immediately
+     * followed by a full re-send. Tracking it is what keeps a bot's clicks from being treated as
+     * a desynchronised client's.
+     */
+    private volatile int containerStateId;
+
+    /** Title of the open menu, as plain text, for diagnostics and matching. */
+    private volatile String containerTitle;
+
+    /** No menu open. The player's own inventory is container 0, so -1 is the free sentinel. */
+    public static final int NO_CONTAINER = -1;
+
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
         this.session = session;
@@ -284,6 +308,26 @@ public final class BotSession implements AutoCloseable {
         return (int) Math.floor(z());
     }
 
+    /** The open menu's container id, or {@link #NO_CONTAINER}. */
+    public int containerId() {
+        return containerId;
+    }
+
+    /** The server's current synchronisation counter for the open container. */
+    public int containerStateId() {
+        return containerStateId;
+    }
+
+    /** The open menu's title as plain text, or {@code null} if no menu is open. */
+    public String containerTitle() {
+        return containerTitle;
+    }
+
+    /** Whether the server has a menu open for this bot. */
+    public boolean hasMenuOpen() {
+        return containerId != NO_CONTAINER;
+    }
+
     /** A readable position, for failure messages. */
     public String describePosition() {
         return position == null ? "unknown" : x() + ", " + y() + ", " + z();
@@ -395,6 +439,7 @@ public final class BotSession implements AutoCloseable {
                 inGame = true;
             }
 
+            trackContainer(packet);
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.
@@ -424,9 +469,42 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
+        /**
+         * Follows the open menu and its synchronisation counter.
+         *
+         * <p>The state id arrives on three different packets and every one of them advances it.
+         * Missing any means the next click carries a stale id, which the server answers by
+         * resending the whole container — harmless once, but it makes a test that clicks twice
+         * behave differently from one that clicks once, for reasons nothing reports.
+         */
+        private void trackContainer(Packet packet) {
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .inventory.ClientboundOpenScreenPacket open) {
+                containerId = open.getContainerId();
+                containerTitle = PlainTextComponentSerializer.plainText()
+                        .serialize(open.getTitle());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerSetContentPacket content) {
+                containerStateId = content.getStateId();
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerSetSlotPacket slot) {
+                containerStateId = slot.getStateId();
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerClosePacket) {
+                // The server can close a menu on its own — a plugin moving the player to
+                // another screen, or rejecting what they did. Forgetting it here means a later
+                // click reports "no menu open" rather than being sent into a container that is
+                // no longer there.
+                containerId = NO_CONTAINER;
+                containerTitle = null;
+            }
+        }
+
         @Override
         public void disconnected(DisconnectedEvent event) {
             inGame = false;
+            containerId = NO_CONTAINER;
+            containerTitle = null;
             disconnectReason.set(describe(event));
             // Released so a caller waiting on login fails immediately with the server's reason
             // rather than sitting out the full timeout.

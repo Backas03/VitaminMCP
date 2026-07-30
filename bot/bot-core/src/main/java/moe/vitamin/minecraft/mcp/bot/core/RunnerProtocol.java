@@ -43,6 +43,25 @@ public final class RunnerProtocol {
     public static final String POSITION = "position";
     public static final String SHUTDOWN = "shutdown";
 
+    /** Right-click a block: {@code use <bot> <x> <y> <z> [face]}. Opens containers. */
+    public static final String USE = "use";
+
+    /** Click a slot in the open menu: {@code click <bot> <slot> <left|right|shift_*>}. */
+    public static final String CLICK = "click";
+
+    /** Close the open menu: {@code close_menu <bot>}. */
+    public static final String CLOSE_MENU = "close_menu";
+
+    /**
+     * What menu the bot has open: {@code menu <bot>} → {@code ok menu <containerId> <title>}.
+     *
+     * <p>Answered from the bot's side rather than the agent's on purpose. The agent says what
+     * the <em>server</em> thinks is open; this says what the <em>client</em> was told. They
+     * disagree exactly when a menu failed to reach the client, which is a bug worth being able
+     * to see rather than one to be averaged away.
+     */
+    public static final String MENU = "menu";
+
     // Replies.
     public static final String OK = "ok";
     public static final String ERROR = "err";

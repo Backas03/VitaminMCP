@@ -101,6 +101,81 @@ class ScenarioRunnerLiveTest {
         assertTrue(result.passed(), result.describe());
     }
 
+    /**
+     * The whole point of the inventory work: something opens a menu, and the menu is checked.
+     *
+     * <p>A chest with named items stands in for a plugin's GUI. It is the same path — the
+     * server opens a container view, the client is told about it, and the contents live only in
+     * that view — so a plugin menu is read the same way, without this test needing a plugin.
+     *
+     * <p>Names are set with SNBT rather than a JSON string: since 1.21.5 the {@code custom_name}
+     * component is stored as NBT, and a quoted JSON blob is taken as a literal name. The first
+     * version of this test did exactly that and asserted happily against
+     * {@code {"text":"Buy"}} as the item's name.
+     */
+    @Test
+    void aMenuIsOpenedReadAndClicked() throws Exception {
+        // Placed relative to where the bot actually landed, and only after it has. An earlier
+        // version scouted the position with one bot and used it for another, which drifts as
+        // soon as an earlier test has dug the ground away underneath the spawn point.
+        BotRunner.BotHandle bot = bots.spawn("Tester1");
+        int x = bot.blockX() + 1;
+        int y = bot.blockY();
+        int z = bot.blockZ();
+
+        ScenarioResult result = run("""
+                [
+                  {"action":"console","command":"setblock %d %d %d chest"},
+                  {"action":"console","command":"setblock %d %d %d air"},
+                  {"action":"assert_block","x":%d,"y":%d,"z":%d,"material":"CHEST"},
+                  {"action":"console","command":"item replace block %d %d %d container.11 with emerald[custom_name={text:'Buy',color:'green'},lore=[{text:'Costs 10'}]] 1"},
+                  {"action":"console","command":"item replace block %d %d %d container.15 with barrier[custom_name={text:'Close',color:'red'}] 3"},
+                  {"action":"use_block","bot":"Tester1","x":%d,"y":%d,"z":%d},
+                  {"action":"wait_for","condition":"inventory_open","name":"Tester1"},
+                  {"action":"wait_for","condition":"inventory_contains","name":"Tester1","material":"EMERALD","slot":11},
+                  {"action":"assert_inventory","bot":"Tester1","size":27,"slots":[
+                      {"slot":11,"material":"EMERALD","name":"Buy","amount":1,"lore":"Costs 10"},
+                      {"slot":15,"material":"BARRIER","name":"Close","amount":3},
+                      {"slot":13,"empty":true}
+                  ]},
+                  {"action":"click_slot","bot":"Tester1","slot":15,"click":"shift_left"},
+                  {"action":"assert_event","eventType":"InventoryClickEvent","player":"Tester1"},
+                  {"action":"close_menu","bot":"Tester1"}
+                ]
+                """.formatted(
+                        x, y, z,
+                        // A chest with a solid block directly above it will not open — a rule of
+                        // the game, not of this harness, and one that makes the failure look
+                        // like the menu code is broken when the world is simply in the way.
+                        x, y + 1, z,
+                        x, y, z,
+                        x, y, z, x, y, z, x, y, z));
+
+        assertTrue(result.passed(), result.describe());
+    }
+
+    /**
+     * The wait has to be capable of not matching.
+     *
+     * <p>Pinned because it once could not. A player with no menu open reports view type
+     * {@code CREATIVE} in creative mode, and the condition only excluded {@code CRAFTING}, so it
+     * matched on the first tick for every bot — every scenario using it read a menu that had not
+     * opened, and passed because the server happened to be fast. A wait that cannot fail is
+     * worse than no wait, because it looks like protection.
+     */
+    @Test
+    void waitingForAMenuDoesNotMatchWhenNoneIsOpen() throws Exception {
+        bots.spawn("Tester1");
+
+        com.fasterxml.jackson.databind.node.ObjectNode arguments = AgentClient.arguments();
+        arguments.put("condition", "inventory_open");
+        arguments.put("name", "Tester1");
+        arguments.put("timeoutMillis", 1000);
+
+        assertFalse(agent.call("wait_for", arguments).path("matched").asBoolean(),
+                "inventory_open matched although the bot has no menu open");
+    }
+
     @Test
     void aFailingStepIsNamedExactly() {
         ScenarioResult result = run("""

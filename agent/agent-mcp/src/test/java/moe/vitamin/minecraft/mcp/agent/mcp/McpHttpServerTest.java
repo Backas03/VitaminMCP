@@ -404,6 +404,13 @@ class McpHttpServerTest {
                     false, "world", 1, 2, 3, List.of());
         }
 
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.InventorySnapshot inventory(
+                String name, boolean openMenu, int limit) {
+            return new moe.vitamin.minecraft.mcp.contract.InventorySnapshot(
+                    "CHEST", "§aShop", 27, 0, List.of(), false);
+        }
+
 
         @Override
         public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(

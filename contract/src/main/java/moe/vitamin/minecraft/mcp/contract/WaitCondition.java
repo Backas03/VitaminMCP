@@ -50,6 +50,26 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
      */
     public static final String PLAYER_STATE = "player_state";
 
+    /**
+     * A player has a plugin menu open, optionally one with a given title.
+     *
+     * <p>The precondition for reading a menu at all. Opening one is not synchronous with the
+     * command that caused it — the plugin may hop a tick, or wait on a database — so a read
+     * fired straight after the command sees the player's own inventory screen and reports an
+     * empty menu, which looks exactly like a menu that failed to populate.
+     */
+    public static final String INVENTORY_OPEN = "inventory_open";
+
+    /**
+     * A menu holds a given item, optionally at a given slot.
+     *
+     * <p>Separate from {@link #INVENTORY_OPEN} because the two failure modes are different and
+     * a test wants to tell them apart. A plugin that opens an empty menu and fills it a tick
+     * later passes "is it open" while the buttons are still missing; waiting for the button
+     * itself is what makes the subsequent assertions meaningful rather than lucky.
+     */
+    public static final String INVENTORY_CONTAINS = "inventory_contains";
+
     public WaitCondition {
         Objects.requireNonNull(type, "type");
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);

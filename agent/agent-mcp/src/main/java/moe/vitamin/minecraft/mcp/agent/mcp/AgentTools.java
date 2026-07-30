@@ -17,6 +17,7 @@ import moe.vitamin.minecraft.mcp.agent.core.SequencedRingBuffer;
 import moe.vitamin.minecraft.mcp.contract.Cursor;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
+import moe.vitamin.minecraft.mcp.contract.InventorySnapshot;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
 import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
@@ -113,16 +114,29 @@ final class AgentTools {
         tools.add(tool("state_query",
                 "Reads current server state directly rather than inferring it from events. "
                         + "kind='player' needs 'target' (a player name) and optionally "
-                        + "'permissions'; kind='block' needs 'x','y','z' and optionally 'world'.",
+                        + "'permissions'; kind='block' needs 'x','y','z' and optionally 'world'; "
+                        + "kind='inventory' needs 'target' and reads the menu that player has "
+                        + "open — the only way to check a plugin GUI, since its contents exist "
+                        + "nowhere else. Empty slots are omitted; 'size' and 'occupiedSlots' "
+                        + "describe the whole inventory. A 'view' of CRAFTING means no menu is "
+                        + "open.",
                 properties -> {
-                    enumProperty(properties, "kind", "What to read.", List.of("player", "block"));
-                    stringProperty(properties, "target", "Player name, for kind='player'.");
+                    enumProperty(properties, "kind", "What to read.",
+                            List.of("player", "block", "inventory"));
+                    stringProperty(properties, "target",
+                            "Player name, for kind='player' and kind='inventory'.");
                     arrayProperty(properties, "permissions",
                             "Permission nodes to test. They can only be tested, not listed.");
                     stringProperty(properties, "world", "World name, for kind='block'.");
                     numberProperty(properties, "x", "Block X, for kind='block'.");
                     numberProperty(properties, "y", "Block Y, for kind='block'.");
                     numberProperty(properties, "z", "Block Z, for kind='block'.");
+                    stringProperty(properties, "which",
+                            "For kind='inventory': 'menu' (default) for the open GUI, or "
+                                    + "'player' for the player's own inventory.");
+                    numberProperty(properties, "limit",
+                            "For kind='inventory': most slots to list, capped at "
+                                    + budget.maxItems() + ".");
                 }));
 
         tools.add(tool("wait_for",
@@ -132,7 +146,10 @@ final class AgentTools {
                         + "the response carries the events and log lines from that moment, "
                         + "which usually explain it. Condition types: ticks (count), block_is / "
                         + "block_is_not (world,x,y,z,material), event (eventType, player), "
-                        + "player_online / player_offline (name), player_near (name,x,y,z,distance).",
+                        + "player_online / player_offline (name), player_near (name,x,y,z,distance), "
+                        + "inventory_open (name, title), inventory_contains (name, material, slot, "
+                        + "which). Wait for inventory_open before reading a menu — opening one is "
+                        + "not synchronous with the command that caused it.",
                 properties -> {
                     stringProperty(properties, "condition",
                             "Condition type, e.g. 'block_is_not' or 'event'.");
@@ -141,7 +158,16 @@ final class AgentTools {
                     stringProperty(properties, "eventType", "For condition='event'.");
                     stringProperty(properties, "player", "Player name, where the condition takes one.");
                     stringProperty(properties, "name", "Player name, for player_* conditions.");
-                    stringProperty(properties, "material", "For block_is / block_is_not.");
+                    stringProperty(properties, "material",
+                            "For block_is / block_is_not / inventory_contains.");
+                    stringProperty(properties, "title",
+                            "For inventory_open: substring of the menu title, colour codes "
+                                    + "ignored. Omit to accept any menu.");
+                    numberProperty(properties, "slot",
+                            "For inventory_contains: check this slot only. Omit to accept the "
+                                    + "material anywhere.");
+                    stringProperty(properties, "which",
+                            "For inventory_contains: 'menu' (default) or 'player'.");
                     stringProperty(properties, "world", "World name. Defaults to the main world.");
                     numberProperty(properties, "x", "Coordinate, where the condition takes one.");
                     numberProperty(properties, "y", "Coordinate, where the condition takes one.");
@@ -316,6 +342,23 @@ final class AgentTools {
                 yield mapper.valueToTree(
                         capture.playerState(target, stringSet(args.path("permissions"))));
             }
+            case "inventory" -> {
+                String target = text(args.path("target"));
+                if (target == null) {
+                    throw new ToolException("state_query kind='inventory' needs 'target'.");
+                }
+                // Defaults to the menu, because that is the thing nothing else can see. A
+                // player's own inventory is at least reachable through commands.
+                boolean openMenu = !"player".equalsIgnoreCase(args.path("which").asText("menu"));
+
+                InventorySnapshot snapshot = capture.inventory(
+                        target, openMenu, budget.clampLimit(args.path("limit").asInt(0)));
+                if (snapshot == null) {
+                    throw new ToolException("No such online player: " + target);
+                }
+                yield mapper.valueToTree(snapshot);
+            }
+
             case "block" -> {
                 ObjectNode result = mapper.createObjectNode();
                 int x = args.path("x").asInt();

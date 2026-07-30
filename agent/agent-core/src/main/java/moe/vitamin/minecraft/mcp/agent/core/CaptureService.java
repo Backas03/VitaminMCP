@@ -12,6 +12,7 @@ import moe.vitamin.minecraft.mcp.contract.Cursor;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.EventsSummary;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
+import moe.vitamin.minecraft.mcp.contract.InventorySnapshot;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
 import moe.vitamin.minecraft.mcp.contract.PlayerState;
@@ -288,6 +289,105 @@ public final class CaptureService implements AgentQueries {
         }
         java.net.InetAddress ip = address.getAddress();
         return ip == null ? address.getHostString() : ip.getHostAddress();
+    }
+
+    /**
+     * Reads a player's inventory, or the menu they have open.
+     *
+     * <p><b>On {@code InventoryView} and docs/design.md §5.5.</b> That section warns against
+     * calling this type directly: it became an interface in 1.21, so a call compiled against an
+     * older API is baked in as {@code invokevirtual} and dies with
+     * {@code IncompatibleClassChangeError} on a newer server. The hazard is compiling low and
+     * running high. Here the floor <em>is</em> 1.21.8 — past the change — so the call compiles
+     * to {@code invokeinterface}, which is correct on every server this agent can be installed
+     * on. {@code EventDetails} still avoids direct calls because it touches arbitrary event
+     * types across the whole API surface; this touches one type whose shape the floor pins.
+     *
+     * <p>If the floor is ever lowered below 1.21, this breaks and the compiler will not say so.
+     * That is the same trap {@code SupportedVersions} exists to catch, and §5.4 is the checklist.
+     */
+    @Override
+    public InventorySnapshot inventory(String name, boolean openMenu, int limit) {
+        return onMainThread(() -> {
+            org.bukkit.entity.Player player = Bukkit.getPlayerExact(name);
+            if (player == null) {
+                return null;
+            }
+
+            org.bukkit.inventory.InventoryView view = player.getOpenInventory();
+            // getTopInventory() on a player with nothing open is their 2x2 crafting grid, and
+            // the view type says CRAFTING. Reporting that honestly beats pretending a menu is
+            // open, so the caller can tell "wrong contents" from "nothing opened at all".
+            org.bukkit.inventory.Inventory inventory =
+                    openMenu ? view.getTopInventory() : player.getInventory();
+
+            List<InventorySnapshot.Item> items = new ArrayList<>();
+            int occupied = 0;
+            boolean truncated = false;
+
+            for (int slot = 0; slot < inventory.getSize(); slot++) {
+                org.bukkit.inventory.ItemStack stack = inventory.getItem(slot);
+                if (stack == null || stack.getType() == org.bukkit.Material.AIR) {
+                    continue;
+                }
+                occupied++;
+                if (items.size() >= limit) {
+                    // Counting continues past the limit so occupiedSlots stays truthful about
+                    // the whole inventory rather than about the part that fit.
+                    truncated = true;
+                    continue;
+                }
+                items.add(describe(slot, stack));
+            }
+
+            return new InventorySnapshot(
+                    view.getType().name(),
+                    // title(), not the deprecated getTitle(): the component form goes through
+                    // the same encoding as the item names, so a caller compares titles and
+                    // labels the same way instead of one being coded and the other not.
+                    openMenu ? legacy(view.title()) : null,
+                    inventory.getSize(),
+                    occupied,
+                    items,
+                    truncated);
+        }, Duration.ofSeconds(5), null);
+    }
+
+    /** Flattens one stack into the fields a menu assertion is written against. */
+    private static InventorySnapshot.Item describe(int slot, org.bukkit.inventory.ItemStack stack) {
+        String displayName = null;
+        List<String> lore = List.of();
+        boolean enchanted = !stack.getEnchantments().isEmpty();
+
+        if (stack.hasItemMeta()) {
+            org.bukkit.inventory.meta.ItemMeta meta = stack.getItemMeta();
+            if (meta != null) {
+                if (meta.hasDisplayName()) {
+                    displayName = legacy(meta.displayName());
+                }
+                if (meta.hasLore() && meta.lore() != null) {
+                    lore = meta.lore().stream().map(CaptureService::legacy).toList();
+                }
+                // An enchanted-looking button need not carry a real enchantment; menus often
+                // fake the glow. Either way the player sees a glint, so either counts.
+                enchanted = enchanted || meta.hasEnchants();
+            }
+        }
+        return new InventorySnapshot.Item(
+                slot, stack.getType().name(), stack.getAmount(), displayName, lore, enchanted);
+    }
+
+    /**
+     * A component as the {@code §}-coded string a plugin author would have written.
+     *
+     * <p>Colour is part of whether a menu rendered correctly, so it is kept rather than
+     * stripped. Legacy rather than JSON because a test asserting on {@code "§aAccept"} is
+     * readable and one asserting on a serialised component tree is not.
+     */
+    private static String legacy(net.kyori.adventure.text.Component component) {
+        return component == null ? null
+                : net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                        .legacySection().serialize(component);
     }
 
     @Override

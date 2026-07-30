@@ -213,6 +213,44 @@ public final class BotRunner implements AutoCloseable {
         public void chat(String message) throws IOException {
             runner.send(RunnerProtocol.CHAT, name, message);
         }
+
+        /**
+         * Right-clicks a block. This is how a container or a plugin menu gets opened.
+         *
+         * @param face side being clicked, or {@code null} for the top
+         */
+        public void useBlock(int x, int y, int z, String face) throws IOException {
+            runner.send(RunnerProtocol.USE, name, String.valueOf(x), String.valueOf(y),
+                    String.valueOf(z), face == null ? "" : face);
+        }
+
+        /**
+         * Clicks a slot in the menu the bot has open.
+         *
+         * @param click {@code left}, {@code right}, {@code shift_left} or {@code shift_right}
+         */
+        public void clickSlot(int slot, String click) throws IOException {
+            runner.send(RunnerProtocol.CLICK, name, String.valueOf(slot),
+                    click == null || click.isBlank() ? "left" : click);
+        }
+
+        public void closeMenu() throws IOException {
+            runner.send(RunnerProtocol.CLOSE_MENU, name);
+        }
+
+        /**
+         * The menu the client has been told about, or {@code null} if none.
+         *
+         * <p>The client's view, not the server's — {@code state_query kind='inventory'} is the
+         * server's. Comparing them is how "the plugin opened a menu but it never reached the
+         * player" becomes visible instead of looking like an empty menu.
+         */
+        public OpenMenu menu() throws IOException {
+            String[] reply = runner.send(RunnerProtocol.MENU, name);
+            int containerId = Integer.parseInt(reply[2]);
+            return containerId < 0 ? null : new OpenMenu(containerId, reply[3]);
+        }
+
         /** The bot's position now, which may differ from where it spawned. */
         public double[] position() throws IOException {
             String[] reply = runner.send(RunnerProtocol.POSITION, name);
@@ -222,4 +260,7 @@ public final class BotRunner implements AutoCloseable {
             };
         }
     }
+
+    /** A menu the server has opened on the client, as the client sees it. */
+    public record OpenMenu(int containerId, String title) {}
 }

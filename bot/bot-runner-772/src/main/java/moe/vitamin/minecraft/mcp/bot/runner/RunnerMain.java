@@ -126,6 +126,41 @@ public final class RunnerMain {
                 yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
             }
 
+            case RunnerProtocol.USE -> {
+                require(command[1]).actions().useBlock(
+                        Integer.parseInt(command[2]),
+                        Integer.parseInt(command[3]),
+                        Integer.parseInt(command[4]),
+                        command.length > 5 && !command[5].isBlank()
+                                ? org.geysermc.mcprotocollib.protocol.data.game.entity.object
+                                        .Direction.valueOf(command[5].toUpperCase(
+                                                java.util.Locale.ROOT))
+                                : null);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.CLICK -> {
+                require(command[1]).actions().clickSlot(
+                        Integer.parseInt(command[2]),
+                        command.length > 3 ? command[3] : "left");
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.CLOSE_MENU -> {
+                require(command[1]).actions().closeMenu();
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.MENU -> {
+                BotSession bot = require(command[1]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb,
+                        String.valueOf(bot.containerId()),
+                        // Tab is the field separator, so a title containing one would shift
+                        // every field after it into the wrong place.
+                        bot.containerTitle() == null
+                                ? "" : bot.containerTitle().replace('\t', ' '));
+            }
+
             case RunnerProtocol.POSITION -> position(RunnerProtocol.POSITION, require(command[1]));
 
             default -> RunnerProtocol.encode(

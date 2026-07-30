@@ -26,6 +26,25 @@ import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
  * ]
  * </pre>
  *
+ * <p>Testing a menu GUI follows the same shape — cause it, wait for it, then assert on what is
+ * in it. The wait is not optional: a plugin opens its menu on its own schedule, so a scenario
+ * that reads immediately after the command sees the player's own inventory screen.
+ *
+ * <pre>
+ * [
+ *   {"action": "spawn",    "bot": "Tester1"},
+ *   {"action": "command",  "bot": "Tester1", "command": "shop"},
+ *   {"action": "wait_for", "condition": "inventory_open", "name": "Tester1", "title": "Shop"},
+ *   {"action": "assert_inventory", "bot": "Tester1", "size": 27, "slots": [
+ *       {"slot": 11, "material": "EMERALD", "name": "Buy"},
+ *       {"slot": 15, "material": "BARRIER", "name": "Close"},
+ *       {"slot": 13, "empty": true}
+ *   ]},
+ *   {"action": "click_slot", "bot": "Tester1", "slot": 11},
+ *   {"action": "assert_event", "eventType": "InventoryClickEvent", "player": "Tester1"}
+ * ]
+ * </pre>
+ *
  * <p><b>There is no sleep step, and there will not be one.</b> Offering it guarantees it gets
  * used — it is always the shortest path past a timing problem — and every use is a scenario
  * calibrated to the machine that wrote it. {@code wait_for} covers the same ground by naming
@@ -202,6 +221,34 @@ public final class ScenarioRunner {
                         "player state never matched", actual.toString());
             }
 
+            case "use_block" -> {
+                act(step, bot -> bot.useBlock(
+                        step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt(),
+                        step.path("face").asText(null)));
+                yield ScenarioResult.StepResult.ok(index, action, "sent");
+            }
+
+            case "click_slot" -> {
+                act(step, bot -> bot.clickSlot(
+                        step.path("slot").asInt(), step.path("click").asText("left")));
+                yield ScenarioResult.StepResult.ok(index, action, "sent");
+            }
+
+            case "close_menu" -> {
+                act(step, BotRunner.BotHandle::closeMenu);
+                yield ScenarioResult.StepResult.ok(index, action, "sent");
+            }
+
+            case "assert_inventory" -> {
+                ObjectNode query = AgentClient.arguments();
+                query.put("kind", "inventory");
+                query.put("target", required(step, "bot"));
+                query.put("which", step.path("which").asText("menu"));
+                JsonNode actual = agent.call("state_query", query);
+
+                yield checkInventory(index, action, step, actual);
+            }
+
             case "assert_event" -> {
                 ObjectNode arguments = waitArguments(step);
                 arguments.put("condition", "event");
@@ -223,6 +270,129 @@ public final class ScenarioRunner {
 
             default -> throw new IllegalArgumentException("unknown action '" + action + "'");
         };
+    }
+
+    /**
+     * Checks a menu against what the step said should be in it.
+     *
+     * <p>Reports the first thing that is wrong together with what was actually there, because
+     * "slot 11 expected EMERALD but held BARRIER" is a finished diagnosis and "assertion failed"
+     * is the start of one. A slot that is simply empty is called out separately from one holding
+     * the wrong item — the causes are different (the plugin never filled it, versus it filled it
+     * wrongly) and the message should not make the reader guess which.
+     */
+    private ScenarioResult.StepResult checkInventory(
+            int index, String action, JsonNode step, JsonNode snapshot) {
+
+        String view = snapshot.path("view").asText();
+        if (step.hasNonNull("title") || "menu".equals(step.path("which").asText("menu"))) {
+            // Saying "no menu is open" beats reporting every expected slot as missing, which is
+            // the same symptom with a completely different cause.
+            if (!moe.vitamin.minecraft.mcp.contract.InventorySnapshot.isMenu(view)) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "no menu is open for " + step.path("bot").asText()
+                                + " — the view is " + view + ". If a command should have opened "
+                                + "one, wait_for inventory_open first.",
+                        snapshot.toString());
+            }
+        }
+
+        String wantedTitle = step.path("title").asText(null);
+        if (wantedTitle != null && !plain(snapshot.path("title").asText("")).contains(wantedTitle)) {
+            return ScenarioResult.StepResult.failed(index, action,
+                    "expected the title to contain '" + wantedTitle + "' but it was '"
+                            + snapshot.path("title").asText("") + "'",
+                    snapshot.toString());
+        }
+
+        if (step.hasNonNull("size") && snapshot.path("size").asInt() != step.path("size").asInt()) {
+            return ScenarioResult.StepResult.failed(index, action,
+                    "expected " + step.path("size").asInt() + " slots but the menu has "
+                            + snapshot.path("size").asInt(),
+                    snapshot.toString());
+        }
+
+        int checked = 0;
+        for (JsonNode expected : step.path("slots")) {
+            int slot = expected.path("slot").asInt();
+            JsonNode actual = slotIn(snapshot, slot);
+            checked++;
+
+            if (expected.path("empty").asBoolean(false)) {
+                if (actual != null) {
+                    return ScenarioResult.StepResult.failed(index, action,
+                            "expected slot " + slot + " to be empty but it held "
+                                    + actual.path("material").asText(),
+                            snapshot.toString());
+                }
+                continue;
+            }
+
+            if (actual == null) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "slot " + slot + " is empty, expected "
+                                + expected.path("material").asText("something"),
+                        snapshot.toString());
+            }
+
+            String material = expected.path("material").asText(null);
+            if (material != null
+                    && !material.equalsIgnoreCase(actual.path("material").asText())) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "slot " + slot + " expected " + material.toUpperCase(java.util.Locale.ROOT)
+                                + " but held " + actual.path("material").asText(),
+                        snapshot.toString());
+            }
+
+            String name = expected.path("name").asText(null);
+            if (name != null && !plain(actual.path("displayName").asText("")).contains(name)) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "slot " + slot + " expected a name containing '" + name + "' but it was '"
+                                + actual.path("displayName").asText("") + "'",
+                        snapshot.toString());
+            }
+
+            if (expected.hasNonNull("amount")
+                    && actual.path("amount").asInt() != expected.path("amount").asInt()) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "slot " + slot + " expected " + expected.path("amount").asInt()
+                                + " of them but found " + actual.path("amount").asInt(),
+                        snapshot.toString());
+            }
+
+            String lore = expected.path("lore").asText(null);
+            if (lore != null && !plain(actual.path("lore").toString()).contains(lore)) {
+                return ScenarioResult.StepResult.failed(index, action,
+                        "slot " + slot + " expected lore containing '" + lore + "' but it was "
+                                + actual.path("lore"),
+                        snapshot.toString());
+            }
+        }
+
+        return ScenarioResult.StepResult.ok(index, action,
+                view + " '" + snapshot.path("title").asText("") + "', "
+                        + checked + " slot(s) as expected");
+    }
+
+    /** The listed item at a slot, or {@code null} — empty slots are omitted from the snapshot. */
+    private static JsonNode slotIn(JsonNode snapshot, int slot) {
+        for (JsonNode item : snapshot.path("items")) {
+            if (item.path("slot").asInt() == slot) {
+                return item;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Drops legacy colour codes.
+     *
+     * <p>So a scenario can say {@code "name": "Accept"} without knowing the plugin wrote it as
+     * {@code §aAccept}. Colour is still visible in the failure message and in the raw snapshot,
+     * so a test that does care can assert on the coded form instead.
+     */
+    private static String plain(String text) {
+        return text == null ? "" : text.replaceAll("§[0-9a-fk-orA-FK-OR]", "");
     }
 
     /** Copies a step's parameters into wait_for arguments, dropping the ones it does not take. */
