@@ -73,6 +73,10 @@ directly.
 
 ### A login reward, and its cooldown
 
+> Test the daily reward plugin. Join as `Newcomer`, wait for the reward menu, check slot 13 is the
+> claim button, click it and confirm the bot was told it claimed something. Then rejoin as the same
+> player, click again, and confirm it is refused this time because the cooldown is still running.
+
 Rejoining and checking the *refusal* is the interesting half — and the refusal is usually one chat
 message with no log line behind it.
 
@@ -387,6 +391,28 @@ Call `session_start` first. Every other tool depends on it.
 `dist` puts all three in one folder, you rarely need to write it.
 
 A successful connection returns the server version, TPS and plugin list.
+
+#### Or just ask
+
+You do not have to write the JSON. Give the agent the same facts in a sentence:
+
+> Connect to the Minecraft server on this machine. Minecraft is on port 25565, the VitaminMCP agent
+> on 25585, and the token is `kQ8s…` from `plugins/VitaminMCP/config.yml`. Once you are in, tell me
+> the server version and which plugins are loaded.
+
+If the server is behind an SSH tunnel, say which local ports the tunnel forwards:
+
+> The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent on
+> localhost:25685. Token is `kQ8s…`. Connect and confirm it is alive.
+
+For a remote agent over TLS, paste the block the agent printed at startup:
+
+> Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`, fingerprint
+> `sha256:ffb61d8f…f163`. Minecraft is on 25565.
+
+**Include the port numbers and the token.** Without them the agent has to guess at defaults, and a
+wrong guess surfaces as a rejected token rather than a wrong address — the same failure whichever
+detail was missing.
 
 ---
 
