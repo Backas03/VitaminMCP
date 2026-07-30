@@ -20,16 +20,21 @@ final class AgentProbe {
     private static final HttpClient CLIENT =
             HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
+    private final String host;
     private final int port;
     private final String token;
 
-    AgentProbe(int port, String token) {
+    AgentProbe(String host, int port, String token) {
+        this.host = host;
         this.port = port;
         this.token = token;
     }
 
     static AgentProbe fromSystemProperties() {
         return new AgentProbe(
+                // The same host the bots dial. Hardcoding loopback here would have quietly
+                // pointed the probe at a different machine than the one under test.
+                System.getProperty("vitaminmcp.host", "127.0.0.1"),
                 Integer.getInteger("vitaminmcp.mcpPort", 25585),
                 System.getProperty("vitaminmcp.token", ""));
     }
@@ -42,7 +47,7 @@ final class AgentProbe {
                 """.formatted(tool, argumentsJson);
 
         HttpResponse<String> response = CLIENT.send(
-                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
+                HttpRequest.newBuilder(URI.create("http://" + host + ":" + port + "/mcp"))
                         .header("Authorization", "Bearer " + token)
                         .header("Content-Type", "application/json")
                         .timeout(Duration.ofSeconds(15))
@@ -65,6 +70,13 @@ final class AgentProbe {
         String response = call("state_query",
                 "{\"kind\":\"player\",\"target\":\"%s\"}".formatted(player));
         return extract(response, "gameMode");
+    }
+
+    /** The address the server attributes a player's connection to. */
+    String addressOf(String player) throws Exception {
+        String response = call("state_query",
+                "{\"kind\":\"player\",\"target\":\"%s\"}".formatted(player));
+        return extract(response, "address");
     }
 
     String runCommand(String command) throws Exception {

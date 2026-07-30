@@ -49,7 +49,9 @@ public final class MatrixRunner {
     private final int parallelism;
 
     /**
-     * @param workDirectory where per-version server directories and the jar cache live
+     * @param workDirectory where per-version server directories live. Downloaded jars do not:
+     *                      they are cached by {@link PaperDownloader} somewhere durable, so a
+     *                      caller is free to delete this directory afterwards
      * @param agentJar      the VitaminMCP plugin to install on each server
      * @param runnerJar     the bot runner built for the protocol these versions speak
      * @param worldTemplate world copied in before each run, or {@code null} for a fresh world
@@ -127,7 +129,7 @@ public final class MatrixRunner {
             String token = generateToken();
             Path directory = workDirectory.resolve("servers").resolve(entry.id());
 
-            Path jar = new PaperDownloader(workDirectory.resolve("cache"))
+            Path jar = new PaperDownloader()
                     .fetch(entry.paperVersion(), entry.build());
 
             try (ManagedServer server = new ManagedServer(directory, jar, port, agentPort)) {

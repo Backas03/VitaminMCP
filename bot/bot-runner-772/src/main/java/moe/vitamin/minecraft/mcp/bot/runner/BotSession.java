@@ -2,6 +2,7 @@ package moe.vitamin.minecraft.mcp.bot.runner;
 
 import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
 import moe.vitamin.minecraft.mcp.bot.core.ForwardingHandshake;
+import moe.vitamin.minecraft.mcp.bot.core.RunnerProtocol;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
@@ -53,9 +54,68 @@ public final class BotSession implements AutoCloseable {
     private volatile java.util.concurrent.ScheduledExecutorService ticker;
     private volatile boolean loadedSent;
 
+    /**
+     * The menu the server has opened for this bot, if any.
+     *
+     * <p>Tracked because a click has to name the container it is in, and the id is assigned by
+     * the server when it opens the screen — there is no way to ask for it later.
+     */
+    private volatile int containerId = NO_CONTAINER;
+
+    /**
+     * The server's synchronisation counter for the open container.
+     *
+     * <p>Sent back with every click. The server uses it to notice that the client acted on a
+     * stale view of the container, and a click carrying an old value is applied but immediately
+     * followed by a full re-send. Tracking it is what keeps a bot's clicks from being treated as
+     * a desynchronised client's.
+     */
+    private volatile int containerStateId;
+
+    /** Title of the open menu, as plain text, for diagnostics and matching. */
+    private volatile String containerTitle;
+
+    /**
+     * The menu's contents as the client was told them.
+     *
+     * <p>Kept because the server-side inventory is not always the same thing. A plugin that
+     * draws its menu by sending packets — the usual approach when ProtocolLib or packetevents is
+     * involved — leaves the Bukkit inventory empty and paints the screen directly. Asking the
+     * server then reports an empty chest while the player is looking at a full one, and the
+     * only place the truth exists is here, in what arrived on the wire.
+     */
+    private volatile org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[] containerItems
+            = new org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[0];
+
+    /** Most recent messages the server sent this bot, oldest first. */
+    private final java.util.Deque<String> messages = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    /**
+     * How many messages to keep.
+     *
+     * <p>Enough for the join sequence plus whatever a command replies, and bounded because a bot
+     * left connected to a busy server would otherwise accumulate every public chat line for as
+     * long as it lives.
+     */
+    private static final int MAX_MESSAGES = 100;
+
+    /** No menu open. The player's own inventory is container 0, so -1 is the free sentinel. */
+    public static final int NO_CONTAINER = -1;
+
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
         this.session = session;
+    }
+
+    /**
+     * Opens a session, presenting the connection as what it actually is.
+     *
+     * <p>The backend is told the host that was really dialled and the address this machine
+     * really connects from. Use {@link #open(String, int, BotIdentity, String, String)} to claim
+     * something else.
+     */
+    public static BotSession open(String host, int port, BotIdentity identity) throws Exception {
+        return open(host, port, identity, null, null);
     }
 
     /**
@@ -64,23 +124,22 @@ public final class BotSession implements AutoCloseable {
      * @param host        the server to connect to
      * @param port        the server's port
      * @param identity    who the bot claims to be
-     * @param claimedHost the host the backend should believe was dialled
-     * @param clientIp    the address the backend should attribute the connection to
+     * @param claimedHost the host the backend should believe was dialled, or {@code null} for
+     *                    {@code host} — which is what a real client dialling it would send, and
+     *                    what a server routing on forced hosts matches against
+     * @param clientIp    the address the backend should attribute the connection to, or
+     *                    {@code null} for the one this machine really uses. Worth setting only
+     *                    to reproduce a specific address — an IP ban, a geo lookup — because a
+     *                    made-up one is a lie the rest of the test then has to live with
      */
     public static BotSession open(
             String host, int port, BotIdentity identity, String claimedHost, String clientIp)
             throws Exception {
 
-        String forwardedHost =
-                ForwardingHandshake.addressField(claimedHost, clientIp, identity);
-
-        // The payload is carried by the address itself: MCProtocolLib copies the remote
-        // address's host string into the intention packet. getByAddress binds an arbitrary
-        // label to a literal IP without a DNS lookup, which is what makes it possible to put
-        // a string no resolver could ever answer for into a connectable address.
-        java.net.InetAddress resolved = java.net.InetAddress.getByName(host);
-        InetSocketAddress target = new InetSocketAddress(
-                java.net.InetAddress.getByAddress(forwardedHost, resolved.getAddress()), port);
+        // Resolved here rather than left to connect(), so a host that does not exist says so
+        // instead of arriving later as a login that never completed.
+        InetSocketAddress target =
+                new InetSocketAddress(java.net.InetAddress.getByName(host), port);
 
         // The username here still matters: the backend takes the UUID and skin from the
         // forwarded fields but the name from the login packet, and a mismatch between them is
@@ -99,8 +158,15 @@ public final class BotSession implements AutoCloseable {
                 null);
 
         BotSession bot = new BotSession(identity, session);
-        session.addListener(bot.new LifecycleListener(forwardedHost));
+        session.addListener(bot.new LifecycleListener(
+                isBlank(claimedHost) ? host : claimedHost,
+                isBlank(clientIp) ? null : clientIp));
         return bot;
+    }
+
+    /** Absent and empty mean the same thing — the runner protocol sends an empty field. */
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**
@@ -267,6 +333,122 @@ public final class BotSession implements AutoCloseable {
         return (int) Math.floor(z());
     }
 
+    /** The open menu's container id, or {@link #NO_CONTAINER}. */
+    public int containerId() {
+        return containerId;
+    }
+
+    /** The server's current synchronisation counter for the open container. */
+    public int containerStateId() {
+        return containerStateId;
+    }
+
+    /** The open menu's title as plain text, or {@code null} if no menu is open. */
+    public String containerTitle() {
+        return containerTitle;
+    }
+
+    /** Whether the server has a menu open for this bot. */
+    public boolean hasMenuOpen() {
+        return containerId != NO_CONTAINER;
+    }
+
+    /**
+     * The open menu's slots as the client received them, one record per occupied slot.
+     *
+     * <p>{@code slot ␟ itemId ␟ amount ␟ name ␟ customModelData ␟ lore}, joined by ␞.
+     *
+     * <p><b>The item is a numeric id, not a name.</b> The protocol carries a registry index and
+     * MCProtocolLib ships no table to turn it back into {@code DIAMOND_SWORD}; the mapping lives
+     * in the game jar. The agent's own {@code state_query} gives real material names — this is
+     * for the case where that comes back empty because the menu was never in the server's
+     * inventory to begin with. Names, lore and model data do come through, and for a menu those
+     * are what identify a button anyway.
+     */
+    public String clientMenuItems() {
+        var items = containerItems;
+        StringBuilder out = new StringBuilder();
+        for (int slot = 0; slot < items.length; slot++) {
+            var item = items[slot];
+            if (item == null) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append(RunnerProtocol.RECORD_SEPARATOR);
+            }
+            out.append(slot).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(item.getId()).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(item.getAmount()).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(RunnerProtocol.sanitize(nameOf(item))).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(modelDataOf(item)).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(RunnerProtocol.sanitize(loreOf(item)));
+        }
+        return out.toString();
+    }
+
+    private static String nameOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var custom = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.CUSTOM_NAME);
+        if (custom == null) {
+            custom = components.get(
+                    org.geysermc.mcprotocollib.protocol.data.game.item.component
+                            .DataComponentTypes.ITEM_NAME);
+        }
+        return custom == null ? "" : PlainTextComponentSerializer.plainText().serialize(custom);
+    }
+
+    private static String loreOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var lore = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.LORE);
+        if (lore == null || lore.isEmpty()) {
+            return "";
+        }
+        return lore.stream()
+                .map(line -> PlainTextComponentSerializer.plainText().serialize(line))
+                .collect(java.util.stream.Collectors.joining(" | "));
+    }
+
+    /** @return the first float of the model data component, or empty when it carries none */
+    private static String modelDataOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var model = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.CUSTOM_MODEL_DATA);
+        if (model == null) {
+            return "";
+        }
+        // Strings first: a pack keyed on them is the modern idiom, and the floats are often
+        // absent entirely when it is.
+        if (model.strings() != null && !model.strings().isEmpty()) {
+            return String.join(",", model.strings());
+        }
+        if (model.floats() != null && !model.floats().isEmpty()) {
+            return String.valueOf(model.floats().get(0));
+        }
+        return "";
+    }
+
+    /** Messages the server sent this bot, oldest first, joined by ␞. */
+    public String receivedMessages() {
+        return String.join(String.valueOf(RunnerProtocol.RECORD_SEPARATOR), messages);
+    }
+
     /** A readable position, for failure messages. */
     public String describePosition() {
         return position == null ? "unknown" : x() + ", " + y() + ", " + z();
@@ -300,25 +482,36 @@ public final class BotSession implements AutoCloseable {
     /** Injects the forwarded identity, and tracks how far through login the bot has got. */
     private final class LifecycleListener extends SessionAdapter {
 
-        private final String forwardedHost;
+        private final String claimedHost;
+        private final String clientIp;
 
-        LifecycleListener(String forwardedHost) {
-            this.forwardedHost = forwardedHost;
+        /** @param clientIp {@code null} to report the address the socket really uses */
+        LifecycleListener(String claimedHost, String clientIp) {
+            this.claimedHost = claimedHost;
+            this.clientIp = clientIp;
         }
 
         /**
          * Replaces the handshake's hostname with the forwarded identity.
          *
-         * <p>Done here rather than by disguising the address the session connects to. Both
-         * would work today — MCProtocolLib copies the hostname out of the remote address — but
-         * that is an implementation detail of the library, whereas the intention packet is
-         * part of the protocol. Rewriting the packet says what is actually meant, and does not
-         * quietly stop injecting if the library changes how it derives the host.
+         * <p>Done by rewriting the packet rather than by disguising the address the session
+         * connects to. Both would work — MCProtocolLib copies the hostname out of the remote
+         * address, so a fake label on it ends up on the wire — but that is an implementation
+         * detail of the library, whereas the intention packet is part of the protocol.
+         * Rewriting the packet says what is actually meant, and does not quietly stop injecting
+         * if the library changes how it derives the host.
+         *
+         * <p>The field is assembled here, not at construction, because until the socket is
+         * connected there is no local address to report — and the handshake is the first thing
+         * sent after it connects, so here is the earliest moment it is known.
          */
         @Override
         public void packetSending(
                 org.geysermc.mcprotocollib.network.event.session.PacketSendingEvent event) {
             if (event.getPacket() instanceof ClientIntentionPacket intention) {
+                String forwardedHost = ForwardingHandshake.addressField(
+                        claimedHost, clientIp == null ? localAddress() : clientIp, identity);
+
                 if (Boolean.getBoolean("vitaminmcp.debugHandshake")) {
                     System.err.println("[handshake] protocol=" + intention.getProtocolVersion()
                             + " intent=" + intention.getIntent()
@@ -334,6 +527,31 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
+        /**
+         * The address this machine is connecting from.
+         *
+         * <p>What the server would have seen had nothing been forwarding on our behalf — so
+         * reporting it means the bot looks like a client at this machine rather than at a
+         * fictional loopback address, which is what anything keyed on the address (bans,
+         * per-IP connection limits, geo lookups) then sees.
+         *
+         * <p>Exact when nothing translates addresses between here and the server, and close
+         * enough to be useful when something does; a NAT would have the server seeing the
+         * public address instead, which no client can determine for itself. Pass an explicit
+         * clientIp when the test needs a specific one.
+         */
+        private String localAddress() {
+            if (session.getLocalAddress() instanceof InetSocketAddress local
+                    && local.getAddress() != null) {
+                return local.getAddress().getHostAddress();
+            }
+            // Only reachable if the channel has no local address, which for a socket that is
+            // mid-handshake means it is already gone. The connection is about to fail either
+            // way; loopback keeps the field well-formed so it fails with the server's reason
+            // rather than an exception on a Netty thread.
+            return "127.0.0.1";
+        }
+
         @Override
         public void packetReceived(org.geysermc.mcprotocollib.network.Session session, Packet packet) {
             // The join packet, not the login-success one: success means the server accepted
@@ -341,6 +559,9 @@ public final class BotSession implements AutoCloseable {
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
             }
+
+            trackContainer(packet);
+            trackMessages(packet);
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.
@@ -370,9 +591,85 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
+        /**
+         * Follows the open menu and its synchronisation counter.
+         *
+         * <p>The state id arrives on three different packets and every one of them advances it.
+         * Missing any means the next click carries a stale id, which the server answers by
+         * resending the whole container — harmless once, but it makes a test that clicks twice
+         * behave differently from one that clicks once, for reasons nothing reports.
+         */
+        private void trackContainer(Packet packet) {
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .inventory.ClientboundOpenScreenPacket open) {
+                containerId = open.getContainerId();
+                containerTitle = PlainTextComponentSerializer.plainText()
+                        .serialize(open.getTitle());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerSetContentPacket content) {
+                containerStateId = content.getStateId();
+                containerItems = content.getItems();
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerSetSlotPacket slot) {
+                containerStateId = slot.getStateId();
+                // One slot at a time is how a menu is usually filled after it opens, so
+                // following only the full sends would show a permanently empty screen.
+                var current = containerItems;
+                if (slot.getSlot() >= 0 && slot.getSlot() < current.length) {
+                    var updated = java.util.Arrays.copyOf(current, current.length);
+                    updated[slot.getSlot()] = slot.getItem();
+                    containerItems = updated;
+                }
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.inventory.ClientboundContainerClosePacket) {
+                // The server can close a menu on its own — a plugin moving the player to
+                // another screen, or rejecting what they did. Forgetting it here means a later
+                // click reports "no menu open" rather than being sent into a container that is
+                // no longer there.
+                containerId = NO_CONTAINER;
+                containerTitle = null;
+            }
+        }
+
+        /**
+         * Keeps what the server said to this bot.
+         *
+         * <p>Almost every plugin refusal is a message and nothing else — no exception, no console
+         * line, no event. Without this, a command that was declined for lack of permission and
+         * one that silently did nothing are indistinguishable from the server side, which is
+         * exactly the wall this hit on a real server.
+         *
+         * <p>Three packet types because the server picks between them by how the message was
+         * produced: plugins and command feedback use the system one, player chat the signed one,
+         * and anything relayed on a player's behalf the disguised one. A test does not care
+         * which, so they all land in the same place.
+         */
+        private void trackMessages(Packet packet) {
+            String text = null;
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .ClientboundSystemChatPacket system) {
+                text = PlainTextComponentSerializer.plainText().serialize(system.getContent());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.ClientboundDisguisedChatPacket disguised) {
+                text = PlainTextComponentSerializer.plainText().serialize(disguised.getMessage());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.ClientboundPlayerChatPacket chat) {
+                text = chat.getContent();
+            }
+            if (text == null) {
+                return;
+            }
+            messages.addLast(RunnerProtocol.sanitize(text));
+            while (messages.size() > MAX_MESSAGES) {
+                messages.pollFirst();
+            }
+        }
+
         @Override
         public void disconnected(DisconnectedEvent event) {
             inGame = false;
+            containerId = NO_CONTAINER;
+            containerTitle = null;
             disconnectReason.set(describe(event));
             // Released so a caller waiting on login fails immediately with the server's reason
             // rather than sitting out the full timeout.

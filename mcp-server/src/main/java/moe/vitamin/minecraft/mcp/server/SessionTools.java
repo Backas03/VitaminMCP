@@ -44,11 +44,19 @@ final class SessionTools {
                     number(properties, "mcpPort", "Agent's MCP port. Defaults to 25585.");
                     string(properties, "token", "The agent's auth-token from its config.yml.");
                     string(properties, "runnerJar",
-                            "Path to the bot runner jar built for this server's protocol.");
+                            "Path to the bot runner jar. Optional: defaults to the "
+                                    + "bot-runner-*.jar sitting beside this server's own jar, "
+                                    + "which is where 'gradlew dist' puts it.");
                     string(properties, "tls",
                             "'true' if the agent serves HTTPS. Required for any server that is "
                                     + "not on this machine — a remotely reachable agent refuses "
                                     + "to start without transport security.");
+                    string(properties, "tlsFingerprint",
+                            "SHA-256 of the agent's certificate, printed in its startup log. "
+                                    + "Needed when the agent uses a self-signed certificate; "
+                                    + "pins that exact certificate so nothing has to be "
+                                    + "installed on this machine. Omit for a certificate signed "
+                                    + "by a public authority.");
                 }));
 
         tools.add(tool("session_reset",
@@ -60,24 +68,54 @@ final class SessionTools {
                 "Connect a bot and wait until it is standing in the world. Its UUID is derived "
                         + "from its name, so the same name is the same player every run and "
                         + "permission-dependent behaviour is reproducible.",
-                properties -> string(properties, "name", "Bot name, at most 16 characters.")));
+                properties -> {
+                    string(properties, "name", "Bot name, at most 16 characters.");
+                    string(properties, "clientIp",
+                            "Address the server should attribute the connection to. Omit unless "
+                                    + "you are testing something keyed on the address — an IP "
+                                    + "ban, a per-IP limit, geo logic. Omitted, the bot reports "
+                                    + "the address it really connects from.");
+                }));
+
+        tools.add(tool("bot_inspect",
+                "What the bot's client was told, which the server cannot always be asked. Use "
+                        + "when state_query reports an empty menu but a player would see a full "
+                        + "one — a plugin drawing its GUI with packets leaves the server-side "
+                        + "inventory empty. Also returns the messages the server sent this bot, "
+                        + "which is where a refusal like 'you lack permission' appears; those "
+                        + "never reach the console, so a declined command and one that did "
+                        + "nothing look identical from the agent's side. Item ids are numeric "
+                        + "here — the protocol carries no names.",
+                properties -> string(properties, "name", "Bot name.")));
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
-                        + "command, chat, console, wait_for, assert_block, assert_player, "
-                        + "assert_event. There is no sleep step — use wait_for and name what "
-                        + "you are waiting for. On failure the response says which step failed, "
-                        + "why, and what the server was doing at that moment.",
+                        + "command, chat, console, use_block, click_slot, close_menu, wait_for, "
+                        + "assert_block, assert_player, assert_event, assert_inventory. There is "
+                        + "no sleep step — use wait_for and name what you are waiting for. To "
+                        + "test a menu GUI: command, then wait_for inventory_open, then "
+                        + "assert_inventory with the slots you expect. On failure the response "
+                        + "says which step failed, why, and what the server was doing at that "
+                        + "moment.",
                 properties -> string(properties, "scenario",
                         "JSON array of steps, e.g. "
                                 + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]")));
 
         // Proxied verbatim: one definition of each tool, living where it is implemented.
+        //
+        // The parameters are not restated here, and the schema says so by accepting any
+        // property rather than declaring one. An earlier version declared a single string
+        // called "arguments", which was worse than saying nothing: a caller that believed it
+        // sent {"arguments": "{...}"}, the agent saw no parameters at all, and the failure came
+        // back as "state_query needs 'kind'" — blaming the caller for following the schema.
+        //
+        // What the parameters actually are comes from the agent itself, in session_start's
+        // response. That keeps one definition of each tool, in the module that implements it.
         for (String name : PROXIED) {
-            tools.add(tool(name,
-                    "Forwarded to the agent on the connected server. Call session_start first.",
-                    properties -> string(properties, "arguments",
-                            "Passed through unchanged; see the agent's own schema.")));
+            tools.add(passthroughTool(name,
+                    "Forwarded to the agent on the connected server. Call session_start first — "
+                            + "its response lists this tool's parameters, as the agent defines "
+                            + "them. Pass them as top-level properties, not wrapped."));
         }
         return tools;
     }
@@ -89,6 +127,7 @@ final class SessionTools {
             case "session_start" -> sessionStart(args);
             case "session_reset" -> sessionReset();
             case "bot_spawn" -> botSpawn(args);
+            case "bot_inspect" -> botInspect(args);
             case "bot_run_scenario" -> runScenario(args);
             default -> {
                 if (PROXIED.contains(name)) {
@@ -111,12 +150,9 @@ final class SessionTools {
         }
 
         String runnerJar = args.path("runnerJar").asText("");
-        if (runnerJar.isBlank()) {
-            throw new IllegalArgumentException(
-                    "session_start needs 'runnerJar' — the bot runner built for this server's "
-                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
-                            + "bots run in a child process.");
-        }
+        java.nio.file.Path runner = runnerJar.isBlank()
+                ? runnerBesideThisJar()
+                : java.nio.file.Path.of(runnerJar);
 
         try {
             session = new Session(
@@ -125,7 +161,8 @@ final class SessionTools {
                     args.path("mcpPort").asInt(25585),
                     token,
                     args.path("tls").asBoolean(false),
-                    java.nio.file.Path.of(runnerJar));
+                    args.path("tlsFingerprint").asText(null),
+                    runner);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
@@ -137,6 +174,12 @@ final class SessionTools {
         ObjectNode result = MAPPER.createObjectNode();
         result.put("connected", session.describe());
         result.set("server", info);
+
+        // The proxied tools' real parameters, straight from the agent that implements them.
+        // They cannot be in this server's own tool list: that list is published at startup,
+        // before any agent is connected, and which tools exist depends on the agent — a
+        // read-only one does not expose command_exec at all.
+        result.set("agentTools", session.agent().listTools());
         return result;
     }
 
@@ -154,7 +197,8 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
         try {
-            BotRunner.BotHandle bot = require().bots().spawn(name);
+            BotRunner.BotHandle bot = require().bots().spawn(
+                    name, args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null);
 
             ObjectNode result = MAPPER.createObjectNode();
             result.put("name", name);
@@ -166,6 +210,43 @@ final class SessionTools {
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    private JsonNode botInspect(JsonNode args) {
+        String name = args.path("name").asText("");
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("bot_inspect needs 'name'.");
+        }
+        try {
+            BotRunner.ClientView view = new BotRunner.BotHandle(
+                    require().bots(), name, 0, 0, 0).inspect();
+
+            ObjectNode result = MAPPER.createObjectNode();
+            if (view.menu() == null) {
+                result.putNull("menu");
+            } else {
+                ObjectNode menu = result.putObject("menu");
+                menu.put("containerId", view.menu().containerId());
+                menu.put("title", view.menu().title());
+            }
+
+            ArrayNode items = result.putArray("items");
+            for (BotRunner.MenuItem item : view.items()) {
+                ObjectNode entry = items.addObject();
+                entry.put("slot", item.slot());
+                entry.put("itemId", item.itemId());
+                entry.put("amount", item.amount());
+                entry.put("name", item.name());
+                entry.put("customModelData", item.customModelData());
+                entry.put("lore", item.lore());
+            }
+
+            ArrayNode messages = result.putArray("messages");
+            view.messages().forEach(messages::add);
+            return result;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);
         }
     }
 
@@ -200,6 +281,55 @@ final class SessionTools {
         return response;
     }
 
+    /**
+     * Finds the bot runner next to this server's own jar.
+     *
+     * <p>{@code gradlew dist} puts the three jars in one directory, so the caller knowing where
+     * this one is means they already know where the runner is. Asking them to type an absolute
+     * path to a file we can see from here was friction for nothing.
+     *
+     * <p>Refuses to guess when there is more than one. Runners are named for the protocol they
+     * speak, and picking the wrong one produces "Outdated client!" from the server — a failure
+     * far enough from the cause to be worth avoiding.
+     */
+    private static java.nio.file.Path runnerBesideThisJar() {
+        java.nio.file.Path here;
+        try {
+            here = java.nio.file.Path.of(SessionTools.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI()).getParent();
+        } catch (RuntimeException | java.net.URISyntaxException e) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': this server could not work out where its "
+                            + "own jar is, so it cannot find the runner beside it.");
+        }
+
+        List<java.nio.file.Path> found = new java.util.ArrayList<>();
+        try (var entries = java.nio.file.Files.list(here)) {
+            entries.filter(path -> {
+                String name = path.getFileName().toString();
+                return name.startsWith("bot-runner-") && name.endsWith(".jar");
+            }).forEach(found::add);
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': could not look in " + here + " (" + e + ")");
+        }
+
+        if (found.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar' — the bot runner built for this server's "
+                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
+                            + "bots run in a child process. No bot-runner-*.jar was found in "
+                            + here + ", so pass its path.");
+        }
+        if (found.size() > 1) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': " + here + " holds more than one runner "
+                            + found.stream().map(p -> p.getFileName().toString()).toList()
+                            + ". Name the one that speaks this server's protocol.");
+        }
+        return found.get(0);
+    }
+
     private Session require() {
         if (session == null) {
             throw new IllegalStateException("No session. Call session_start first.");
@@ -225,6 +355,24 @@ final class SessionTools {
         schema.put("type", "object");
         properties.accept(schema.putObject("properties"));
         schema.set("required", MAPPER.createArrayNode());
+        return tool;
+    }
+
+    /**
+     * A tool whose arguments belong to something else.
+     *
+     * <p>Declares an object with no named properties and {@code additionalProperties} allowed,
+     * which is the accurate description of a passthrough: whatever arrives is forwarded as-is.
+     */
+    private static ObjectNode passthroughTool(String name, String description) {
+        ObjectNode tool = MAPPER.createObjectNode();
+        tool.put("name", name);
+        tool.put("description", description);
+
+        ObjectNode schema = tool.putObject("inputSchema");
+        schema.put("type", "object");
+        schema.putObject("properties");
+        schema.put("additionalProperties", true);
         return tool;
     }
 

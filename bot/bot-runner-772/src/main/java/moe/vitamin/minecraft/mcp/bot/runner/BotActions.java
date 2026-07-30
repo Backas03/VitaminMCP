@@ -4,12 +4,22 @@ import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
 import moe.vitamin.minecraft.mcp.bot.core.ForwardingHandshake;
 
 import java.time.Duration;
+import java.util.Locale;
+import java.util.Map;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
+import org.geysermc.mcprotocollib.protocol.data.game.inventory.ClickItemAction;
+import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerAction;
+import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerActionType;
+import org.geysermc.mcprotocollib.protocol.data.game.inventory.ShiftClickItemAction;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundChatCommandPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundContainerClickPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundContainerClosePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
 
 /**
  * What a bot can do once it is in the world.
@@ -128,6 +138,113 @@ public final class BotActions {
      */
     public BotActions chat(String message) {
         return command("say " + message);
+    }
+
+    /**
+     * Right-clicks a block — which is how a container is opened.
+     *
+     * <p>The counterpart to {@link #breakBlock}, and the action that gets a menu on screen at
+     * all: a chest, a villager, or a plugin's block listener all react to this, not to digging.
+     *
+     * <p>The cursor position on the face is sent as the middle of it. A real client sends where
+     * the crosshair actually landed and a few plugins read it — placing a block on the upper or
+     * lower half of a slab, for instance — but for opening things it is not consulted.
+     *
+     * @param face which side is being clicked, e.g. {@code UP}. Matters for placement, not for
+     *             opening a container
+     */
+    public BotActions useBlock(int x, int y, int z, Direction face) {
+        require();
+        bot.session().send(new ServerboundUseItemOnPacket(
+                Vector3i.from(x, y, z),
+                face == null ? Direction.UP : face,
+                Hand.MAIN_HAND,
+                0.5f, 0.5f, 0.5f,
+                false,          // not inside a block
+                false,          // world border not involved
+                ++sequence));
+        return this;
+    }
+
+    /**
+     * Clicks a slot in the menu the server has open for this bot.
+     *
+     * <p>Does not wait, and does not check what happened — same reasoning as {@link
+     * #breakBlock}. Whether the click did anything is a question about the plugin, answered by
+     * waiting on what it changed.
+     *
+     * <p>The click carries no predicted slot changes and an empty cursor. A real client sends
+     * what it thinks the result will be so the server can skip a correction when they agree;
+     * predicting nothing simply means the server always corrects us, which costs one container
+     * re-send and is always right. It is also the honest thing for a bot with no inventory
+     * model: a wrong prediction would desynchronise silently, and menu plugins cancel the click
+     * anyway, so there is usually nothing to predict.
+     *
+     * @param slot  slot index within the open view. Slots past the menu's own size address the
+     *              player's inventory, exactly as they do for a real client
+     * @param click one of {@code left}, {@code right}, {@code shift_left}, {@code shift_right}
+     * @throws IllegalStateException if no menu is open
+     */
+    public BotActions clickSlot(int slot, String click) {
+        require();
+        int containerId = bot.containerId();
+        if (containerId == BotSession.NO_CONTAINER) {
+            throw new IllegalStateException(
+                    "Bot " + bot.identity().name() + " has no menu open, so slot " + slot
+                            + " cannot be clicked. Wait for inventory_open first — a menu does "
+                            + "not open synchronously with the command that causes it.");
+        }
+
+        ContainerActionType type;
+        ContainerAction action;
+        switch (click == null ? "left" : click.toLowerCase(Locale.ROOT)) {
+            case "left" -> {
+                type = ContainerActionType.CLICK_ITEM;
+                action = ClickItemAction.LEFT_CLICK;
+            }
+            case "right" -> {
+                type = ContainerActionType.CLICK_ITEM;
+                action = ClickItemAction.RIGHT_CLICK;
+            }
+            case "shift_left" -> {
+                type = ContainerActionType.SHIFT_CLICK_ITEM;
+                action = ShiftClickItemAction.LEFT_CLICK;
+            }
+            case "shift_right" -> {
+                type = ContainerActionType.SHIFT_CLICK_ITEM;
+                action = ShiftClickItemAction.RIGHT_CLICK;
+            }
+            default -> throw new IllegalArgumentException(
+                    "Unknown click '" + click + "'. Use left, right, shift_left or shift_right.");
+        }
+
+        bot.session().send(new ServerboundContainerClickPacket(
+                containerId,
+                // The server's own counter, echoed back. A stale one is not rejected but makes
+                // the server resend the container, which is a difference a test can trip over.
+                bot.containerStateId(),
+                slot,
+                type,
+                action,
+                null,
+                Map.of()));
+        return this;
+    }
+
+    /**
+     * Closes the open menu.
+     *
+     * <p>Worth doing between steps rather than leaving it to the next action: a plugin that
+     * tracks who has its menu open will keep believing this bot does, and the next scenario
+     * inherits that.
+     */
+    public BotActions closeMenu() {
+        require();
+        int containerId = bot.containerId();
+        if (containerId != BotSession.NO_CONTAINER) {
+            bot.session().send(new ServerboundContainerClosePacket(containerId));
+        }
+        return this;
     }
 
     /** How many block interactions have been sent, for assertions about sequencing. */

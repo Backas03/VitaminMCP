@@ -377,8 +377,23 @@ class AgentToolsTest {
         public moe.vitamin.minecraft.mcp.contract.PlayerState playerState(
                 String name, Collection<String> permissionNodes) {
             return new moe.vitamin.minecraft.mcp.contract.PlayerState(
-                    name, "00000000-0000-0000-0000-000000000000", true, "CREATIVE", false,
-                    "world", 1, 2, 3, List.of());
+                    name, "00000000-0000-0000-0000-000000000000", true, "127.0.0.1", "CREATIVE",
+                    false, "world", 1, 2, 3, List.of());
+        }
+
+        /** A one-button menu, enough to check the tool's shape without a server. */
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.InventorySnapshot inventory(
+                String name, boolean openMenu, int limit) {
+            if (!openMenu) {
+                return new moe.vitamin.minecraft.mcp.contract.InventorySnapshot(
+                        "PLAYER", null, 36, 0, List.of(), false);
+            }
+            return new moe.vitamin.minecraft.mcp.contract.InventorySnapshot(
+                    "CHEST", "§aShop", 27, 1,
+                    List.of(new moe.vitamin.minecraft.mcp.contract.InventorySnapshot.Item(
+                            11, "EMERALD", 1, "§aBuy", List.of("§7Click me"), false, 7, null)),
+                    false);
         }
 
 

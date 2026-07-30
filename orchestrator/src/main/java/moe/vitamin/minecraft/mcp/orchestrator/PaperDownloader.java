@@ -50,8 +50,38 @@ public final class PaperDownloader {
 
     private final Path cacheDirectory;
 
+    /**
+     * Caches into a directory of this class's choosing, shared across runs.
+     *
+     * <p>Deliberately outside whatever working directory a caller is using. A cached jar is
+     * worth keeping between runs — that is the entire point of caching a 50MB download — and a
+     * per-run directory throws it away every time.
+     *
+     * <p>It also has to outlive the servers started from it. A JVM started with {@code -jar}
+     * keeps the file mapped, and Windows does not release that lock the instant the process
+     * dies; a caller that deletes its working directory immediately afterwards hits a file it
+     * cannot remove. Keeping the cache elsewhere means nobody is racing the operating system
+     * over it.
+     */
+    public PaperDownloader() {
+        this(defaultCacheDirectory());
+    }
+
     public PaperDownloader(Path cacheDirectory) {
         this.cacheDirectory = cacheDirectory;
+    }
+
+    /**
+     * Where jars are kept when the caller does not say.
+     *
+     * <p>Overridable, because a build agent may have no writable home directory and failing
+     * there for that reason would be a poor trade for a default.
+     */
+    public static Path defaultCacheDirectory() {
+        String configured = System.getProperty("vitaminmcp.paperCache");
+        return configured != null && !configured.isBlank()
+                ? Path.of(configured)
+                : Path.of(System.getProperty("user.home"), ".vitaminmcp", "paper");
     }
 
     /**

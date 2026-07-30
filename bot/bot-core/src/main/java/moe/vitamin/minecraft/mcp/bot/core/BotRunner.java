@@ -72,7 +72,21 @@ public final class BotRunner implements AutoCloseable {
 
     /** Connects a bot and waits until it is standing in the world. */
     public BotHandle spawn(String name) throws IOException {
-        String[] reply = send(RunnerProtocol.SPAWN, name);
+        return spawn(name, null);
+    }
+
+    /**
+     * Connects a bot that claims to be connecting from a particular address.
+     *
+     * <p>For testing what is keyed on the address rather than on the player: an IP ban, a
+     * per-IP connection limit, a geo lookup. Anything else should use {@link #spawn(String)}
+     * and let the bot report the address it really has — a fabricated one is a difference from
+     * reality that every later step inherits.
+     *
+     * @param clientIp the address to claim, or {@code null} for the real one
+     */
+    public BotHandle spawn(String name, String clientIp) throws IOException {
+        String[] reply = send(RunnerProtocol.SPAWN, name, clientIp == null ? "" : clientIp);
         live.add(name);
         return new BotHandle(this, name,
                 Double.parseDouble(reply[2]), Double.parseDouble(reply[3]),
@@ -200,6 +214,67 @@ public final class BotRunner implements AutoCloseable {
             runner.send(RunnerProtocol.CHAT, name, message);
         }
 
+        /**
+         * Right-clicks a block. This is how a container or a plugin menu gets opened.
+         *
+         * @param face side being clicked, or {@code null} for the top
+         */
+        public void useBlock(int x, int y, int z, String face) throws IOException {
+            runner.send(RunnerProtocol.USE, name, String.valueOf(x), String.valueOf(y),
+                    String.valueOf(z), face == null ? "" : face);
+        }
+
+        /**
+         * Clicks a slot in the menu the bot has open.
+         *
+         * @param click {@code left}, {@code right}, {@code shift_left} or {@code shift_right}
+         */
+        public void clickSlot(int slot, String click) throws IOException {
+            runner.send(RunnerProtocol.CLICK, name, String.valueOf(slot),
+                    click == null || click.isBlank() ? "left" : click);
+        }
+
+        public void closeMenu() throws IOException {
+            runner.send(RunnerProtocol.CLOSE_MENU, name);
+        }
+
+        /**
+         * The menu the client has been told about, or {@code null} if none.
+         *
+         * <p>The client's view, not the server's — {@code state_query kind='inventory'} is the
+         * server's. Comparing them is how "the plugin opened a menu but it never reached the
+         * player" becomes visible instead of looking like an empty menu.
+         */
+        public OpenMenu menu() throws IOException {
+            String[] reply = runner.send(RunnerProtocol.MENU, name);
+            int containerId = Integer.parseInt(reply[2]);
+            return containerId < 0 ? null : new OpenMenu(containerId, reply[3]);
+        }
+
+        /**
+         * What the client was told, which the server cannot always be asked.
+         *
+         * <p>Two things live here for the same reason: neither survives on the server. A menu
+         * drawn with packets leaves the Bukkit inventory empty, and a plugin's refusal is a
+         * message to the player and nothing else.
+         */
+        public ClientView inspect() throws IOException {
+            String[] reply = runner.send(RunnerProtocol.INSPECT, name);
+            int containerId = Integer.parseInt(reply[2]);
+
+            List<MenuItem> items = new ArrayList<>();
+            for (String record : RunnerProtocol.records(reply[4])) {
+                String[] parts = RunnerProtocol.fields(record);
+                items.add(new MenuItem(
+                        Integer.parseInt(parts[0]), Integer.parseInt(parts[1]),
+                        Integer.parseInt(parts[2]), parts[3], parts[4], parts[5]));
+            }
+            return new ClientView(
+                    containerId < 0 ? null : new OpenMenu(containerId, reply[3]),
+                    List.copyOf(items),
+                    List.of(RunnerProtocol.records(reply[5])));
+        }
+
         /** The bot's position now, which may differ from where it spawned. */
         public double[] position() throws IOException {
             String[] reply = runner.send(RunnerProtocol.POSITION, name);
@@ -209,4 +284,28 @@ public final class BotRunner implements AutoCloseable {
             };
         }
     }
+
+    /** A menu the server has opened on the client, as the client sees it. */
+    public record OpenMenu(int containerId, String title) {}
+
+    /**
+     * Everything the client knows that the server will not report.
+     *
+     * @param menu     the open menu, or {@code null} if none
+     * @param items    its occupied slots as they arrived on the wire
+     * @param messages what the server has said to this bot, oldest first
+     */
+    public record ClientView(OpenMenu menu, List<MenuItem> items, List<String> messages) {}
+
+    /**
+     * One slot of a menu, as the client received it.
+     *
+     * @param itemId          registry index, not a name — the protocol carries no names and
+     *                        MCProtocolLib ships no table to recover them. Use the agent's
+     *                        {@code state_query} when the material matters and the server
+     *                        actually holds the menu
+     * @param customModelData the model data selector, string keys preferred over the first float
+     */
+    public record MenuItem(
+            int slot, int itemId, int amount, String name, String customModelData, String lore) {}
 }

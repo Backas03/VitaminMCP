@@ -12,6 +12,7 @@ import moe.vitamin.minecraft.mcp.contract.Cursor;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.EventsSummary;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
+import moe.vitamin.minecraft.mcp.contract.InventorySnapshot;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
 import moe.vitamin.minecraft.mcp.contract.PlayerState;
@@ -248,7 +249,7 @@ public final class CaptureService implements AgentQueries {
                 org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
                 return new PlayerState(
                         name, String.valueOf(offline.getUniqueId()), false,
-                        null, offline.isOp(), null, 0, 0, 0, List.of());
+                        null, null, offline.isOp(), null, 0, 0, 0, List.of());
             }
 
             List<PlayerState.PermissionCheck> checks = new ArrayList<>();
@@ -263,12 +264,159 @@ public final class CaptureService implements AgentQueries {
                     player.getName(),
                     player.getUniqueId().toString(),
                     true,
+                    hostAddress(player.getAddress()),
                     player.getGameMode().name(),
                     player.isOp(),
                     at.getWorld() == null ? null : at.getWorld().getName(),
                     at.getX(), at.getY(), at.getZ(),
                     checks);
         }, Duration.ofSeconds(5), null);
+    }
+
+    /**
+     * The IP out of a socket address, without the port.
+     *
+     * <p>The port is the client's ephemeral one and changes every connection, so including it
+     * would make the field useless for the comparison anyone actually wants to make — against a
+     * ban list, a whitelist, or the address a proxy claimed to be forwarding.
+     *
+     * @return the address, or {@code null} if the player is already on the way out
+     */
+    private static String hostAddress(java.net.InetSocketAddress address) {
+        if (address == null) {
+            // Bukkit returns null once the connection is closing, which a query can race.
+            return null;
+        }
+        java.net.InetAddress ip = address.getAddress();
+        return ip == null ? address.getHostString() : ip.getHostAddress();
+    }
+
+    /**
+     * Reads a player's inventory, or the menu they have open.
+     *
+     * <p><b>On {@code InventoryView} and docs/design.md §5.5.</b> That section warns against
+     * calling this type directly: it became an interface in 1.21, so a call compiled against an
+     * older API is baked in as {@code invokevirtual} and dies with
+     * {@code IncompatibleClassChangeError} on a newer server. The hazard is compiling low and
+     * running high. Here the floor <em>is</em> 1.21.8 — past the change — so the call compiles
+     * to {@code invokeinterface}, which is correct on every server this agent can be installed
+     * on. {@code EventDetails} still avoids direct calls because it touches arbitrary event
+     * types across the whole API surface; this touches one type whose shape the floor pins.
+     *
+     * <p>If the floor is ever lowered below 1.21, this breaks and the compiler will not say so.
+     * That is the same trap {@code SupportedVersions} exists to catch, and §5.4 is the checklist.
+     */
+    @Override
+    public InventorySnapshot inventory(String name, boolean openMenu, int limit) {
+        return onMainThread(() -> {
+            org.bukkit.entity.Player player = Bukkit.getPlayerExact(name);
+            if (player == null) {
+                return null;
+            }
+
+            org.bukkit.inventory.InventoryView view = player.getOpenInventory();
+            // getTopInventory() on a player with nothing open is their 2x2 crafting grid, and
+            // the view type says CRAFTING. Reporting that honestly beats pretending a menu is
+            // open, so the caller can tell "wrong contents" from "nothing opened at all".
+            org.bukkit.inventory.Inventory inventory =
+                    openMenu ? view.getTopInventory() : player.getInventory();
+
+            List<InventorySnapshot.Item> items = new ArrayList<>();
+            int occupied = 0;
+            boolean truncated = false;
+
+            for (int slot = 0; slot < inventory.getSize(); slot++) {
+                org.bukkit.inventory.ItemStack stack = inventory.getItem(slot);
+                if (stack == null || stack.getType() == org.bukkit.Material.AIR) {
+                    continue;
+                }
+                occupied++;
+                if (items.size() >= limit) {
+                    // Counting continues past the limit so occupiedSlots stays truthful about
+                    // the whole inventory rather than about the part that fit.
+                    truncated = true;
+                    continue;
+                }
+                items.add(describe(slot, stack));
+            }
+
+            return new InventorySnapshot(
+                    view.getType().name(),
+                    // title(), not the deprecated getTitle(): the component form goes through
+                    // the same encoding as the item names, so a caller compares titles and
+                    // labels the same way instead of one being coded and the other not.
+                    openMenu ? legacy(view.title()) : null,
+                    inventory.getSize(),
+                    occupied,
+                    items,
+                    truncated);
+        }, Duration.ofSeconds(5), null);
+    }
+
+    /** Flattens one stack into the fields a menu assertion is written against. */
+    private static InventorySnapshot.Item describe(int slot, org.bukkit.inventory.ItemStack stack) {
+        String displayName = null;
+        List<String> lore = List.of();
+        boolean enchanted = !stack.getEnchantments().isEmpty();
+        Integer customModelData = null;
+        InventorySnapshot.ModelData modelData = null;
+
+        if (stack.hasItemMeta()) {
+            org.bukkit.inventory.meta.ItemMeta meta = stack.getItemMeta();
+            if (meta != null) {
+                if (meta.hasDisplayName()) {
+                    displayName = legacy(meta.displayName());
+                }
+                if (meta.hasLore() && meta.lore() != null) {
+                    lore = meta.lore().stream().map(CaptureService::legacy).toList();
+                }
+                // An enchanted-looking button need not carry a real enchantment; menus often
+                // fake the glow. Either way the player sees a glint, so either counts.
+                enchanted = enchanted || meta.hasEnchants();
+                if (meta.hasCustomModelData()) {
+                    customModelData = meta.getCustomModelData();
+                }
+                if (meta.hasCustomModelDataComponent()) {
+                    modelData = describe(meta.getCustomModelDataComponent());
+                }
+            }
+        }
+        return new InventorySnapshot.Item(slot, stack.getType().name(), stack.getAmount(),
+                displayName, lore, enchanted, customModelData, modelData);
+    }
+
+    /**
+     * Flattens the custom model data component.
+     *
+     * @return the component, or {@code null} if it carries nothing — an empty one says the same
+     *         as no component at all, and reporting it would put four empty lists on every item
+     */
+    private static InventorySnapshot.ModelData describe(
+            org.bukkit.inventory.meta.components.CustomModelDataComponent component) {
+        InventorySnapshot.ModelData data = new InventorySnapshot.ModelData(
+                component.getFloats(),
+                component.getFlags(),
+                component.getStrings(),
+                component.getColors().stream().map(CaptureService::hex).toList());
+        return data.carriesNothing() ? null : data;
+    }
+
+    /** A colour as {@code #RRGGBB}, which is how a pack author writes it. */
+    private static String hex(org.bukkit.Color color) {
+        return String.format("#%06X", color.asRGB());
+    }
+
+    /**
+     * A component as the {@code §}-coded string a plugin author would have written.
+     *
+     * <p>Colour is part of whether a menu rendered correctly, so it is kept rather than
+     * stripped. Legacy rather than JSON because a test asserting on {@code "§aAccept"} is
+     * readable and one asserting on a serialised component tree is not.
+     */
+    private static String legacy(net.kyori.adventure.text.Component component) {
+        return component == null ? null
+                : net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+                        .legacySection().serialize(component);
     }
 
     @Override

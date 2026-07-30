@@ -10,7 +10,6 @@ import java.time.Duration;
 import moe.vitamin.minecraft.mcp.orchestrator.VersionMatrix;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
-import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The Stage 5 DoD: one scenario, every version in versions.yaml.
@@ -46,6 +45,44 @@ class MatrixRunnerLiveTest {
             ]
             """;
 
+    /**
+     * A working directory this test owns, cleaned up best-effort.
+     *
+     * <p>Not {@code @TempDir}. That deletes the directory the moment the test method returns and
+     * fails the test if anything is still locked — and this directory has just hosted several
+     * server JVMs, which on Windows keep files mapped for a short while after they exit. The
+     * result was a test that reported failure while every version it ran had passed: the
+     * scenario results were green and the error was about deleting a jar.
+     *
+     * <p>So cleanup is a courtesy here, not an assertion. What this test is for is whether the
+     * matrix runs, and a leftover directory must not be able to say otherwise.
+     */
+    private Path work;
+
+    @org.junit.jupiter.api.BeforeEach
+    void createWorkDirectory() throws Exception {
+        work = Files.createTempDirectory("vitaminmcp-matrix-");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void removeWorkDirectory() {
+        if (work == null) {
+            return;
+        }
+        try (var paths = Files.walk(work)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (java.io.IOException stillInUse) {
+                    // The OS has not let go yet. Nothing here depends on it being gone.
+                    System.err.println("left behind (still locked): " + path);
+                }
+            });
+        } catch (java.io.IOException e) {
+            System.err.println("could not walk " + work + ": " + e.getMessage());
+        }
+    }
+
     private static MatrixRunner runner(Path work) {
         Path agentJar = Path.of(System.getProperty("vitaminmcp.agentJar", ""));
         assertTrue(Files.exists(agentJar),
@@ -58,7 +95,7 @@ class MatrixRunnerLiveTest {
     }
 
     @Test
-    void oneScenarioRunsOnEveryVersion(@TempDir Path work) throws Exception {
+    void oneScenarioRunsOnEveryVersion() throws Exception {
         VersionMatrix matrix = VersionMatrix.load(Path.of("..", "versions.yaml"));
 
         MatrixResult result =
@@ -72,7 +109,7 @@ class MatrixRunnerLiveTest {
     }
 
     @Test
-    void aVersionThatCannotStartIsReportedRatherThanAborting(@TempDir Path work) throws Exception {
+    void aVersionThatCannotStartIsReportedRatherThanAborting() throws Exception {
         // A matrix exists to report on all versions. Aborting at the first problem hides
         // whether the rest would have passed, which is the most useful thing it could say.
         VersionMatrix matrix = VersionMatrix.parse("""

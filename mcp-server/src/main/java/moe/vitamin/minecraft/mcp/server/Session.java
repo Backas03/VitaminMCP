@@ -18,12 +18,12 @@ final class Session {
     private final AgentClient agent;
     private final BotRunner bots;
 
-    Session(String host, int port, int mcpPort, String token, boolean tls,
+    Session(String host, int port, int mcpPort, String token, boolean tls, String tlsFingerprint,
             java.nio.file.Path runnerJar)
             throws java.io.IOException {
         this.host = host;
         this.port = port;
-        this.agent = new AgentClient(host, mcpPort, token, tls);
+        this.agent = new AgentClient(host, mcpPort, token, tls, tlsFingerprint);
         // Bots live in a child process built for the server's protocol version, so this JVM
         // never links a protocol library (docs/design.md §4.2).
         this.bots = BotRunner.launch(

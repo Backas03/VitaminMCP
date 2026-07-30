@@ -2,6 +2,7 @@ package moe.vitamin.minecraft.mcp.agent.core;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -184,13 +185,67 @@ public final class WaitForService {
                         condition.decimal("z", 0))) <= distance * distance;
             }
 
+            case WaitCondition.INVENTORY_OPEN -> {
+                Player player = Bukkit.getPlayerExact(required(condition, "name"));
+                if (player == null) {
+                    yield false;
+                }
+                org.bukkit.inventory.InventoryView view = player.getOpenInventory();
+                // The list of "this is just their own screen" view names lives in contract, so
+                // this and the snapshot cannot disagree about whether a menu is open.
+                if (!moe.vitamin.minecraft.mcp.contract.InventorySnapshot
+                        .isMenu(view.getType().name())) {
+                    yield false;
+                }
+                String wanted = condition.string("title", null);
+                yield wanted == null || plainTitle(view).contains(wanted);
+            }
+
+            case WaitCondition.INVENTORY_CONTAINS -> {
+                Player player = Bukkit.getPlayerExact(required(condition, "name"));
+                if (player == null) {
+                    yield false;
+                }
+                org.bukkit.inventory.Inventory inventory =
+                        "player".equalsIgnoreCase(condition.string("which", "menu"))
+                                ? player.getInventory()
+                                : player.getOpenInventory().getTopInventory();
+
+                String material = required(condition, "material").toUpperCase(Locale.ROOT);
+                // A named slot checks that one; without it, anywhere in the inventory counts.
+                int slot = condition.integer("slot", -1);
+                if (slot >= 0) {
+                    yield slot < inventory.getSize() && matches(inventory.getItem(slot), material);
+                }
+                for (int index = 0; index < inventory.getSize(); index++) {
+                    if (matches(inventory.getItem(index), material)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+
             default -> throw new IllegalArgumentException(
                     "Unknown wait condition '" + condition.type() + "'. Known types: "
                             + List.of(WaitCondition.TICKS, WaitCondition.BLOCK_IS,
                             WaitCondition.BLOCK_IS_NOT, WaitCondition.EVENT,
                             WaitCondition.PLAYER_ONLINE, WaitCondition.PLAYER_OFFLINE,
-                            WaitCondition.PLAYER_NEAR, WaitCondition.PLAYER_STATE));
+                            WaitCondition.PLAYER_NEAR, WaitCondition.PLAYER_STATE,
+                            WaitCondition.INVENTORY_OPEN, WaitCondition.INVENTORY_CONTAINS));
         };
+    }
+
+    private static boolean matches(org.bukkit.inventory.ItemStack stack, String material) {
+        return stack != null && stack.getType().name().equals(material);
+    }
+
+    /**
+     * A view's title as plain text, so a caller can match on words without knowing how the
+     * plugin coloured them.
+     */
+    private static String plainTitle(org.bukkit.inventory.InventoryView view) {
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
+                .serialize(view.title());
     }
 
     private String material(WaitCondition condition) {

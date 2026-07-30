@@ -50,6 +50,26 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
      */
     public static final String PLAYER_STATE = "player_state";
 
+    /**
+     * A player has a plugin menu open, optionally one with a given title.
+     *
+     * <p>The precondition for reading a menu at all. Opening one is not synchronous with the
+     * command that caused it — the plugin may hop a tick, or wait on a database — so a read
+     * fired straight after the command sees the player's own inventory screen and reports an
+     * empty menu, which looks exactly like a menu that failed to populate.
+     */
+    public static final String INVENTORY_OPEN = "inventory_open";
+
+    /**
+     * A menu holds a given item, optionally at a given slot.
+     *
+     * <p>Separate from {@link #INVENTORY_OPEN} because the two failure modes are different and
+     * a test wants to tell them apart. A plugin that opens an empty menu and fills it a tick
+     * later passes "is it open" while the buttons are still missing; waiting for the button
+     * itself is what makes the subsequent assertions meaningful rather than lucky.
+     */
+    public static final String INVENTORY_CONTAINS = "inventory_contains";
+
     public WaitCondition {
         Objects.requireNonNull(type, "type");
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);
@@ -60,14 +80,46 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
         return value == null ? fallback : String.valueOf(value);
     }
 
+    /**
+     * A numeric parameter.
+     *
+     * <p>Accepts {@code "20"} as readily as {@code 20}. These parameters cross a JSON boundary
+     * and the tool that forwards them cannot say what type each should be — the agent owns that
+     * knowledge, and it is not published where the caller's client can act on it. So a number
+     * sometimes arrives quoted.
+     *
+     * <p>It used to fall back to the default in that case, silently. {@code wait_for} with
+     * {@code count: 20} therefore waited one tick and reported success: a wait that does not
+     * wait, which is worse than no wait because it looks like protection. Refusing an
+     * unparseable value rather than defaulting is the other half of that lesson.
+     *
+     * @throws IllegalArgumentException if the key is present but is not a number
+     */
     public int integer(String key, int fallback) {
-        Object value = parameters.get(key);
-        return value instanceof Number number ? number.intValue() : fallback;
+        Number number = number(key);
+        return number == null ? fallback : number.intValue();
     }
 
     public double decimal(String key, double fallback) {
+        Number number = number(key);
+        return number == null ? fallback : number.doubleValue();
+    }
+
+    /** @return the value as a number, or {@code null} if the key was not supplied */
+    private Number number(String key) {
         Object value = parameters.get(key);
-        return value instanceof Number number ? number.doubleValue() : fallback;
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number;
+        }
+        try {
+            return Double.valueOf(String.valueOf(value).trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "'" + key + "' must be a number but was '" + value + "'");
+        }
     }
 
     /** Whether a key was supplied at all, so absent and false stay distinguishable. */

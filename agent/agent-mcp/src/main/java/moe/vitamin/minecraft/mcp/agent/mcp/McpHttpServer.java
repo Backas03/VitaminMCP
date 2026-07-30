@@ -121,6 +121,87 @@ public final class McpHttpServer {
                         + "HTTP and trusting whatever is in front of it to terminate TLS. If "
                         + "nothing is, the token is crossing the network in clear text.");
             }
+            logConnectionDetails();
+        }
+    }
+
+    /**
+     * Prints what a client needs, in the shape it needs it.
+     *
+     * <p>Everything here is already knowable — from config.yml, from the keystore, from the
+     * machine's own address — but only by collecting it from four places and getting the format
+     * right. Connecting to a remote agent was mostly that clerical work, so the agent does it.
+     *
+     * <p>The fingerprint is the part worth having. A self-signed certificate is otherwise
+     * unusable without exporting it, copying it over and building a truststore; pinned by
+     * fingerprint it needs nothing installed on the client at all.
+     */
+    private void logConnectionDetails() {
+        StringBuilder block = new StringBuilder("Connect with session_start:")
+                .append(System.lineSeparator())
+                .append("  \"host\": \"").append(reachableHost()).append("\",")
+                .append(" \"mcpPort\": ").append(settings.port()).append(",")
+                .append(" \"tls\": \"").append(settings.tls().enabled()).append("\",")
+                .append(System.lineSeparator())
+                .append("  \"token\": \"").append(settings.authToken()).append("\"");
+
+        certificateFingerprint().ifPresent(fingerprint -> block
+                .append(",").append(System.lineSeparator())
+                .append("  \"tlsFingerprint\": \"sha256:").append(fingerprint).append("\""));
+
+        logger.info(block.toString());
+    }
+
+    /**
+     * A host a client could actually dial.
+     *
+     * <p>{@code 0.0.0.0} means "every interface", which is not an address anything can connect
+     * to — printing it verbatim would hand the reader something that cannot work.
+     */
+    private String reachableHost() {
+        if (!"0.0.0.0".equals(settings.bindAddress()) && !"::".equals(settings.bindAddress())) {
+            return settings.bindAddress();
+        }
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (IOException e) {
+            return "<this server's address>";
+        }
+    }
+
+    /** SHA-256 of the certificate being served, as lowercase hex, if TLS is on. */
+    private java.util.Optional<String> certificateFingerprint() {
+        if (!settings.tls().enabled()) {
+            return java.util.Optional.empty();
+        }
+        try {
+            char[] password = settings.tls().keystorePassword().toCharArray();
+            java.security.KeyStore keystore = java.security.KeyStore.getInstance("PKCS12");
+            try (var in = java.nio.file.Files.newInputStream(
+                    java.nio.file.Path.of(settings.tls().keystore()))) {
+                keystore.load(in, password);
+            }
+            java.util.Enumeration<String> aliases = keystore.aliases();
+            while (aliases.hasMoreElements()) {
+                java.security.cert.Certificate certificate =
+                        keystore.getCertificate(aliases.nextElement());
+                if (certificate != null) {
+                    byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                            .digest(certificate.getEncoded());
+                    StringBuilder hex = new StringBuilder(digest.length * 2);
+                    for (byte b : digest) {
+                        hex.append(Character.forDigit((b >> 4) & 0xF, 16))
+                                .append(Character.forDigit(b & 0xF, 16));
+                    }
+                    return java.util.Optional.of(hex.toString());
+                }
+            }
+            return java.util.Optional.empty();
+        } catch (java.security.GeneralSecurityException | IOException e) {
+            // Not fatal: the server is already listening, and a missing fingerprint costs the
+            // reader convenience rather than correctness.
+            logger.warning("Could not read the certificate to print its fingerprint: " + e);
+            return java.util.Optional.empty();
         }
     }
 

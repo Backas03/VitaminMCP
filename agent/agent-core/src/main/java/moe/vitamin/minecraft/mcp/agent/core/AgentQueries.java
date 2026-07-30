@@ -8,6 +8,7 @@ import moe.vitamin.minecraft.mcp.contract.CommandResult;
 import moe.vitamin.minecraft.mcp.contract.EventRecord;
 import moe.vitamin.minecraft.mcp.contract.EventsSummary;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
+import moe.vitamin.minecraft.mcp.contract.InventorySnapshot;
 import moe.vitamin.minecraft.mcp.contract.LogEntry;
 import moe.vitamin.minecraft.mcp.contract.LogLevel;
 import moe.vitamin.minecraft.mcp.contract.PlayerState;
@@ -62,6 +63,21 @@ public interface AgentQueries {
      * it acted on a position holding something other than what the test assumed.
      */
     String blockAt(String world, int x, int y, int z);
+
+    /**
+     * What a player has in front of them, or {@code null} if they are not online.
+     *
+     * <p>The only way to check a plugin menu. Its contents live in a virtual inventory attached
+     * to the open view and nowhere else — not in the player's NBT, not in any event payload — so
+     * a test that wants to know whether the menu rendered correctly has to read it here.
+     *
+     * @param name      player to look at
+     * @param openMenu  {@code true} for the menu they have open, {@code false} for their own
+     *                  inventory. Asking for the menu when none is open reports the player's
+     *                  own screen, which {@link InventorySnapshot#menuIsOpen()} distinguishes
+     * @param limit     most slots to list, oldest-first by slot index
+     */
+    InventorySnapshot inventory(String name, boolean openMenu, int limit);
 
     /**
      * Runs a command on the server.

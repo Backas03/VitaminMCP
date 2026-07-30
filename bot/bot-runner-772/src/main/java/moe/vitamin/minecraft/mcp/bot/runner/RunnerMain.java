@@ -80,8 +80,12 @@ public final class RunnerMain {
         return switch (verb) {
             case RunnerProtocol.SPAWN -> {
                 String name = command[1];
+                // Null for the claimed host, so the backend is told the host actually dialled;
+                // hardcoding one made every server believe it had been reached as "localhost".
+                // The client IP is passed through as given — empty means the real one.
+                String clientIp = command.length > 2 ? command[2] : "";
                 BotSession bot = BotSession
-                        .open(host, port, BotIdentity.of(name), "localhost", "127.0.0.1")
+                        .open(host, port, BotIdentity.of(name), null, clientIp)
                         .connect(Duration.ofSeconds(30));
                 bot.awaitGrounded(Duration.ofSeconds(15));
                 bots.put(name, bot);
@@ -120,6 +124,50 @@ public final class RunnerMain {
             case RunnerProtocol.CHAT -> {
                 require(command[1]).actions().chat(command[2]);
                 yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.USE -> {
+                require(command[1]).actions().useBlock(
+                        Integer.parseInt(command[2]),
+                        Integer.parseInt(command[3]),
+                        Integer.parseInt(command[4]),
+                        command.length > 5 && !command[5].isBlank()
+                                ? org.geysermc.mcprotocollib.protocol.data.game.entity.object
+                                        .Direction.valueOf(command[5].toUpperCase(
+                                                java.util.Locale.ROOT))
+                                : null);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.CLICK -> {
+                require(command[1]).actions().clickSlot(
+                        Integer.parseInt(command[2]),
+                        command.length > 3 ? command[3] : "left");
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.CLOSE_MENU -> {
+                require(command[1]).actions().closeMenu();
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
+            }
+
+            case RunnerProtocol.MENU -> {
+                BotSession bot = require(command[1]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb,
+                        String.valueOf(bot.containerId()),
+                        // Tab is the field separator, so a title containing one would shift
+                        // every field after it into the wrong place.
+                        bot.containerTitle() == null
+                                ? "" : bot.containerTitle().replace('\t', ' '));
+            }
+
+            case RunnerProtocol.INSPECT -> {
+                BotSession bot = require(command[1]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb,
+                        String.valueOf(bot.containerId()),
+                        RunnerProtocol.sanitize(bot.containerTitle()),
+                        bot.clientMenuItems(),
+                        bot.receivedMessages());
             }
 
             case RunnerProtocol.POSITION -> position(RunnerProtocol.POSITION, require(command[1]));
