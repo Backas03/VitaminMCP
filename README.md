@@ -154,13 +154,51 @@ client** — `tlsFingerprint` pins that one certificate. No exporting, no copyin
 With a real certificate (Let's Encrypt and friends), drop `tlsFingerprint` and verification
 proceeds normally.
 
-A successful connection returns the server version, TPS and plugin list. From there:
+A successful connection returns the server version, TPS and plugin list.
 
-- `events_summary` → `events_query` — what happened
-- `logs_query`, `exceptions_recent` — what broke
-- `bot_spawn` → `bot_run_scenario` — attach a bot and actually try it
+## Tools
 
-Tool parameters and the full scenario step reference are in [docs/usage.md](docs/usage.md).
+Two groups, and the difference matters. **Session tools** live in `mcp-server` and are always
+present. **Agent tools** are proxied from the plugin — which ones exist is decided by the server
+you connected to, so `session_start` returns their real definitions in `agentTools` rather than
+`mcp-server` guessing at startup.
+
+### Session tools — bots and the connection
+
+| Tool | What it does |
+|---|---|
+| `session_start` | Connect to a server and its agent. Every other tool needs it. `host`, `port`, `mcpPort`, `token`, `runnerJar`, `tls`, `tlsFingerprint` |
+| `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests so one does not inherit the other's players. World state is **not** rolled back |
+| `bot_spawn` | Connect a bot and wait until it is standing in the world. The UUID is derived from the name, so the same name is the same player every run. `name`, `clientIp` |
+| `bot_inspect` | What the bot's client was actually told. Use when the server-side menu reads empty but a player would see a full one, and to read the messages the server sent that bot — a refusal like "you lack permission" appears nowhere else |
+| `bot_run_scenario` | Run a declarative scenario. Stops at the first failure and reports which step failed, why, and what the server was doing at that moment |
+
+### Agent tools — reading the server
+
+| Tool | What it does |
+|---|---|
+| `server_info` | Implementation, version, TPS, online players, installed plugins, capture statistics. Start here when you do not know what you are looking at |
+| `events_summary` | Counts captured events by type over a window. **Always call this before `events_query`** — it stays small however busy the server is, and it tells you which types are worth asking for |
+| `events_query` | Individual captured events. High-frequency types are excluded unless you name them in `types`. Page with `cursor` |
+| `logs_query` | Search logs by minimum severity and regular expression. There is no "last N lines" tool — search for what you are looking for |
+| `exceptions_recent` | Distinct exceptions, most recent first, collapsed with occurrence count and first-seen time. Pass `hash` for one full stack trace |
+| `state_query` | Read current state instead of inferring it: `kind="player"` (position, gamemode, op, and permission nodes you name), `kind="block"`, `kind="inventory"` (the menu a player has open — the only place a plugin GUI's contents exist) |
+| `wait_for` | Block until something becomes true. Conditions: `ticks`, `block_is` / `block_is_not`, `event`, `player_online` / `player_offline`, `player_near`, `inventory_open`, `inventory_contains`. On timeout the response carries the events and logs from that moment |
+| `command_exec` | Run a command, as the console by default. **Changes the server**, so it is absent entirely unless `read-only: false` |
+
+Two things that catch people out:
+
+- **Pass proxied parameters flat, at the top level** — `{"kind": "player", "target": "Tester1"}`,
+  not wrapped in an `arguments` object.
+- **`wait_for` exists because there is no sleep step, and there will not be one.** A fixed wait is
+  a guess about timing that is right on an idle server and wrong on a busy one. Name the thing you
+  are waiting for and the agent checks every tick inside the server.
+
+The usual GUI-testing loop is `command_exec` → `wait_for inventory_open` → `state_query` with
+`kind="inventory"`, falling back to `bot_inspect` if the menu reads empty because the plugin draws
+it with packets.
+
+Full parameters and the scenario step reference are in [docs/usage.md](docs/usage.md).
 
 ## Running against several versions
 
