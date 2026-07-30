@@ -318,3 +318,6 @@ Their license and notice files travel inside the jars under `META-INF/` — relo
 renames it, it does not lift the obligation to carry the notice.
 
 `paper-api`, `log4j-core` and the JetBrains annotations are compile-only and are not distributed.
+The agent compiles against Paper's API, which is LGPL-3.0; the jar does not contain it, and the
+server already provides it. Nothing here touches `paper-server` (GPL-3.0) — the agent uses the
+Bukkit/Paper API only, never NMS.
