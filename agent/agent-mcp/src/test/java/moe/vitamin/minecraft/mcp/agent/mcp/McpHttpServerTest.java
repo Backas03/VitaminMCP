@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
+import moe.vitamin.minecraft.mcp.agent.core.ActivityLogging;
 import moe.vitamin.minecraft.mcp.agent.core.AgentQueries;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.SequencedRingBuffer;
@@ -50,12 +51,19 @@ class McpHttpServerTest {
 
     private McpHttpServer server;
     private URI endpoint;
+    private RecordingLogger console;
 
     private static AgentSettings settings(String token, String bind) {
-        return new AgentSettings(bind, 0, token, true, 1024, 1024, 16, false,
+        return settings(token, bind, true, ActivityLogging.FULL);
+    }
+
+    private static AgentSettings settings(
+            String token, String bind, boolean readOnly, ActivityLogging activityLog) {
+        return new AgentSettings(bind, 0, token, readOnly, 1024, 1024, 16, false,
                 List.of(), List.of(), List.of(),
                 moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled(),
-                moe.vitamin.minecraft.mcp.agent.core.TlsSettings.disabled());
+                moe.vitamin.minecraft.mcp.agent.core.TlsSettings.disabled(),
+                activityLog);
     }
 
     @BeforeEach
@@ -63,8 +71,8 @@ class McpHttpServerTest {
         AgentSettings config = settings(TOKEN, "127.0.0.1");
         AgentTools tools = new AgentTools(
                 new StubQueries(), mapper, ResponseBudget.DEFAULT, config.readOnly());
-        server = new McpHttpServer(
-                config, tools, mapper, Logger.getLogger("test"), "1.0.0-test");
+        console = new RecordingLogger();
+        server = new McpHttpServer(config, tools, mapper, console.logger(), "1.0.0-test");
         server.start();
         endpoint = URI.create("http://127.0.0.1:" + server.boundPort() + "/mcp");
     }
@@ -238,7 +246,139 @@ class McpHttpServerTest {
         assertEquals(405, response.statusCode());
     }
 
+    // -------------------------------------------------------------- activity
+
+    @Test
+    void logsWhatWasCalledAndWhatCameBack() throws Exception {
+        post("tools/call", "{\"name\":\"state_query\",\"arguments\":{\"kind\":\"player\","
+                + "\"target\":\"Notch\"}}", TOKEN);
+
+        // The arrival line names the tool and the arguments. "tools/call" alone would say
+        // nothing about what the server was asked to do.
+        String arrival = console.firstContaining("state_query");
+        assertTrue(arrival.contains("kind"), arrival);
+        assertTrue(arrival.contains("Notch"), arrival);
+
+        // The completion line carries the answer, which is the half an operator cannot
+        // reconstruct from the request.
+        String completion = console.firstContaining("ok in");
+        assertTrue(completion.contains("Notch"), completion);
+    }
+
+    @Test
+    void logsARefusedTokenButNeverTheTokenItself() throws Exception {
+        post("tools/list", "{}", "hunter2-guessed-token");
+
+        String refusal = console.firstContaining("rejected");
+        assertEquals(java.util.logging.Level.WARNING, console.levelOf(refusal));
+        // A rejected guess is still someone's secret, and console logs get pasted into issues.
+        assertFalse(refusal.contains("hunter2-guessed-token"), refusal);
+    }
+
+    @Test
+    void logsAFailingCallWithTheReason() throws Exception {
+        post("tools/call", "{\"name\":\"exceptions_recent\",\"arguments\":{\"hash\":\"nope\"}}",
+                TOKEN);
+
+        String completion = console.firstContaining("failed in");
+        assertTrue(completion.contains("nope"), completion);
+    }
+
+    @Test
+    void quietActivityLoggingStillRecordsStateChanges() throws Exception {
+        AgentSettings quiet = settings(TOKEN, "127.0.0.1", false, ActivityLogging.OFF);
+        RecordingLogger recorder = new RecordingLogger();
+        McpHttpServer silent = new McpHttpServer(
+                quiet,
+                new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, quiet.readOnly()),
+                mapper, recorder.logger(), "1.0.0-test");
+        silent.start();
+
+        URI quietEndpoint = URI.create("http://127.0.0.1:" + silent.boundPort() + "/mcp");
+        try {
+            send(quietEndpoint, "tools/call", "{\"name\":\"server_info\",\"arguments\":{}}");
+            assertTrue(recorder.lines().stream().noneMatch(line -> line.contains("server_info")),
+                    recorder.lines().toString());
+
+            send(quietEndpoint, "tools/call",
+                    "{\"name\":\"command_exec\",\"arguments\":{\"command\":\"say hello\"}}");
+        } finally {
+            silent.stop();
+        }
+
+        // Turning the console quiet is not the same as giving up the record of the agent
+        // changing the server, and the record has to include which command it was.
+        String logged = recorder.firstContaining("command_exec");
+        assertTrue(logged.contains("say hello"), logged);
+    }
+
     // --------------------------------------------------------------- helpers
+
+    /** A {@link Logger} that keeps what was written to it, so the console output can be asserted. */
+    private static final class RecordingLogger extends java.util.logging.Handler {
+
+        private static final java.util.concurrent.atomic.AtomicInteger COUNTER =
+                new java.util.concurrent.atomic.AtomicInteger();
+
+        private final List<java.util.logging.LogRecord> records =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        private final Logger logger =
+                Logger.getLogger("vitaminmcp-test-" + COUNTER.incrementAndGet());
+
+        RecordingLogger() {
+            logger.setUseParentHandlers(false);
+            logger.addHandler(this);
+        }
+
+        Logger logger() {
+            return logger;
+        }
+
+        @Override
+        public void publish(java.util.logging.LogRecord record) {
+            records.add(record);
+        }
+
+        @Override
+        public void flush() {}
+
+        @Override
+        public void close() {}
+
+        List<String> lines() {
+            synchronized (records) {
+                return records.stream().map(java.util.logging.LogRecord::getMessage).toList();
+            }
+        }
+
+        String firstContaining(String fragment) {
+            return lines().stream()
+                    .filter(line -> line.contains(fragment))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "no logged line contained '" + fragment + "'; lines were " + lines()));
+        }
+
+        java.util.logging.Level levelOf(String line) {
+            synchronized (records) {
+                return records.stream()
+                        .filter(record -> line.equals(record.getMessage()))
+                        .map(java.util.logging.LogRecord::getLevel)
+                        .findFirst()
+                        .orElseThrow();
+            }
+        }
+    }
+
+    private HttpResponse<String> send(URI target, String method, String params) throws Exception {
+        return client.send(
+                HttpRequest.newBuilder(target)
+                        .header("Authorization", "Bearer " + TOKEN)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(rpc(1, method, params)))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
 
     private static String rpc(int id, String method, String params) {
         return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"" + method
@@ -326,7 +466,8 @@ class McpHttpServerTest {
                 "0.0.0.0", 0, TOKEN, true, 1024, 1024, 16, false,
                 List.of(), List.of(), List.of(),
                 moe.vitamin.minecraft.mcp.agent.core.OAuthSettings.disabled(),
-                new moe.vitamin.minecraft.mcp.agent.core.TlsSettings(false, "", "", true));
+                new moe.vitamin.minecraft.mcp.agent.core.TlsSettings(false, "", "", true),
+                ActivityLogging.FULL);
 
         McpHttpServer proxied = new McpHttpServer(
                 behindProxy,

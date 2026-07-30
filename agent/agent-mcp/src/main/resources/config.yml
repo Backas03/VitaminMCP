@@ -23,6 +23,20 @@ auth-token: ""
 # specifically need otherwise.
 read-only: true
 
+# ------------------------------------------------------------------------- console log
+
+# What the agent writes to the server console as it works. Two lines per MCP call: one when it
+# arrives, naming the tool and the arguments, and one when it answers, with how long it took and
+# what came back. Arguments and answers are truncated — the full payload went to the client.
+#
+#   full     one line per call with arguments, one with the answer (default)
+#   summary  the same two lines, without arguments or answers
+#   off      lifecycle only
+#
+# 'off' still logs a refused token and every state-changing call. Turning the console quiet is
+# not the same as giving up the record of what the agent did to your server.
+activity-log: full
+
 # --------------------------------------------------------------------------------- tls
 
 # Required once bind-address is anything other than loopback. The agent refuses to start

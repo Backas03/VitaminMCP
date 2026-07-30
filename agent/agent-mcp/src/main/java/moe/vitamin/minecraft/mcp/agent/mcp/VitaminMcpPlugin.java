@@ -5,7 +5,9 @@ import java.io.IOException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
+import moe.vitamin.minecraft.mcp.agent.core.ActivityLogging;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.CaptureService;
 import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
@@ -54,6 +56,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
 
         capture = new CaptureService(this, settings);
         capture.start();
+        logCaptureState(settings);
 
         ObjectMapper mapper = new ObjectMapper();
         AgentTools tools = new AgentTools(
@@ -78,10 +81,42 @@ public final class VitaminMcpPlugin extends JavaPlugin {
         if (mcpServer != null) {
             mcpServer.stop();
             mcpServer = null;
+            getLogger().info("MCP endpoint closed.");
         }
         if (capture != null) {
+            Map<String, Object> status = capture.captureStatus();
             capture.stop();
             capture = null;
+            getLogger().info("Capture stopped after " + status.get("eventsCaptured")
+                    + " events and " + status.get("logsCaptured") + " log entries.");
+        }
+    }
+
+    /**
+     * Says on the console what is being captured and what is not.
+     *
+     * <p>Both halves are worth a line. Log capture attaching is not guaranteed — it degrades to
+     * events only rather than failing (see {@code LogCapture}) — and an operator who reads
+     * "logs_query returns nothing" has no way to tell that apart from a quiet server. The
+     * excluded high-frequency types are the other question that gets asked, for the same
+     * reason: an event that was never captured looks exactly like an event that never fired.
+     */
+    private void logCaptureState(AgentSettings settings) {
+        Map<String, Object> status = capture.captureStatus();
+        getLogger().info("Capturing " + status.get("eventTypesRegistered") + " event types into a "
+                + settings.eventBufferSize() + "-record buffer; log capture "
+                + (Boolean.TRUE.equals(status.get("logCaptureActive"))
+                        ? "attached (" + settings.logBufferSize() + " records)"
+                        : "UNAVAILABLE, so logs_query will stay empty") + ".");
+
+        if (!settings.captureHighFrequency()) {
+            getLogger().info("High-frequency events are not being captured "
+                    + "(capture-high-frequency: false in config.yml).");
+        }
+        if (settings.activityLog() != ActivityLogging.FULL) {
+            getLogger().info("Activity logging is set to '"
+                    + settings.activityLog().name().toLowerCase(java.util.Locale.ROOT)
+                    + "'; refused tokens and state-changing calls are still logged.");
         }
     }
 
@@ -99,7 +134,8 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 stringList(config, "reinstate-types"),
                 stringList(config, "scan-packages"),
                 readOAuth(config),
-                readTls(config));
+                readTls(config),
+                ActivityLogging.parse(config.getString("activity-log", "full")));
     }
 
     /**

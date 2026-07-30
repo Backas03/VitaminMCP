@@ -23,6 +23,7 @@ import java.util.Objects;
  * @param scanPackages         packages searched for event classes
  * @param oauth                OAuth 2.1 settings for the HTTP endpoint
  * @param tls                  transport security, required once reachable remotely
+ * @param activityLog          how much of the agent's own activity reaches the server console
  */
 public record AgentSettings(
         String bindAddress,
@@ -37,7 +38,8 @@ public record AgentSettings(
         List<String> reinstatedTypes,
         List<String> scanPackages,
         OAuthSettings oauth,
-        TlsSettings tls) {
+        TlsSettings tls,
+        ActivityLogging activityLog) {
 
     /**
      * Loopback. Exposing the agent externally has to be a deliberate edit, never a default
@@ -54,6 +56,7 @@ public record AgentSettings(
         scanPackages = scanPackages == null ? List.of() : List.copyOf(scanPackages);
         oauth = oauth == null ? OAuthSettings.disabled() : oauth;
         tls = tls == null ? TlsSettings.disabled() : tls;
+        activityLog = activityLog == null ? ActivityLogging.FULL : activityLog;
     }
 
     /** Whether a usable token was configured. */

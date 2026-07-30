@@ -173,6 +173,18 @@ final class AgentTools {
         return tools;
     }
 
+    /**
+     * Whether a tool changes the server rather than only reading it.
+     *
+     * <p>Lives here because this class already owns that boundary — {@code readOnly} decides
+     * what gets listed and {@code commandExec} re-checks it — and a second copy of the list
+     * elsewhere would be one to forget. The console log uses it to decide what must be recorded
+     * regardless of how quiet an operator has asked the agent to be.
+     */
+    boolean changesState(String toolName) {
+        return "command_exec".equals(toolName);
+    }
+
     // ------------------------------------------------------------- execution
 
     /**

@@ -62,6 +62,7 @@ public final class McpHttpServer {
     private final Logger logger;
     private final String serverVersion;
     private final BearerTokenVerifier tokens;
+    private final ActivityLog activity;
 
     private HttpServer server;
     private ExecutorService executor;
@@ -78,6 +79,7 @@ public final class McpHttpServer {
         this.logger = logger;
         this.serverVersion = serverVersion;
         this.tokens = new BearerTokenVerifier(settings.authToken(), settings.oauth(), logger);
+        this.activity = new ActivityLog(logger, settings.activityLog());
     }
 
     public void start() throws IOException {
@@ -104,8 +106,10 @@ public final class McpHttpServer {
         server.setExecutor(executor);
         server.start();
 
+        // boundPort() rather than the configured one: a port of 0 means "any free port", and
+        // printing the 0 back tells a reader nothing about where to connect.
         logger.info("MCP endpoint listening on " + scheme() + "://" + settings.bindAddress() + ":"
-                + settings.port() + ENDPOINT + (settings.readOnly() ? " (read-only)" : ""));
+                + boundPort() + ENDPOINT + (settings.readOnly() ? " (read-only)" : ""));
 
         if (settings.isExternallyReachable()) {
             logger.warning("The MCP endpoint is reachable from outside this machine. Anyone "
@@ -177,9 +181,11 @@ public final class McpHttpServer {
     // --------------------------------------------------------------- routing
 
     private void handle(HttpExchange exchange) throws IOException {
+        String client = clientOf(exchange);
         try (exchange) {
             String refusal = tokens.refuse(exchange.getRequestHeaders().getFirst("Authorization"));
             if (refusal != null) {
+                activity.refused(client, refusal);
                 // Points at the metadata document, which is how a client discovers where to
                 // obtain a token rather than simply failing.
                 exchange.getResponseHeaders().add("WWW-Authenticate",
@@ -193,22 +199,29 @@ public final class McpHttpServer {
 
             String method = exchange.getRequestMethod();
             switch (method) {
-                case "POST" -> handlePost(exchange);
+                case "POST" -> handlePost(exchange, client);
                 // Nothing is pushed to the client, so there is no stream to open.
-                case "GET" -> respond(exchange, 405, "{\"error\":\"this endpoint accepts POST only\"}");
+                case "GET" -> {
+                    activity.malformed(client, "GET, but this endpoint accepts POST only");
+                    respond(exchange, 405, "{\"error\":\"this endpoint accepts POST only\"}");
+                }
                 // Sessions are not held, so a termination request is already satisfied.
                 case "DELETE" -> respond(exchange, 204, "");
-                default -> respond(exchange, 405, "{\"error\":\"unsupported method\"}");
+                default -> {
+                    activity.malformed(client, "unsupported HTTP method " + method);
+                    respond(exchange, 405, "{\"error\":\"unsupported method\"}");
+                }
             }
         } catch (RuntimeException e) {
-            logger.log(Level.WARNING, "Unhandled error serving an MCP request", e);
+            logger.log(Level.WARNING, "Unhandled error serving an MCP request from " + client, e);
             safelyRespond(exchange, 500, "{\"error\":\"internal error\"}");
         }
     }
 
-    private void handlePost(HttpExchange exchange) throws IOException {
+    private void handlePost(HttpExchange exchange, String client) throws IOException {
         byte[] body = readBody(exchange);
         if (body == null) {
+            activity.malformed(client, "the request body exceeded " + MAX_REQUEST_BYTES + " bytes");
             respond(exchange, 413, "{\"error\":\"request too large\"}");
             return;
         }
@@ -217,15 +230,17 @@ public final class McpHttpServer {
         try {
             payload = mapper.readTree(body);
         } catch (IOException e) {
+            activity.malformed(client, "malformed JSON");
             writeJson(exchange, 400, JsonRpc.error(null, JsonRpc.PARSE_ERROR, "Malformed JSON"));
             return;
         }
 
         if (payload == null || !payload.isObject()) {
-            writeJson(exchange, 400, JsonRpc.error(null, JsonRpc.INVALID_REQUEST,
-                    payload != null && payload.isArray()
-                            ? "Batched requests are not supported by this protocol revision"
-                            : "Expected a JSON-RPC object"));
+            String problem = payload != null && payload.isArray()
+                    ? "Batched requests are not supported by this protocol revision"
+                    : "Expected a JSON-RPC object";
+            activity.malformed(client, problem);
+            writeJson(exchange, 400, JsonRpc.error(null, JsonRpc.INVALID_REQUEST, problem));
             return;
         }
 
@@ -234,14 +249,80 @@ public final class McpHttpServer {
                 payload.path("method").asText(""),
                 payload.has("params") ? payload.get("params") : mapper.createObjectNode());
 
+        if (request.isNotification()) {
+            // No reply is coming, so there is no outcome to pair with an arrival line.
+            activity.notification(client, request.method());
+            dispatch(request);
+            // Acknowledged, with no body, per JSON-RPC.
+            respond(exchange, 202, "");
+            return;
+        }
+
+        ActivityLog.Call call = begin(client, request);
         ObjectNode response = dispatch(request);
+        record(call, response);
 
         if (response == null) {
-            // A notification. Acknowledged, with no body, per JSON-RPC.
             respond(exchange, 202, "");
             return;
         }
         writeJson(exchange, 200, response);
+    }
+
+    // -------------------------------------------------------------- activity
+
+    /** The caller's address, which is what distinguishes a local client from a remote one. */
+    private static String clientOf(HttpExchange exchange) {
+        InetSocketAddress remote = exchange.getRemoteAddress();
+        return remote == null
+                ? "unknown"
+                : remote.getAddress().getHostAddress() + ":" + remote.getPort();
+    }
+
+    /**
+     * Opens the console record for a call.
+     *
+     * <p>{@code tools/call} is unwrapped so the line names the tool and its arguments rather
+     * than the envelope carrying them — "tools/call" on its own says nothing about what the
+     * server was asked to do.
+     */
+    private ActivityLog.Call begin(String client, JsonRpc.Request request) {
+        boolean isToolCall = "tools/call".equals(request.method());
+        String toolName = isToolCall ? request.params().path("name").asText("") : null;
+        JsonNode arguments = isToolCall ? request.params().get("arguments") : request.params();
+        // State-changing tools are logged even when activity logging is turned off: this is the
+        // record of the agent altering the server, and it is not noise anyone can opt out of.
+        return activity.begin(
+                client, request.method(), toolName, arguments, tools.changesState(toolName));
+    }
+
+    /**
+     * Closes that record with whatever the caller was sent.
+     *
+     * <p>A failing tool comes back as a normal result carrying {@code isError} (see
+     * {@link #callTool}), so reading the outcome means looking inside the result rather than
+     * only at the JSON-RPC envelope.
+     */
+    private static void record(ActivityLog.Call call, ObjectNode response) {
+        if (response == null) {
+            call.succeeded(null);
+            return;
+        }
+        JsonNode error = response.get("error");
+        if (error != null) {
+            call.failed(error.path("message").asText(""));
+            return;
+        }
+
+        JsonNode result = response.path("result");
+        String text = result.path("content").path(0).path("text").asText(null);
+        if (result.path("isError").asBoolean()) {
+            call.failed(text == null ? result.toString() : text);
+            return;
+        }
+        // The tool's own payload where there is one, so the line shows the data the caller got
+        // and not the MCP content wrapper around it.
+        call.succeeded(text == null ? result.toString() : text);
     }
 
     /** @return the response, or {@code null} when the request was a notification */
