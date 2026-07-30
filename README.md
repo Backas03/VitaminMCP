@@ -123,6 +123,24 @@ settings:
 > **Never expose a server in this configuration to the internet.** Anyone who can open a socket can
 > impersonate anyone. This is a test-harness configuration, not a production one.
 
+Recommended alongside those:
+
+```properties
+# server.properties
+allow-flight=true
+```
+
+**The bot has no physics engine.** `move_to` sends one position packet at the destination and calls
+itself on the ground; nothing simulates gravity, acceleration, or the path in between. That is
+deliberate — a bot that reimplemented client movement would be testing our physics rather than your
+plugin — but it means the server's flight check sees a player crossing distance no walking player
+could, and kicks it with `Flying is not enabled on this server`. The bot vanishes mid-scenario and
+the next step fails somewhere unrelated to the real cause.
+
+With `allow-flight=true` the check is off and `move_to` behaves like a teleport. It costs nothing on
+a test server. Leave it alone on a real one — and note this is another reason not to point bots at
+production.
+
 ## 3. Connect an MCP client
 
 For Claude Code:
