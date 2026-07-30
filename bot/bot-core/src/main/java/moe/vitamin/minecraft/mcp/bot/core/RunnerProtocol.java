@@ -16,12 +16,17 @@ package moe.vitamin.minecraft.mcp.bot.core;
  * <pre>
  *   → spawn    Tester1
  *   ← ok       spawn   Tester1  -97.5  79.0  -107.5
+ *   → spawn    Tester2  203.0.113.7        ← claim an address instead of using the real one
+ *   ← ok       spawn   Tester2  -97.5  79.0  -107.5
  *   → break    Tester1  -97  78  -107
  *   ← ok       break
  *   → position Tester1
  *   ← ok       position  -97.5  79.0  -107.5
  *   ← err      spawn   Outdated client! Please use 1.21.11
  * </pre>
+ *
+ * <p>Trailing fields are optional, and an absent one means the same as an empty one: the
+ * default. That is why the client IP goes last rather than beside the name.
  */
 public final class RunnerProtocol {
 

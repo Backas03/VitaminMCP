@@ -400,8 +400,8 @@ class McpHttpServerTest {
         public moe.vitamin.minecraft.mcp.contract.PlayerState playerState(
                 String name, Collection<String> permissionNodes) {
             return new moe.vitamin.minecraft.mcp.contract.PlayerState(
-                    name, "00000000-0000-0000-0000-000000000000", true, "CREATIVE", false,
-                    "world", 1, 2, 3, List.of());
+                    name, "00000000-0000-0000-0000-000000000000", true, "127.0.0.1", "CREATIVE",
+                    false, "world", 1, 2, 3, List.of());
         }
 
 

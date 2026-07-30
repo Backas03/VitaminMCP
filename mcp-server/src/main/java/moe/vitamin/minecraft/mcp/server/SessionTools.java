@@ -60,7 +60,14 @@ final class SessionTools {
                 "Connect a bot and wait until it is standing in the world. Its UUID is derived "
                         + "from its name, so the same name is the same player every run and "
                         + "permission-dependent behaviour is reproducible.",
-                properties -> string(properties, "name", "Bot name, at most 16 characters.")));
+                properties -> {
+                    string(properties, "name", "Bot name, at most 16 characters.");
+                    string(properties, "clientIp",
+                            "Address the server should attribute the connection to. Omit unless "
+                                    + "you are testing something keyed on the address — an IP "
+                                    + "ban, a per-IP limit, geo logic. Omitted, the bot reports "
+                                    + "the address it really connects from.");
+                }));
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
@@ -73,6 +80,7 @@ final class SessionTools {
                                 + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]")));
 
         // Proxied verbatim: one definition of each tool, living where it is implemented.
+        //
         for (String name : PROXIED) {
             tools.add(tool(name,
                     "Forwarded to the agent on the connected server. Call session_start first.",
@@ -154,7 +162,8 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
         try {
-            BotRunner.BotHandle bot = require().bots().spawn(name);
+            BotRunner.BotHandle bot = require().bots().spawn(
+                    name, args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null);
 
             ObjectNode result = MAPPER.createObjectNode();
             result.put("name", name);
@@ -227,7 +236,6 @@ final class SessionTools {
         schema.set("required", MAPPER.createArrayNode());
         return tool;
     }
-
     private static void string(ObjectNode properties, String name, String description) {
         ObjectNode property = properties.putObject(name);
         property.put("type", "string");

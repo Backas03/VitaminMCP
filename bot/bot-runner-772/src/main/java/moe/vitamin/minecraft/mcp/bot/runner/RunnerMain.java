@@ -80,8 +80,12 @@ public final class RunnerMain {
         return switch (verb) {
             case RunnerProtocol.SPAWN -> {
                 String name = command[1];
+                // Null for the claimed host, so the backend is told the host actually dialled;
+                // hardcoding one made every server believe it had been reached as "localhost".
+                // The client IP is passed through as given — empty means the real one.
+                String clientIp = command.length > 2 ? command[2] : "";
                 BotSession bot = BotSession
-                        .open(host, port, BotIdentity.of(name), "localhost", "127.0.0.1")
+                        .open(host, port, BotIdentity.of(name), null, clientIp)
                         .connect(Duration.ofSeconds(30));
                 bot.awaitGrounded(Duration.ofSeconds(15));
                 bots.put(name, bot);

@@ -248,7 +248,7 @@ public final class CaptureService implements AgentQueries {
                 org.bukkit.OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
                 return new PlayerState(
                         name, String.valueOf(offline.getUniqueId()), false,
-                        null, offline.isOp(), null, 0, 0, 0, List.of());
+                        null, null, offline.isOp(), null, 0, 0, 0, List.of());
             }
 
             List<PlayerState.PermissionCheck> checks = new ArrayList<>();
@@ -263,12 +263,31 @@ public final class CaptureService implements AgentQueries {
                     player.getName(),
                     player.getUniqueId().toString(),
                     true,
+                    hostAddress(player.getAddress()),
                     player.getGameMode().name(),
                     player.isOp(),
                     at.getWorld() == null ? null : at.getWorld().getName(),
                     at.getX(), at.getY(), at.getZ(),
                     checks);
         }, Duration.ofSeconds(5), null);
+    }
+
+    /**
+     * The IP out of a socket address, without the port.
+     *
+     * <p>The port is the client's ephemeral one and changes every connection, so including it
+     * would make the field useless for the comparison anyone actually wants to make — against a
+     * ban list, a whitelist, or the address a proxy claimed to be forwarding.
+     *
+     * @return the address, or {@code null} if the player is already on the way out
+     */
+    private static String hostAddress(java.net.InetSocketAddress address) {
+        if (address == null) {
+            // Bukkit returns null once the connection is closing, which a query can race.
+            return null;
+        }
+        java.net.InetAddress ip = address.getAddress();
+        return ip == null ? address.getHostString() : ip.getHostAddress();
     }
 
     @Override

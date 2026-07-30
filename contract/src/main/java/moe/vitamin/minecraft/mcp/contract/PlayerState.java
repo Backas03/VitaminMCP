@@ -14,6 +14,10 @@ import java.util.Objects;
  * @param name        player name
  * @param uuid        the UUID the server assigned, which is what permissions are keyed by
  * @param online      whether they are connected right now
+ * @param address     the IP the server attributes the connection to, or {@code null} if
+ *                    offline. Worth asking for rather than assuming: it is what IP bans and
+ *                    geo lookups key on, and for a bot it is an injected value, so this is the
+ *                    only way to find out whether the injection took
  * @param gameMode    survival, creative, adventure or spectator
  * @param op          whether they hold operator status
  * @param world       world they are in, or {@code null} if offline
@@ -24,6 +28,7 @@ public record PlayerState(
         String name,
         String uuid,
         boolean online,
+        String address,
         String gameMode,
         boolean op,
         String world,

@@ -59,28 +59,38 @@ public final class BotSession implements AutoCloseable {
     }
 
     /**
+     * Opens a session, presenting the connection as what it actually is.
+     *
+     * <p>The backend is told the host that was really dialled and the address this machine
+     * really connects from. Use {@link #open(String, int, BotIdentity, String, String)} to claim
+     * something else.
+     */
+    public static BotSession open(String host, int port, BotIdentity identity) throws Exception {
+        return open(host, port, identity, null, null);
+    }
+
+    /**
      * Opens a session against a backend that trusts proxy forwarding.
      *
      * @param host        the server to connect to
      * @param port        the server's port
      * @param identity    who the bot claims to be
-     * @param claimedHost the host the backend should believe was dialled
-     * @param clientIp    the address the backend should attribute the connection to
+     * @param claimedHost the host the backend should believe was dialled, or {@code null} for
+     *                    {@code host} — which is what a real client dialling it would send, and
+     *                    what a server routing on forced hosts matches against
+     * @param clientIp    the address the backend should attribute the connection to, or
+     *                    {@code null} for the one this machine really uses. Worth setting only
+     *                    to reproduce a specific address — an IP ban, a geo lookup — because a
+     *                    made-up one is a lie the rest of the test then has to live with
      */
     public static BotSession open(
             String host, int port, BotIdentity identity, String claimedHost, String clientIp)
             throws Exception {
 
-        String forwardedHost =
-                ForwardingHandshake.addressField(claimedHost, clientIp, identity);
-
-        // The payload is carried by the address itself: MCProtocolLib copies the remote
-        // address's host string into the intention packet. getByAddress binds an arbitrary
-        // label to a literal IP without a DNS lookup, which is what makes it possible to put
-        // a string no resolver could ever answer for into a connectable address.
-        java.net.InetAddress resolved = java.net.InetAddress.getByName(host);
-        InetSocketAddress target = new InetSocketAddress(
-                java.net.InetAddress.getByAddress(forwardedHost, resolved.getAddress()), port);
+        // Resolved here rather than left to connect(), so a host that does not exist says so
+        // instead of arriving later as a login that never completed.
+        InetSocketAddress target =
+                new InetSocketAddress(java.net.InetAddress.getByName(host), port);
 
         // The username here still matters: the backend takes the UUID and skin from the
         // forwarded fields but the name from the login packet, and a mismatch between them is
@@ -99,8 +109,15 @@ public final class BotSession implements AutoCloseable {
                 null);
 
         BotSession bot = new BotSession(identity, session);
-        session.addListener(bot.new LifecycleListener(forwardedHost));
+        session.addListener(bot.new LifecycleListener(
+                isBlank(claimedHost) ? host : claimedHost,
+                isBlank(clientIp) ? null : clientIp));
         return bot;
+    }
+
+    /** Absent and empty mean the same thing — the runner protocol sends an empty field. */
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**
@@ -300,25 +317,36 @@ public final class BotSession implements AutoCloseable {
     /** Injects the forwarded identity, and tracks how far through login the bot has got. */
     private final class LifecycleListener extends SessionAdapter {
 
-        private final String forwardedHost;
+        private final String claimedHost;
+        private final String clientIp;
 
-        LifecycleListener(String forwardedHost) {
-            this.forwardedHost = forwardedHost;
+        /** @param clientIp {@code null} to report the address the socket really uses */
+        LifecycleListener(String claimedHost, String clientIp) {
+            this.claimedHost = claimedHost;
+            this.clientIp = clientIp;
         }
 
         /**
          * Replaces the handshake's hostname with the forwarded identity.
          *
-         * <p>Done here rather than by disguising the address the session connects to. Both
-         * would work today — MCProtocolLib copies the hostname out of the remote address — but
-         * that is an implementation detail of the library, whereas the intention packet is
-         * part of the protocol. Rewriting the packet says what is actually meant, and does not
-         * quietly stop injecting if the library changes how it derives the host.
+         * <p>Done by rewriting the packet rather than by disguising the address the session
+         * connects to. Both would work — MCProtocolLib copies the hostname out of the remote
+         * address, so a fake label on it ends up on the wire — but that is an implementation
+         * detail of the library, whereas the intention packet is part of the protocol.
+         * Rewriting the packet says what is actually meant, and does not quietly stop injecting
+         * if the library changes how it derives the host.
+         *
+         * <p>The field is assembled here, not at construction, because until the socket is
+         * connected there is no local address to report — and the handshake is the first thing
+         * sent after it connects, so here is the earliest moment it is known.
          */
         @Override
         public void packetSending(
                 org.geysermc.mcprotocollib.network.event.session.PacketSendingEvent event) {
             if (event.getPacket() instanceof ClientIntentionPacket intention) {
+                String forwardedHost = ForwardingHandshake.addressField(
+                        claimedHost, clientIp == null ? localAddress() : clientIp, identity);
+
                 if (Boolean.getBoolean("vitaminmcp.debugHandshake")) {
                     System.err.println("[handshake] protocol=" + intention.getProtocolVersion()
                             + " intent=" + intention.getIntent()
@@ -334,6 +362,31 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
+        /**
+         * The address this machine is connecting from.
+         *
+         * <p>What the server would have seen had nothing been forwarding on our behalf — so
+         * reporting it means the bot looks like a client at this machine rather than at a
+         * fictional loopback address, which is what anything keyed on the address (bans,
+         * per-IP connection limits, geo lookups) then sees.
+         *
+         * <p>Exact when nothing translates addresses between here and the server, and close
+         * enough to be useful when something does; a NAT would have the server seeing the
+         * public address instead, which no client can determine for itself. Pass an explicit
+         * clientIp when the test needs a specific one.
+         */
+        private String localAddress() {
+            if (session.getLocalAddress() instanceof InetSocketAddress local
+                    && local.getAddress() != null) {
+                return local.getAddress().getHostAddress();
+            }
+            // Only reachable if the channel has no local address, which for a socket that is
+            // mid-handshake means it is already gone. The connection is about to fail either
+            // way; loopback keeps the field well-formed so it fails with the server's reason
+            // rather than an exception on a Netty thread.
+            return "127.0.0.1";
+        }
+
         @Override
         public void packetReceived(org.geysermc.mcprotocollib.network.Session session, Packet packet) {
             // The join packet, not the login-success one: success means the server accepted
@@ -341,6 +394,7 @@ public final class BotSession implements AutoCloseable {
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
             }
+
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.

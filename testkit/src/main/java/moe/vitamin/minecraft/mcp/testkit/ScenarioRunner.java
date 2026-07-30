@@ -102,7 +102,10 @@ public final class ScenarioRunner {
             case "spawn" -> {
                 String name = required(step, "bot");
                 try {
-                    BotRunner.BotHandle bot = bots.spawn(name);
+                    // Optional: without it the bot reports the address it really connects from,
+                    // which is what a test should normally want.
+                    BotRunner.BotHandle bot = bots.spawn(
+                            name, step.hasNonNull("clientIp") ? step.get("clientIp").asText() : null);
                     yield ScenarioResult.StepResult.ok(index, action,
                             name + " joined at " + bot.x() + ", " + bot.y() + ", " + bot.z());
                 } catch (java.io.IOException e) {

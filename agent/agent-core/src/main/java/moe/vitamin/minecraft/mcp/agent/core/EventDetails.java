@@ -52,7 +52,12 @@ final class EventDetails {
             // Without this, PluginEnableEvent and PluginDisableEvent record an empty payload —
             // they report that *a* plugin changed state but not which one, which is the only
             // thing anyone reads them for.
-            "getPlugin");
+            "getPlugin",
+            // Effectively PlayerLoginEvent only, and the one thing that event says which is not
+            // available anywhere later: the address the client claimed to have dialled. Servers
+            // route on it (forced hosts), and for a bot it is injected through the forwarding
+            // handshake, so without this there is no way to check the injection landed.
+            "getHostname");
 
     /** Cached per-class plan: the reflective getters that turned out to be usable. */
     private final ConcurrentMap<Class<?>, List<ValueAccessor>> plans = new ConcurrentHashMap<>();

@@ -72,7 +72,21 @@ public final class BotRunner implements AutoCloseable {
 
     /** Connects a bot and waits until it is standing in the world. */
     public BotHandle spawn(String name) throws IOException {
-        String[] reply = send(RunnerProtocol.SPAWN, name);
+        return spawn(name, null);
+    }
+
+    /**
+     * Connects a bot that claims to be connecting from a particular address.
+     *
+     * <p>For testing what is keyed on the address rather than on the player: an IP ban, a
+     * per-IP connection limit, a geo lookup. Anything else should use {@link #spawn(String)}
+     * and let the bot report the address it really has — a fabricated one is a difference from
+     * reality that every later step inherits.
+     *
+     * @param clientIp the address to claim, or {@code null} for the real one
+     */
+    public BotHandle spawn(String name, String clientIp) throws IOException {
+        String[] reply = send(RunnerProtocol.SPAWN, name, clientIp == null ? "" : clientIp);
         live.add(name);
         return new BotHandle(this, name,
                 Double.parseDouble(reply[2]), Double.parseDouble(reply[3]),
@@ -199,7 +213,6 @@ public final class BotRunner implements AutoCloseable {
         public void chat(String message) throws IOException {
             runner.send(RunnerProtocol.CHAT, name, message);
         }
-
         /** The bot's position now, which may differ from where it spawned. */
         public double[] position() throws IOException {
             String[] reply = runner.send(RunnerProtocol.POSITION, name);

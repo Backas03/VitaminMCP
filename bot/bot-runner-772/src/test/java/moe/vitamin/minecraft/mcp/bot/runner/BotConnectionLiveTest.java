@@ -37,8 +37,11 @@ class BotConnectionLiveTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     private static BotSession connect(String name) throws Exception {
-        return BotSession.open(HOST, PORT, BotIdentity.of(name), "localhost", "127.0.0.1")
-                .connect(TIMEOUT);
+        return BotSession.open(HOST, PORT, BotIdentity.of(name)).connect(TIMEOUT);
+    }
+
+    private static BotSession connect(String name, String clientIp) throws Exception {
+        return BotSession.open(HOST, PORT, BotIdentity.of(name), null, clientIp).connect(TIMEOUT);
     }
 
     @Test
@@ -61,6 +64,51 @@ class BotConnectionLiveTest {
     }
 
 
+
+    /**
+     * The address half of the forwarded identity, checked the only way it can be: by asking the
+     * server what it recorded.
+     *
+     * <p>Uses the documentation range (RFC 5737), which cannot belong to anything real, so a
+     * pass means the value travelled rather than that it happened to match the truth.
+     */
+    @Test
+    void aBotCanClaimTheAddressItConnectsFrom() throws Exception {
+        AgentProbe agent = AgentProbe.fromSystemProperties();
+
+        try (BotSession bot = connect("Tester1", "203.0.113.7")) {
+            assertTrue(bot.isInGame(), "bot did not reach the world: " + bot.disconnectReason());
+            assertEquals("203.0.113.7", agent.addressOf("Tester1"),
+                    "the server did not attribute the connection to the claimed address");
+        }
+    }
+
+    /**
+     * Without a claim, the bot reports where it really is.
+     *
+     * <p>The expected value is derived independently — a plain socket to the same server, whose
+     * local address is what the OS routes through — rather than by asking the bot, which would
+     * be checking the code against itself.
+     *
+     * <p>Against a server on this machine both sides are loopback, so this passes either way;
+     * it only distinguishes the fix from the bug it replaces when {@code vitaminmcp.host} names
+     * another machine. That is the case the fix exists for.
+     */
+    @Test
+    void withoutAClaimTheServerSeesTheRealAddress() throws Exception {
+        AgentProbe agent = AgentProbe.fromSystemProperties();
+
+        String expected;
+        try (java.net.Socket probe = new java.net.Socket(HOST, PORT)) {
+            expected = probe.getLocalAddress().getHostAddress();
+        }
+
+        try (BotSession bot = connect("Tester1")) {
+            assertTrue(bot.isInGame(), "bot did not reach the world: " + bot.disconnectReason());
+            assertEquals(expected, agent.addressOf("Tester1"),
+                    "the server recorded an address this machine does not connect from");
+        }
+    }
 
     @Test
     void aBotKnowsWhereItStands() throws Exception {
