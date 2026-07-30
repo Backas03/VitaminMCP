@@ -239,14 +239,16 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 | **1.21.7, 1.21.8** | **Supported** | Protocol 772 — one runner covers both. Both run in the matrix ([versions.yaml](versions.yaml)) |
 | 1.21.9 – 26.2 | Planned | Changed protocol. Needs a sibling `bot-runner-<protocol>` built against the matching MCProtocolLib release |
 
-Only the middle row is tested today; the other two are intent, not a promise about a date. Pointing
-the harness at a version outside it fails honestly rather than quietly — an unsupported server
-refuses to load the agent, and a bot without a runner for its protocol is rejected with
+**1.21.7 and 1.21.8 are supported today.** The other rows are on the roadmap without a date
+attached.
+
+Outside the supported range, things fail clearly rather than misbehaving: an older server declines
+to load the agent, and a bot with no runner for the server's protocol is turned away with
 `Outdated client!`.
 
-The two halves move independently. The agent's floor is what Paper API it compiles against; the
-bot's reach is which protocol runners exist. A version can be readable by the agent before any bot
-can connect to it, and that is a useful state — investigation works without bots.
+Agent support and bot support can also differ. The agent needs a compatible Paper API; bots need a
+runner built for the server's protocol. So a server may be readable by the agent before bots can
+join it — inspection, logs and events all still work without them.
 
 ---
 
