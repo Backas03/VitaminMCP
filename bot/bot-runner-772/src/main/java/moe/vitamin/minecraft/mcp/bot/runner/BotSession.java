@@ -2,6 +2,7 @@ package moe.vitamin.minecraft.mcp.bot.runner;
 
 import moe.vitamin.minecraft.mcp.bot.core.BotIdentity;
 import moe.vitamin.minecraft.mcp.bot.core.ForwardingHandshake;
+import moe.vitamin.minecraft.mcp.bot.core.RunnerProtocol;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
@@ -73,6 +74,30 @@ public final class BotSession implements AutoCloseable {
 
     /** Title of the open menu, as plain text, for diagnostics and matching. */
     private volatile String containerTitle;
+
+    /**
+     * The menu's contents as the client was told them.
+     *
+     * <p>Kept because the server-side inventory is not always the same thing. A plugin that
+     * draws its menu by sending packets — the usual approach when ProtocolLib or packetevents is
+     * involved — leaves the Bukkit inventory empty and paints the screen directly. Asking the
+     * server then reports an empty chest while the player is looking at a full one, and the
+     * only place the truth exists is here, in what arrived on the wire.
+     */
+    private volatile org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[] containerItems
+            = new org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[0];
+
+    /** Most recent messages the server sent this bot, oldest first. */
+    private final java.util.Deque<String> messages = new java.util.concurrent.ConcurrentLinkedDeque<>();
+
+    /**
+     * How many messages to keep.
+     *
+     * <p>Enough for the join sequence plus whatever a command replies, and bounded because a bot
+     * left connected to a busy server would otherwise accumulate every public chat line for as
+     * long as it lives.
+     */
+    private static final int MAX_MESSAGES = 100;
 
     /** No menu open. The player's own inventory is container 0, so -1 is the free sentinel. */
     public static final int NO_CONTAINER = -1;
@@ -328,6 +353,102 @@ public final class BotSession implements AutoCloseable {
         return containerId != NO_CONTAINER;
     }
 
+    /**
+     * The open menu's slots as the client received them, one record per occupied slot.
+     *
+     * <p>{@code slot ␟ itemId ␟ amount ␟ name ␟ customModelData ␟ lore}, joined by ␞.
+     *
+     * <p><b>The item is a numeric id, not a name.</b> The protocol carries a registry index and
+     * MCProtocolLib ships no table to turn it back into {@code DIAMOND_SWORD}; the mapping lives
+     * in the game jar. The agent's own {@code state_query} gives real material names — this is
+     * for the case where that comes back empty because the menu was never in the server's
+     * inventory to begin with. Names, lore and model data do come through, and for a menu those
+     * are what identify a button anyway.
+     */
+    public String clientMenuItems() {
+        var items = containerItems;
+        StringBuilder out = new StringBuilder();
+        for (int slot = 0; slot < items.length; slot++) {
+            var item = items[slot];
+            if (item == null) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append(RunnerProtocol.RECORD_SEPARATOR);
+            }
+            out.append(slot).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(item.getId()).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(item.getAmount()).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(RunnerProtocol.sanitize(nameOf(item))).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(modelDataOf(item)).append(RunnerProtocol.UNIT_SEPARATOR)
+                    .append(RunnerProtocol.sanitize(loreOf(item)));
+        }
+        return out.toString();
+    }
+
+    private static String nameOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var custom = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.CUSTOM_NAME);
+        if (custom == null) {
+            custom = components.get(
+                    org.geysermc.mcprotocollib.protocol.data.game.item.component
+                            .DataComponentTypes.ITEM_NAME);
+        }
+        return custom == null ? "" : PlainTextComponentSerializer.plainText().serialize(custom);
+    }
+
+    private static String loreOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var lore = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.LORE);
+        if (lore == null || lore.isEmpty()) {
+            return "";
+        }
+        return lore.stream()
+                .map(line -> PlainTextComponentSerializer.plainText().serialize(line))
+                .collect(java.util.stream.Collectors.joining(" | "));
+    }
+
+    /** @return the first float of the model data component, or empty when it carries none */
+    private static String modelDataOf(
+            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
+        var components = item.getDataComponentsPatch();
+        if (components == null) {
+            return "";
+        }
+        var model = components.get(
+                org.geysermc.mcprotocollib.protocol.data.game.item.component
+                        .DataComponentTypes.CUSTOM_MODEL_DATA);
+        if (model == null) {
+            return "";
+        }
+        // Strings first: a pack keyed on them is the modern idiom, and the floats are often
+        // absent entirely when it is.
+        if (model.strings() != null && !model.strings().isEmpty()) {
+            return String.join(",", model.strings());
+        }
+        if (model.floats() != null && !model.floats().isEmpty()) {
+            return String.valueOf(model.floats().get(0));
+        }
+        return "";
+    }
+
+    /** Messages the server sent this bot, oldest first, joined by ␞. */
+    public String receivedMessages() {
+        return String.join(String.valueOf(RunnerProtocol.RECORD_SEPARATOR), messages);
+    }
+
     /** A readable position, for failure messages. */
     public String describePosition() {
         return position == null ? "unknown" : x() + ", " + y() + ", " + z();
@@ -440,6 +561,7 @@ public final class BotSession implements AutoCloseable {
             }
 
             trackContainer(packet);
+            trackMessages(packet);
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.
@@ -486,9 +608,18 @@ public final class BotSession implements AutoCloseable {
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.inventory.ClientboundContainerSetContentPacket content) {
                 containerStateId = content.getStateId();
+                containerItems = content.getItems();
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.inventory.ClientboundContainerSetSlotPacket slot) {
                 containerStateId = slot.getStateId();
+                // One slot at a time is how a menu is usually filled after it opens, so
+                // following only the full sends would show a permanently empty screen.
+                var current = containerItems;
+                if (slot.getSlot() >= 0 && slot.getSlot() < current.length) {
+                    var updated = java.util.Arrays.copyOf(current, current.length);
+                    updated[slot.getSlot()] = slot.getItem();
+                    containerItems = updated;
+                }
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.inventory.ClientboundContainerClosePacket) {
                 // The server can close a menu on its own — a plugin moving the player to
@@ -497,6 +628,40 @@ public final class BotSession implements AutoCloseable {
                 // no longer there.
                 containerId = NO_CONTAINER;
                 containerTitle = null;
+            }
+        }
+
+        /**
+         * Keeps what the server said to this bot.
+         *
+         * <p>Almost every plugin refusal is a message and nothing else — no exception, no console
+         * line, no event. Without this, a command that was declined for lack of permission and
+         * one that silently did nothing are indistinguishable from the server side, which is
+         * exactly the wall this hit on a real server.
+         *
+         * <p>Three packet types because the server picks between them by how the message was
+         * produced: plugins and command feedback use the system one, player chat the signed one,
+         * and anything relayed on a player's behalf the disguised one. A test does not care
+         * which, so they all land in the same place.
+         */
+        private void trackMessages(Packet packet) {
+            String text = null;
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .ClientboundSystemChatPacket system) {
+                text = PlainTextComponentSerializer.plainText().serialize(system.getContent());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.ClientboundDisguisedChatPacket disguised) {
+                text = PlainTextComponentSerializer.plainText().serialize(disguised.getMessage());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.ClientboundPlayerChatPacket chat) {
+                text = chat.getContent();
+            }
+            if (text == null) {
+                return;
+            }
+            messages.addLast(RunnerProtocol.sanitize(text));
+            while (messages.size() > MAX_MESSAGES) {
+                messages.pollFirst();
             }
         }
 

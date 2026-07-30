@@ -249,6 +249,25 @@ public final class ScenarioRunner {
                 yield checkInventory(index, action, step, actual);
             }
 
+            case "assert_message" -> {
+                // What the server said to the player, which is where a refusal lives. It never
+                // reaches the console, so without this a declined command and one that quietly
+                // did nothing are the same observation.
+                String bot = required(step, "bot");
+                String wanted = required(step, "contains");
+                try {
+                    List<String> received =
+                            new BotRunner.BotHandle(bots, bot, 0, 0, 0).inspect().messages();
+                    yield received.stream().anyMatch(line -> line.contains(wanted))
+                            ? ScenarioResult.StepResult.ok(index, action, "said to " + bot)
+                            : ScenarioResult.StepResult.failed(index, action,
+                                    "nothing said to " + bot + " contained '" + wanted + "'",
+                                    String.join(" | ", received));
+                } catch (java.io.IOException e) {
+                    throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+                }
+            }
+
             case "assert_event" -> {
                 ObjectNode arguments = waitArguments(step);
                 arguments.put("condition", "event");

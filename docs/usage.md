@@ -135,6 +135,40 @@ exceptions_recent(hash="...")      # 그 하나만 전체 스택과 함께
 - `view`가 `CRAFTING`/`CREATIVE`/`PLAYER`면 **열린 메뉴가 없다는 뜻**이다. 크리에이티브에서는
   `CREATIVE`가 나온다 — 셋 다 "본인 화면"이다.
 
+## 서버가 못 보는 것 — `bot_inspect`
+
+`state_query`는 **서버 측** Bukkit 인벤토리를 읽습니다. 그런데 ProtocolLib/packetevents로 GUI를 그리는 플러그인은 서버 인벤토리를 비워둔 채 **클라이언트에게 아이템 패킷만 보냅니다.** 그러면:
+
+```
+state_query  →  occupiedSlots: 0   ← 서버는 빈 상자로 알고 있음
+실제 플레이어 →  아이템 가득          ← 클라이언트만 받았음
+```
+
+`bot_inspect`가 **봇의 클라이언트가 실제로 받은 것**을 돌려줍니다:
+
+```jsonc
+{
+  "menu": {"containerId": 1, "title": "응애 메뉴"},
+  "items": [
+    {"slot": 7, "itemId": 983, "amount": 1, "name": "테스트",
+     "customModelData": "1.0", "lore": "테스트1 | 테스트 2"}
+  ],
+  "messages": ["multiplayer.player.joined"]
+}
+```
+
+**아이템은 숫자 id로 나옵니다.** 프로토콜이 이름을 안 실어 보내고 MCProtocolLib에 변환표가 없습니다. 재질 이름이 필요하면 `state_query`를 쓰세요 — 단, 서버가 실제로 그 인벤토리를 들고 있을 때만 나옵니다. 이름·lore·CustomModelData는 컴포넌트로 오므로 양쪽 다 나옵니다.
+
+## 서버가 플레이어에게 한 말 — `messages`
+
+**플러그인의 거절은 대부분 메시지 하나가 전부입니다.** 예외도, 콘솔 로그도, 이벤트도 없습니다. 그래서 에이전트 쪽에서만 보면 *"권한 없어서 거절됨"* 과 *"조용히 아무것도 안 함"* 이 똑같아 보입니다.
+
+`bot_inspect`의 `messages`나 시나리오 스텝으로 확인합니다:
+
+```json
+{"action": "assert_message", "bot": "Tester1", "contains": "권한"}
+```
+
 ## 응답 예산
 
 모든 조회형 툴은 상한이 있다 (기본 200건 / 50KB). 정확한 값은 각 툴 설명에 박혀 있다.
@@ -250,6 +284,7 @@ bot_spawn {"name": "Tester1"}
 | `assert_player` | `bot` | `online`, `gameMode`, `op`, `timeoutMillis` |
 | `assert_event` | `eventType` | `player`, `sinceSequence`, `timeoutMillis` |
 | `assert_inventory` | `bot` | `title`, `size`, `which`, `slots[]` (아래) |
+| `assert_message` | `bot`, `contains` | 서버가 그 봇에게 한 말에 이 문자열이 있는지 |
 
 `assert_inventory`의 `slots[]` 항목:
 
@@ -409,6 +444,8 @@ wait_for inventory_open first.
 | `presented a certificate that no trusted authority signed` | 자체 서명 서버다. 기동 로그의 `tlsFingerprint`를 넣을 것 |
 | `did not present the pinned certificate` | 인증서가 다시 만들어졌다. 새 지문을 로그에서 가져올 것 |
 | 메뉴가 비었다고 나온다 | `wait_for inventory_open`을 안 했다. 아니면 `view`를 볼 것 — `CREATIVE`/`CRAFTING`이면 애초에 안 열린 것이다 |
+| 메뉴는 열렸는데 `occupiedSlots: 0` | 패킷으로 그리는 GUI일 수 있다. `bot_inspect`로 클라이언트가 받은 걸 볼 것 |
+| 명령어가 조용히 아무것도 안 한다 | `bot_inspect`의 `messages`를 볼 것 — 거절 사유가 거기 있다 |
 | 상자가 안 열린다 | 바로 위에 불투명 블록이 있다 (게임 규칙) |
 | `click_slot`이 `has no menu open`으로 실패 | 열리기 전에 클릭했다. `wait_for inventory_open` 먼저 |
 | 봇은 붙었는데 아무것도 안 먹는다 | 착지 전이다. `bot_spawn`은 착지까지 기다리지만, 직접 몰 때는 발밑이 아직 공기일 수 있다 |

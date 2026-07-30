@@ -161,6 +161,15 @@ public final class RunnerMain {
                                 ? "" : bot.containerTitle().replace('\t', ' '));
             }
 
+            case RunnerProtocol.INSPECT -> {
+                BotSession bot = require(command[1]);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb,
+                        String.valueOf(bot.containerId()),
+                        RunnerProtocol.sanitize(bot.containerTitle()),
+                        bot.clientMenuItems(),
+                        bot.receivedMessages());
+            }
+
             case RunnerProtocol.POSITION -> position(RunnerProtocol.POSITION, require(command[1]));
 
             default -> RunnerProtocol.encode(

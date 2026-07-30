@@ -77,6 +77,17 @@ final class SessionTools {
                                     + "the address it really connects from.");
                 }));
 
+        tools.add(tool("bot_inspect",
+                "What the bot's client was told, which the server cannot always be asked. Use "
+                        + "when state_query reports an empty menu but a player would see a full "
+                        + "one — a plugin drawing its GUI with packets leaves the server-side "
+                        + "inventory empty. Also returns the messages the server sent this bot, "
+                        + "which is where a refusal like 'you lack permission' appears; those "
+                        + "never reach the console, so a declined command and one that did "
+                        + "nothing look identical from the agent's side. Item ids are numeric "
+                        + "here — the protocol carries no names.",
+                properties -> string(properties, "name", "Bot name.")));
+
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
                         + "command, chat, console, use_block, click_slot, close_menu, wait_for, "
@@ -116,6 +127,7 @@ final class SessionTools {
             case "session_start" -> sessionStart(args);
             case "session_reset" -> sessionReset();
             case "bot_spawn" -> botSpawn(args);
+            case "bot_inspect" -> botInspect(args);
             case "bot_run_scenario" -> runScenario(args);
             default -> {
                 if (PROXIED.contains(name)) {
@@ -198,6 +210,43 @@ final class SessionTools {
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    private JsonNode botInspect(JsonNode args) {
+        String name = args.path("name").asText("");
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("bot_inspect needs 'name'.");
+        }
+        try {
+            BotRunner.ClientView view = new BotRunner.BotHandle(
+                    require().bots(), name, 0, 0, 0).inspect();
+
+            ObjectNode result = MAPPER.createObjectNode();
+            if (view.menu() == null) {
+                result.putNull("menu");
+            } else {
+                ObjectNode menu = result.putObject("menu");
+                menu.put("containerId", view.menu().containerId());
+                menu.put("title", view.menu().title());
+            }
+
+            ArrayNode items = result.putArray("items");
+            for (BotRunner.MenuItem item : view.items()) {
+                ObjectNode entry = items.addObject();
+                entry.put("slot", item.slot());
+                entry.put("itemId", item.itemId());
+                entry.put("amount", item.amount());
+                entry.put("name", item.name());
+                entry.put("customModelData", item.customModelData());
+                entry.put("lore", item.lore());
+            }
+
+            ArrayNode messages = result.putArray("messages");
+            view.messages().forEach(messages::add);
+            return result;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);
         }
     }
 
