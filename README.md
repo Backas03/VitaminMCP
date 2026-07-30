@@ -300,3 +300,21 @@ Server jars are downloaded from the PaperMC API and started natively (no Docker,
 
 Every version needs a runner that speaks its protocol. Without one the server rejects the bot with
 an honest `Outdated client!`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+The distributed jars bundle third-party code, relocated so it cannot collide with the server or
+other plugins:
+
+| | Bundled in | License |
+|---|---|---|
+| Jackson | `VitaminMCP.jar`, `mcp-server.jar` | Apache-2.0 |
+| ClassGraph | `VitaminMCP.jar` | MIT |
+| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner-772.jar` | MIT / Apache-2.0 |
+
+Their license and notice files travel inside the jars under `META-INF/` — relocating a package
+renames it, it does not lift the obligation to carry the notice.
+
+`paper-api`, `log4j-core` and the JetBrains annotations are compile-only and are not distributed.
