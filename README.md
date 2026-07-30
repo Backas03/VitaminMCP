@@ -49,6 +49,23 @@ whole trace of what the server did in between.
 | Minecraft server | **Paper 1.21.8 or later**. Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
 | Java | 21, for both building and running |
 
+### Version support
+
+| Versions | Status | |
+|---|---|---|
+| 1.18 – 1.21.6 | Planned | Below the current agent floor. Needs the floor lowered and a runner per protocol |
+| **1.21.7, 1.21.8** | **Supported** | Protocol 772 — one runner covers both. Both run in the matrix ([versions.yaml](versions.yaml)) |
+| 1.21.9 – 26.2 | Planned | Changed protocol. Needs a sibling `bot-runner-<protocol>` built against the matching MCProtocolLib release |
+
+Only the middle row is tested today; the other two are intent, not a promise about a date. Pointing
+the harness at a version outside it fails honestly rather than quietly — an unsupported server
+refuses to load the agent, and a bot without a runner for its protocol is rejected with
+`Outdated client!`.
+
+The two halves can move independently. The agent's floor is what Paper API it compiles against; the
+bot's reach is which protocol runners exist. A version can be readable by the agent before any bot
+can connect to it, and that is a useful state — investigation works without bots.
+
 ## Three artifacts
 
 ```bash
