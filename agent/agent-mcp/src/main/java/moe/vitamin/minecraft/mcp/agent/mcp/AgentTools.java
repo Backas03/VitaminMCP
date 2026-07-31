@@ -491,8 +491,45 @@ final class AgentTools {
         return value.isEmpty() ? null : value;
     }
 
-    private static Set<String> stringSet(JsonNode node) {
-        if (node == null || !node.isArray() || node.isEmpty()) {
+    /**
+     * An array argument, however the caller managed to express it.
+     *
+     * <p>Lenient about the shape on purpose. The tools here are proxied by mcp-server, which
+     * publishes them without a parameter schema — it cannot know them until a session exists —
+     * so a client with no types to go on sends everything as a string. Numbers survived that
+     * because parsing them is forgiving; arrays did not, and a rejected {@code types} became a
+     * null filter, so {@code events_query} quietly answered a different question from the one
+     * it was asked. Silently returning everything is the worst possible response to an argument
+     * that was not understood.
+     */
+    private Set<String> stringSet(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isTextual()) {
+            String raw = node.asText().trim();
+            if (raw.isEmpty()) {
+                return null;
+            }
+            if (raw.startsWith("[")) {
+                try {
+                    return stringSet(mapper.readTree(raw));
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    throw new IllegalArgumentException(
+                            "Could not read as a list: " + raw, e);
+                }
+            }
+            // A bare name, or several separated by commas — what someone types by hand.
+            Set<String> parsed = new LinkedHashSet<>();
+            for (String part : raw.split(",")) {
+                String value = part.trim();
+                if (!value.isEmpty()) {
+                    parsed.add(value);
+                }
+            }
+            return parsed.isEmpty() ? null : parsed;
+        }
+        if (!node.isArray() || node.isEmpty()) {
             return null;
         }
         Set<String> values = new LinkedHashSet<>();

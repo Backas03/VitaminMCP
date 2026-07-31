@@ -55,6 +55,76 @@ class AgentToolsTest {
 
     // ------------------------------------------------------------- discovery
 
+    /**
+     * A filter that arrives as a string is still a filter.
+     *
+     * <p>These tools are proxied by mcp-server, which publishes them without a parameter schema
+     * — it cannot know one until a session exists — so a client with no types to work from sends
+     * every argument as a string. Numbers survived that, because parsing them is forgiving.
+     * Arrays did not: the filter was dropped and the query answered a different question from
+     * the one it was asked, which on a busy server reads as "lots of events" rather than as a
+     * bug. Found by asking a live server for one event type and being handed another.
+     */
+    @Test
+    void aTypeFilterSurvivesArrivingAsAJsonString() {
+        ObjectNode arguments = mapper.createObjectNode();
+        arguments.put("types", "[\"BlockBreakEvent\",\"BlockPlaceEvent\"]");
+
+        tools().call("events_query", arguments);
+
+        assertEquals(List.of("BlockBreakEvent", "BlockPlaceEvent"),
+                List.copyOf(queries.lastTypes));
+    }
+
+    @Test
+    void aTypeFilterAcceptsPlainNames() {
+        ObjectNode arguments = mapper.createObjectNode();
+        arguments.put("types", "BlockBreakEvent, BlockPlaceEvent");
+
+        tools().call("events_query", arguments);
+
+        assertEquals(List.of("BlockBreakEvent", "BlockPlaceEvent"),
+                List.copyOf(queries.lastTypes));
+    }
+
+    @Test
+    void aTypeFilterStillAcceptsARealArray() {
+        ObjectNode arguments = mapper.createObjectNode();
+        arguments.putArray("types").add("BlockBreakEvent");
+
+        tools().call("events_query", arguments);
+
+        assertEquals(List.of("BlockBreakEvent"), List.copyOf(queries.lastTypes));
+    }
+
+    /**
+     * The same leniency, for the one other array argument.
+     *
+     * <p>Worth its own test because the consequence is different in kind: a dropped permission
+     * list comes back as {@code "permissions": []}, which does not look like a lost argument. It
+     * looks like the player has none.
+     */
+    @Test
+    void aPermissionListSurvivesArrivingAsAJsonString() {
+        ObjectNode arguments = mapper.createObjectNode();
+        arguments.put("kind", "player");
+        arguments.put("target", "Tester1");
+        arguments.put("permissions", "[\"essentials.fly\"]");
+
+        tools().call("state_query", arguments);
+
+        assertEquals(List.of("essentials.fly"), List.copyOf(queries.lastPermissions));
+    }
+
+    @Test
+    void anUnreadableFilterIsRefusedRatherThanIgnored() {
+        ObjectNode arguments = mapper.createObjectNode();
+        arguments.put("types", "[this is not json");
+
+        // Silently returning everything is the worst answer to an argument nobody understood.
+        assertThrows(RuntimeException.class, () -> tools().call("events_query", arguments));
+    }
+
     @Test
     void exposesTheToolsTheDesignSpecifies() {
         ArrayNode listed = tools().listTools();
@@ -308,6 +378,7 @@ class AgentToolsTest {
 
         int lastLimit;
         Collection<String> lastTypes = List.of();
+        Collection<String> lastPermissions = List.of();
         String lastPlayer;
         String lastCursor;
         LogLevel lastLevel;
@@ -376,6 +447,7 @@ class AgentToolsTest {
         @Override
         public moe.vitamin.minecraft.mcp.contract.PlayerState playerState(
                 String name, Collection<String> permissionNodes) {
+            this.lastPermissions = permissionNodes == null ? List.of() : permissionNodes;
             return new moe.vitamin.minecraft.mcp.contract.PlayerState(
                     name, "00000000-0000-0000-0000-000000000000", true, "127.0.0.1", "CREATIVE",
                     false, "world", 1, 2, 3, List.of());
