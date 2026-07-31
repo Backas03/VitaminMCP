@@ -58,9 +58,15 @@ public final class ManagedServer implements AutoCloseable {
         Files.createDirectories(directory);
         Files.writeString(directory.resolve("eula.txt"), "eula=true\n");
 
+        // enforce-secure-profile defaults to true, and a bot has no Mojang signing key. With it
+        // on, the server accepts the bot's login but refuses any command carrying a signable
+        // argument — `/say`, `/me`, `/msg` — with `chat.disabled.invalid_command_signature`,
+        // which arrives as a message to the player and nothing in the console. A scenario that
+        // ran a command as a bot then failed with no visible reason at all.
         Files.writeString(directory.resolve("server.properties"), """
                 server-port=%d
                 online-mode=false
+                enforce-secure-profile=false
                 max-players=20
                 view-distance=6
                 simulation-distance=6

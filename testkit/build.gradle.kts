@@ -22,6 +22,8 @@ dependencies {
 // Live scenarios are skipped unless asked for, so `./gradlew build` needs no server:
 //   ./gradlew :testkit:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.token=...
 tasks.test {
+    // Every property has to appear here or it is silently ignored, which once turned a
+    // 50-iteration flakiness run into 5 that reported success.
     listOf(
         "vitaminmcp.liveServer",
         "vitaminmcp.host",
@@ -30,6 +32,11 @@ tasks.test {
         "vitaminmcp.token",
         "vitaminmcp.agentJar",
         "vitaminmcp.runnerJar",
+        "vitaminmcp.version",
+        "vitaminmcp.paperBuild",
+        "vitaminmcp.protocol",
+        "vitaminmcp.paperCache",
+        "vitaminmcp.repeat",
     ).forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }

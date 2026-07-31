@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -42,7 +43,7 @@ class SessionLiveTest {
             // The sidebar and any boss bars arrive over the ticks after join, not with it.
             Thread.sleep(4000);
 
-            BotRunner.ClientView view =
+            ClientView view =
                     new BotRunner.BotHandle(session.bots(), "ResetTester", 0, 0, 0).inspect();
 
             System.out.println("messages   = " + view.messages());

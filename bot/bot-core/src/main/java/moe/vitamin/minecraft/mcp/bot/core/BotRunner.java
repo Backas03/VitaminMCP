@@ -11,6 +11,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
+import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
+import moe.vitamin.minecraft.mcp.bot.spi.OpenMenu;
+import moe.vitamin.minecraft.mcp.bot.spi.Scoreboard;
 
 /**
  * A bot runner process, and the bots inside it.
@@ -32,6 +37,7 @@ public final class BotRunner implements AutoCloseable {
     private final BufferedWriter toRunner;
     private final BufferedReader fromRunner;
     private final List<String> live = new ArrayList<>();
+    private int protocol;
 
     private BotRunner(Process process) {
         this.process = process;
@@ -44,7 +50,8 @@ public final class BotRunner implements AutoCloseable {
     /**
      * Launches the runner jar and waits until it is ready.
      *
-     * @param runnerJar the shaded runner for the protocol the server speaks
+     * @param runnerJar the runner bundle. It picks its own backend by asking the server what it
+     *                  speaks, so the same jar serves every supported version
      * @param javaHome  JVM to run it with
      * @param host      server the bots will connect to
      * @param port      server's port
@@ -63,11 +70,23 @@ public final class BotRunner implements AutoCloseable {
 
         BotRunner runner = new BotRunner(process);
         String ready = runner.fromRunner.readLine();
-        if (!RunnerProtocol.READY.equals(ready)) {
+        String[] fields = RunnerProtocol.decode(ready == null ? "" : ready);
+        if (fields.length == 0 || !RunnerProtocol.READY.equals(fields[0])) {
             runner.close();
+            // The runner reports a startup failure as `err startup <reason>`, so this carries
+            // the reason — no backend for that protocol, an unreachable server — rather than
+            // the fact that a line was not the one expected.
             throw new IOException("The bot runner did not start. It said: " + ready);
         }
+        // Which backend answered. The runner chooses it by pinging the server, so a surprise
+        // here is worth being able to see rather than inferring from a later packet error.
+        runner.protocol = fields.length > 1 ? Integer.parseInt(fields[1]) : 0;
         return runner;
+    }
+
+    /** The protocol the loaded backend speaks, or 0 if the runner did not say. */
+    public int protocol() {
+        return protocol;
     }
 
     /** Connects a bot and waits until it is standing in the world. */
@@ -317,50 +336,8 @@ public final class BotRunner implements AutoCloseable {
         }
     }
 
-    /** A menu the server has opened on the client, as the client sees it. */
-    public record OpenMenu(int containerId, String title) {}
-
-    /**
-     * Everything the client knows that the server will not report.
-     *
-     * @param menu       the open menu, or {@code null} if none
-     * @param items      its occupied slots as they arrived on the wire
-     * @param messages   what the server has said to this bot, oldest first. Action bar, title
-     *                   and subtitle text is included, prefixed with where it appeared
-     * @param bossBars   boss bars on screen now
-     * @param scoreboard the sidebar scoreboard, or {@code null} when none is displayed
-     */
-    public record ClientView(
-            OpenMenu menu,
-            List<MenuItem> items,
-            List<String> messages,
-            List<BossBar> bossBars,
-            Scoreboard scoreboard) {}
-
-    /**
-     * A boss bar as the client would draw it.
-     *
-     * @param progress 0..1, the fraction of the bar that is filled
-     * @param color    one of Minecraft's six bar colours, or empty if the server did not say
-     */
-    public record BossBar(String title, float progress, String color) {}
-
-    /**
-     * The sidebar scoreboard.
-     *
-     * @param lines highest score first, which is the order the client draws them in
-     */
-    public record Scoreboard(String title, List<String> lines) {}
-
-    /**
-     * One slot of a menu, as the client received it.
-     *
-     * @param itemId          registry index, not a name — the protocol carries no names and
-     *                        MCProtocolLib ships no table to recover them. Use the agent's
-     *                        {@code state_query} when the material matters and the server
-     *                        actually holds the menu
-     * @param customModelData the model data selector, string keys preferred over the first float
-     */
-    public record MenuItem(
-            int slot, int itemId, int amount, String name, String customModelData, String lore) {}
+    // OpenMenu, ClientView, BossBar, Scoreboard and MenuItem used to be nested here. They moved
+    // to moe.vitamin.minecraft.mcp.bot.spi, where the backend that produces them can name them
+    // too — the same records now describe the value on both sides of the runner process instead
+    // of one side owning the type and the other reconstructing it.
 }

@@ -23,9 +23,12 @@ val dist by tasks.registering(Copy::class) {
 
     // Named individually rather than swept up from every module: most modules are libraries
     // that are not part of an install, and a sweep would quietly start shipping one.
-    from(project(":agent-mcp").tasks.named("shadowJar"))       // → server's plugins/
-    from(project(":mcp-server").tasks.named("shadowJar"))      // → launched by the MCP client
-    from(project(":bot-runner-772").tasks.named("shadowJar"))  // → launched by mcp-server
+    from(project(":agent-mcp").tasks.named("shadowJar"))    // → server's plugins/
+    from(project(":mcp-server").tasks.named("shadowJar"))   // → launched by the MCP client
+    from(project(":bot-runner").tasks.named("shadowJar"))   // → launched by mcp-server
+
+    // One runner, whatever versions are supported. The per-protocol backends are inside it as
+    // resources and are never installed separately (docs/multi-version.md §2.1).
 
     into(layout.buildDirectory.dir("dist"))
 }

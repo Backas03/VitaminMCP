@@ -22,11 +22,20 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":agent-core" to setOf(":contract"),
     ":agent-mcp" to setOf(":agent-core", ":contract"),
     ":bot-core" to setOf(":contract"),
-    ":bot-runner-772" to setOf(":bot-core", ":contract"),
+    ":bot-runner" to setOf(":bot-core", ":contract"),
     ":orchestrator" to setOf(":contract"),
     ":testkit" to setOf(":bot-core", ":orchestrator", ":contract"),
     ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
 )
+
+// Backends are created by copying a directory, so they are matched by shape rather than listed —
+// otherwise the one edit needed to add a protocol would be two. The whitelist stays exhaustive:
+// a module matching neither the map nor this pattern still fails the build.
+fun allowedFor(path: String): Set<String>? = when {
+    allowedProjectDependencies.containsKey(path) -> allowedProjectDependencies[path]
+    path.startsWith(":backend-") -> setOf(":bot-core", ":contract")
+    else -> null
+}
 
 // The invariant is about what a module may *compile* against, so runtime-only and test
 // configurations are deliberately out of scope.
@@ -43,7 +52,7 @@ val checkModuleDependencies = tasks.register("checkModuleDependencies") {
 // compared once the module's build script has finished evaluating. Both sides are captured
 // here as plain strings, which keeps the task usable with the configuration cache.
 afterEvaluate {
-    val allowed = allowedProjectDependencies[modulePath]
+    val allowed = allowedFor(modulePath)
     val declared = checkedConfigurations
         .mapNotNull { configurations.findByName(it) }
         .flatMap { it.dependencies.withType(ProjectDependency::class.java) }

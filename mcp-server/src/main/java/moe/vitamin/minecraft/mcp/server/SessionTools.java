@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
+import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
+import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
 
@@ -234,7 +237,7 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_inspect needs 'name'.");
         }
         try {
-            BotRunner.ClientView view = new BotRunner.BotHandle(
+            ClientView view = new BotRunner.BotHandle(
                     require().bots(), name, 0, 0, 0).inspect();
 
             ObjectNode result = MAPPER.createObjectNode();
@@ -247,7 +250,7 @@ final class SessionTools {
             }
 
             ArrayNode items = result.putArray("items");
-            for (BotRunner.MenuItem item : view.items()) {
+            for (MenuItem item : view.items()) {
                 ObjectNode entry = items.addObject();
                 entry.put("slot", item.slot());
                 entry.put("itemId", item.itemId());
@@ -261,7 +264,7 @@ final class SessionTools {
             view.messages().forEach(messages::add);
 
             ArrayNode bossBars = result.putArray("bossBars");
-            for (BotRunner.BossBar bar : view.bossBars()) {
+            for (BossBar bar : view.bossBars()) {
                 ObjectNode entry = bossBars.addObject();
                 entry.put("title", bar.title());
                 entry.put("progress", bar.progress());
@@ -320,9 +323,10 @@ final class SessionTools {
      * this one is means they already know where the runner is. Asking them to type an absolute
      * path to a file we can see from here was friction for nothing.
      *
-     * <p>Refuses to guess when there is more than one. Runners are named for the protocol they
-     * speak, and picking the wrong one produces "Outdated client!" from the server — a failure
-     * far enough from the cause to be worth avoiding.
+     * <p>There is one runner now, whatever versions are supported: it carries a backend per
+     * protocol and picks the right one by asking the server what it speaks. The check for more
+     * than one survives because a directory with two builds of it in is still ambiguous, but it
+     * is no longer something a supported install produces.
      */
     private static java.nio.file.Path runnerBesideThisJar() {
         java.nio.file.Path here;
