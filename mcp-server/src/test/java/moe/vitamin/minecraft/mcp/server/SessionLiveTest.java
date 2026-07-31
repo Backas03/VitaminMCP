@@ -1,9 +1,11 @@
 package moe.vitamin.minecraft.mcp.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -24,6 +26,46 @@ class SessionLiveTest {
     private static final String TOKEN = System.getProperty("vitaminmcp.token", "");
     private static final Path RUNNER_JAR =
             Path.of(System.getProperty("vitaminmcp.runnerJar", ""));
+
+    /**
+     * The screen the server draws on a player, which it keeps nowhere else.
+     *
+     * <p>Boss bars and the sidebar are assembled from packets that each carry one change, so the
+     * current state exists only in the client. This asserts the round trip parses and reports
+     * what was actually on screen, which is the part no other tool can answer.
+     */
+    @Test
+    void theClientViewCarriesTheWholeScreen() throws Exception {
+        Session session = new Session(HOST, PORT, MCP_PORT, TOKEN, false, null, RUNNER_JAR);
+        try {
+            session.bots().spawn("ResetTester");
+            // The sidebar and any boss bars arrive over the ticks after join, not with it.
+            Thread.sleep(4000);
+
+            BotRunner.ClientView view =
+                    new BotRunner.BotHandle(session.bots(), "ResetTester", 0, 0, 0).inspect();
+
+            System.out.println("messages   = " + view.messages());
+            System.out.println("bossBars   = " + view.bossBars());
+            System.out.println("scoreboard = " + view.scoreboard());
+
+            // Shape, not content: what a given server draws is its own business, but the fields
+            // have to survive the wire rather than arriving null or throwing.
+            assertNotNull(view.messages(), "messages");
+            assertNotNull(view.bossBars(), "bossBars");
+            view.bossBars().forEach(bar -> {
+                assertNotNull(bar.title());
+                assertTrue(bar.progress() >= 0.0f && bar.progress() <= 1.0f,
+                        "progress out of range: " + bar.progress());
+            });
+            if (view.scoreboard() != null) {
+                assertNotNull(view.scoreboard().title());
+                assertNotNull(view.scoreboard().lines());
+            }
+        } finally {
+            session.close();
+        }
+    }
 
     /**
      * Reset has to leave the session usable, which is the whole difference between it and close.

@@ -164,13 +164,45 @@ the real player →  a full menu      ← only the client received it
     {"slot": 7, "itemId": 983, "amount": 1, "name": "Test",
      "customModelData": "1.0", "lore": "line one | line two"}
   ],
-  "messages": ["multiplayer.player.joined"]
+  "messages": ["multiplayer.player.joined", "[action bar] You lack permission"],
+  "bossBars": [{"title": "Event ends in 4:12", "progress": 0.7, "color": "PURPLE"}],
+  "scoreboard": {"title": "Server", "lines": ["Money: 1,200", "Region: spawn"]}
 }
 ```
 
 **Items come back as numeric ids.** The protocol does not carry names and MCProtocolLib has no
-lookup table. Use `state_query` when you need material names — but only when the server really holds
-that inventory. Name, lore and CustomModelData arrive as components, so both sides show them.
+lookup table. Use `state_query` when you need material names — but only when the server really
+holds that inventory. Name, lore and CustomModelData arrive as components, so both sides show them.
+
+### The rest of the screen
+
+Everything a server draws on a player that never reaches the server's own view is here.
+
+| Field | What |
+|---|---|
+| `messages` | chat, plus action bar, title and subtitle — each prefixed with where it appeared |
+| `bossBars` | boss bars on screen now, with `progress` (0..1) and `color` |
+| `scoreboard` | the sidebar: `title` and `lines`, highest score first — the order the client draws |
+
+The split is deliberate. **Messages are things that were said; boss bars and scoreboards are things
+that are showing.** A refusal is a message and is gone a moment later; a scoreboard holds a
+player's live state — money, region, quest progress — for as long as they are online, and asking
+"what does it say now" is a different question from "what was I told".
+
+Prefixes matter for the same reason: "above the hotbar, briefly" and "in chat, persistently" are
+different claims about what a person would actually notice, and a test asserting on a refusal
+usually cares which.
+
+Only the sidebar slot is followed. The player-list and below-name slots hold numbers rather than
+the lines anyone writes a test about.
+
+**Lines come back as the player reads them**, which takes some assembling. A sidebar line's
+"entry" is a key, not text: servers register one blank-looking entry per line — a colour code,
+since entries have to be unique — and put the words in that entry's *team* prefix and suffix. Read
+the scores alone and a fifteen-line scoreboard arrives as `["§e", "§d", "§c", …]`, which looks like
+data and is not. The prefix and suffix are joined back on, and the entry's formatting codes
+dropped, so what you get is the line as drawn. Blank spacer lines stay blank rather than
+disappearing, because their position is part of the layout.
 
 ## What the server told the player — `messages`
 

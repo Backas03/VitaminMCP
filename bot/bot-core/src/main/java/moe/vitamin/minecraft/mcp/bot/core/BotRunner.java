@@ -291,10 +291,20 @@ public final class BotRunner implements AutoCloseable {
                         Integer.parseInt(parts[0]), Integer.parseInt(parts[1]),
                         Integer.parseInt(parts[2]), parts[3], parts[4], parts[5]));
             }
+            List<BossBar> bossBars = new ArrayList<>();
+            for (String record : RunnerProtocol.records(reply[6])) {
+                String[] parts = RunnerProtocol.fields(record);
+                bossBars.add(new BossBar(
+                        parts[0], Float.parseFloat(parts[1]), parts[2]));
+            }
+
             return new ClientView(
                     containerId < 0 ? null : new OpenMenu(containerId, reply[3]),
                     List.copyOf(items),
-                    List.of(RunnerProtocol.records(reply[5])));
+                    List.of(RunnerProtocol.records(reply[5])),
+                    List.copyOf(bossBars),
+                    reply[7].isEmpty() ? null : new Scoreboard(
+                            reply[7], List.of(RunnerProtocol.records(reply[8]))));
         }
 
         /** The bot's position now, which may differ from where it spawned. */
@@ -313,11 +323,34 @@ public final class BotRunner implements AutoCloseable {
     /**
      * Everything the client knows that the server will not report.
      *
-     * @param menu     the open menu, or {@code null} if none
-     * @param items    its occupied slots as they arrived on the wire
-     * @param messages what the server has said to this bot, oldest first
+     * @param menu       the open menu, or {@code null} if none
+     * @param items      its occupied slots as they arrived on the wire
+     * @param messages   what the server has said to this bot, oldest first. Action bar, title
+     *                   and subtitle text is included, prefixed with where it appeared
+     * @param bossBars   boss bars on screen now
+     * @param scoreboard the sidebar scoreboard, or {@code null} when none is displayed
      */
-    public record ClientView(OpenMenu menu, List<MenuItem> items, List<String> messages) {}
+    public record ClientView(
+            OpenMenu menu,
+            List<MenuItem> items,
+            List<String> messages,
+            List<BossBar> bossBars,
+            Scoreboard scoreboard) {}
+
+    /**
+     * A boss bar as the client would draw it.
+     *
+     * @param progress 0..1, the fraction of the bar that is filled
+     * @param color    one of Minecraft's six bar colours, or empty if the server did not say
+     */
+    public record BossBar(String title, float progress, String color) {}
+
+    /**
+     * The sidebar scoreboard.
+     *
+     * @param lines highest score first, which is the order the client draws them in
+     */
+    public record Scoreboard(String title, List<String> lines) {}
 
     /**
      * One slot of a menu, as the client received it.

@@ -136,7 +136,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 | | |
 |---|---|
 | `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
-| `bot_inspect` | What the bot's client was actually sent — menu contents and the messages the server gave it |
+| `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle), boss bars and the sidebar scoreboard |
 | `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
 
 ### Server
@@ -213,9 +213,10 @@ Verification is the point, so this is where the surface is widest.
 
 Two of these exist because the server alone cannot answer the question:
 
-- **`assert_message`** — a plugin's refusal is usually one chat message and nothing else. No
-  exception, no console line, no event. Without it, "denied for lack of permission" and "silently
-  did nothing" are indistinguishable.
+- **`assert_message`** — a plugin's refusal is usually one message and nothing else. No exception,
+  no console line, no event. Without it, "denied for lack of permission" and "silently did nothing"
+  are indistinguishable. It matches action bar and title text too, since a plugin is as likely to
+  refuse above the hotbar as in chat.
 - **`assert_inventory` with `customModelData`** — with a resource pack, two buttons of the same
   material and name can be entirely different icons. Checking material and name alone misses icon
   bugs.

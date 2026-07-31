@@ -85,7 +85,13 @@ final class SessionTools {
                         + "which is where a refusal like 'you lack permission' appears; those "
                         + "never reach the console, so a declined command and one that did "
                         + "nothing look identical from the agent's side. Item ids are numeric "
-                        + "here — the protocol carries no names.",
+                        + "here — the protocol carries no names. 'messages' also covers action "
+                        + "bar, title and subtitle text, each prefixed with where it appeared, "
+                        + "since a plugin is as likely to refuse above the hotbar as in chat. "
+                        + "'bossBars' and 'scoreboard' are on-screen state rather than messages: "
+                        + "they persist, and a server's live view of a player — timers, money, "
+                        + "region, quest progress — is usually drawn there and nowhere the agent "
+                        + "can see.",
                 properties -> string(properties, "name", "Bot name.")));
 
         tools.add(tool("bot_run_scenario",
@@ -253,6 +259,23 @@ final class SessionTools {
 
             ArrayNode messages = result.putArray("messages");
             view.messages().forEach(messages::add);
+
+            ArrayNode bossBars = result.putArray("bossBars");
+            for (BotRunner.BossBar bar : view.bossBars()) {
+                ObjectNode entry = bossBars.addObject();
+                entry.put("title", bar.title());
+                entry.put("progress", bar.progress());
+                entry.put("color", bar.color());
+            }
+
+            if (view.scoreboard() == null) {
+                result.putNull("scoreboard");
+            } else {
+                ObjectNode scoreboard = result.putObject("scoreboard");
+                scoreboard.put("title", view.scoreboard().title());
+                ArrayNode lines = scoreboard.putArray("lines");
+                view.scoreboard().lines().forEach(lines::add);
+            }
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);

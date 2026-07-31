@@ -197,7 +197,10 @@ public final class RunnerMain {
                         String.valueOf(bot.containerId()),
                         RunnerProtocol.sanitize(bot.containerTitle()),
                         bot.clientMenuItems(),
-                        bot.receivedMessages());
+                        bot.receivedMessages(),
+                        bot.clientBossBars(),
+                        bot.clientScoreboardTitle(),
+                        bot.clientScoreboardLines());
             }
 
             case RunnerProtocol.POSITION -> position(RunnerProtocol.POSITION, require(command[1]));

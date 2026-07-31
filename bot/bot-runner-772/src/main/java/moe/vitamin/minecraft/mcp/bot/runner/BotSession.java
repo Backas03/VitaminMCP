@@ -135,6 +135,53 @@ public final class BotSession implements AutoCloseable {
             = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
+     * A boss bar the server is showing this bot.
+     *
+     * <p>Kept as current state rather than as a message, because that is what it is: a boss bar
+     * stays on screen until removed, and asking "is it showing, and what does it say" is a
+     * different question from "what was I told". Plugins use them for timers, event progress and
+     * region names, none of which appear anywhere the agent can see.
+     */
+    private record BossBar(String title, float progress, String color) {}
+
+    /** Boss bars currently shown, by the id the server addresses them with. */
+    private final java.util.Map<java.util.UUID, BossBar> bossBars
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Objective name to the title the client would draw above the sidebar. */
+    private final java.util.Map<String, String> objectiveTitles
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** One scoreboard line: the number on the right, and the text the client draws. */
+    private record ScoreLine(int value, String text) {}
+
+    /** Objective name to its lines, keyed by the entry each line belongs to. */
+    private final java.util.Map<String, java.util.Map<String, ScoreLine>> objectiveLines
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Which objective is in the sidebar slot, or null when none is. */
+    private volatile String sidebarObjective;
+
+    /**
+     * The text a team wraps its members' names in.
+     *
+     * <p>Needed because of how scoreboards are actually written. A sidebar line's "entry" is the
+     * key, not the text: servers register one blank-looking entry per line — a colour code, since
+     * entries must be unique — and put the words the player reads in that entry's team prefix and
+     * suffix. Read the scores alone and a fifteen-line scoreboard comes back as
+     * {@code ["§e", "§d", "§c", ...]}, which looks like data and is not.
+     */
+    private record TeamText(String prefix, String suffix) {}
+
+    /** Team name to its prefix and suffix. */
+    private final java.util.Map<String, TeamText> teamText
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Scoreboard entry to the team it belongs to. */
+    private final java.util.Map<String, String> entryTeam
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
      * The nearest tracked entity to a point, or {@link #NO_ENTITY}.
      *
      * <p>Nearest rather than first, so that two NPCs standing close together resolve to the one
@@ -523,6 +570,82 @@ public final class BotSession implements AutoCloseable {
         return String.join(String.valueOf(RunnerProtocol.RECORD_SEPARATOR), messages);
     }
 
+    /** Boss bars on screen now: {@code title ␟ progress ␟ colour}, one record each. */
+    public String clientBossBars() {
+        return bossBars.values().stream()
+                .map(bar -> RunnerProtocol.sanitize(bar.title())
+                        + RunnerProtocol.UNIT_SEPARATOR
+                        + bar.progress()
+                        + RunnerProtocol.UNIT_SEPARATOR
+                        + bar.color())
+                .collect(java.util.stream.Collectors.joining(
+                        String.valueOf(RunnerProtocol.RECORD_SEPARATOR)));
+    }
+
+    /** Title of the sidebar scoreboard, or empty when nothing is displayed there. */
+    public String clientScoreboardTitle() {
+        String objective = sidebarObjective;
+        return objective == null
+                ? ""
+                : RunnerProtocol.sanitize(objectiveTitles.getOrDefault(objective, objective));
+    }
+
+    /**
+     * The sidebar's lines, highest score first — the order the client draws them in.
+     *
+     * <p>Sorted here rather than by the caller because the sort is part of what the player sees:
+     * the scores are a layout instruction, not data anyone reads.
+     */
+    public String clientScoreboardLines() {
+        String objective = sidebarObjective;
+        if (objective == null) {
+            return "";
+        }
+        var lines = objectiveLines.get(objective);
+        if (lines == null) {
+            return "";
+        }
+        return lines.entrySet().stream()
+                .sorted(java.util.Comparator.comparingInt(
+                        (java.util.Map.Entry<String, ScoreLine> e) -> e.getValue().value())
+                        .reversed())
+                .map(entry -> RunnerProtocol.sanitize(renderLine(entry.getKey(), entry.getValue())))
+                .collect(java.util.stream.Collectors.joining(
+                        String.valueOf(RunnerProtocol.RECORD_SEPARATOR)));
+    }
+
+    /**
+     * One sidebar line as the client would draw it.
+     *
+     * <p>The entry is wrapped in its team's prefix and suffix, which is where the words live on
+     * every scoreboard written since teams became the way to do it. Since 1.20.3 a score may
+     * instead carry its own display text, and that wins outright — it is the whole line, not
+     * something to wrap.
+     */
+    private String renderLine(String entry, ScoreLine line) {
+        if (!line.text().equals(entry)) {
+            return line.text();
+        }
+        String team = entryTeam.get(entry);
+        TeamText text = team == null ? null : teamText.get(team);
+        if (text == null) {
+            return stripLegacyCodes(entry);
+        }
+        return text.prefix() + stripLegacyCodes(entry) + text.suffix();
+    }
+
+    /**
+     * Drops legacy section-sign codes, which are formatting rather than text.
+     *
+     * <p>Applied to the entry only. The client reads {@code §e} as "colour the rest yellow" and
+     * draws nothing for it, so leaving it in makes every line of a blank-entry scoreboard look
+     * like it ends in stray characters. Prefix and suffix have already been through the plain
+     * text serializer and carry no codes to remove.
+     */
+    private static String stripLegacyCodes(String entry) {
+        return entry.replaceAll("(?i)§[0-9a-fk-or]", "");
+    }
+
     /** A readable position, for failure messages. */
     public String describePosition() {
         return position == null ? "unknown" : x() + ", " + y() + ", " + z();
@@ -633,13 +756,23 @@ public final class BotSession implements AutoCloseable {
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
                 // Joining a world invalidates every id from the previous one. Keeping them would
-                // let a lookup match an entity that is no longer anywhere.
+                // let a lookup match an entity that is no longer anywhere. The same applies to
+                // the screen: boss bars and scoreboards are re-sent on join, so anything held
+                // from before would be shown alongside its own replacement.
                 entities.clear();
+                bossBars.clear();
+                objectiveTitles.clear();
+                objectiveLines.clear();
+                teamText.clear();
+                entryTeam.clear();
+                sidebarObjective = null;
             }
 
             trackContainer(packet);
             trackMessages(packet);
             trackEntities(packet);
+            trackBossBars(packet);
+            trackScoreboard(packet);
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.
@@ -716,9 +849,134 @@ public final class BotSession implements AutoCloseable {
          * asserted on messages would otherwise accumulate a blank entry every time any plugin
          * did that.
          */
+        /** A component as plain text, treating absent as empty. */
+        private static String plain(net.kyori.adventure.text.Component component) {
+            return component == null
+                    ? ""
+                    : PlainTextComponentSerializer.plainText().serialize(component);
+        }
+
         private static String overlay(String where, net.kyori.adventure.text.Component component) {
             String plain = PlainTextComponentSerializer.plainText().serialize(component);
             return plain.isBlank() ? null : "[" + where + "] " + plain;
+        }
+
+        /**
+         * Follows the boss bars on this bot's screen.
+         *
+         * <p>The server sends one packet per change rather than the whole bar each time, so the
+         * current state only exists by accumulating them — which is exactly why nothing else can
+         * answer "what does the boss bar say right now".
+         */
+        private void trackBossBars(Packet packet) {
+            if (!(packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .ClientboundBossEventPacket event)) {
+                return;
+            }
+            switch (event.getAction()) {
+                case ADD -> bossBars.put(event.getUuid(), new BossBar(
+                        PlainTextComponentSerializer.plainText().serialize(event.getTitle()),
+                        event.getHealth(),
+                        event.getColor() == null ? "" : event.getColor().name()));
+                case REMOVE -> bossBars.remove(event.getUuid());
+                case UPDATE_TITLE -> bossBars.computeIfPresent(event.getUuid(), (id, bar) ->
+                        new BossBar(
+                                PlainTextComponentSerializer.plainText()
+                                        .serialize(event.getTitle()),
+                                bar.progress(), bar.color()));
+                case UPDATE_HEALTH -> bossBars.computeIfPresent(event.getUuid(), (id, bar) ->
+                        new BossBar(bar.title(), event.getHealth(), bar.color()));
+                case UPDATE_STYLE -> bossBars.computeIfPresent(event.getUuid(), (id, bar) ->
+                        new BossBar(bar.title(), bar.progress(),
+                                event.getColor() == null ? "" : event.getColor().name()));
+                // UPDATE_FLAGS carries darken-sky and boss-music, which nothing here reads.
+                default -> { }
+            }
+        }
+
+        /**
+         * Follows the sidebar scoreboard.
+         *
+         * <p>Assembled from three packet types, none of which is the whole picture: one names
+         * the objective, one puts an objective in a display slot, and one sets a single line.
+         * A scoreboard is the most common place a server puts a player's live state — money,
+         * region, quest progress — and it reaches the client only, so this is the only side that
+         * can be asked what it says.
+         *
+         * <p>Only the sidebar is followed. The player-list and below-name slots hold numbers
+         * rather than the lines anyone writes a test about.
+         */
+        private void trackScoreboard(Packet packet) {
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .scoreboard.ClientboundSetObjectivePacket objective) {
+                switch (objective.getAction()) {
+                    case ADD, UPDATE -> objectiveTitles.put(objective.getName(),
+                            objective.getDisplayName() == null
+                                    ? objective.getName()
+                                    : PlainTextComponentSerializer.plainText()
+                                            .serialize(objective.getDisplayName()));
+                    case REMOVE -> {
+                        objectiveTitles.remove(objective.getName());
+                        objectiveLines.remove(objective.getName());
+                    }
+                    default -> { }
+                }
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.scoreboard.ClientboundSetDisplayObjectivePacket display) {
+                if (display.getPosition() == org.geysermc.mcprotocollib.protocol.data.game
+                        .scoreboard.ScoreboardPosition.SIDEBAR) {
+                    // An empty name clears the slot, which is how a plugin hides its scoreboard.
+                    sidebarObjective = display.getName() == null || display.getName().isEmpty()
+                            ? null
+                            : display.getName();
+                }
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.scoreboard.ClientboundSetScorePacket score) {
+                // Since 1.20.3 a line can carry its own text; before that the entry name was the
+                // line, which is why servers used to fill scoreboards with colour-code entries.
+                String line = score.getDisplay() == null
+                        ? score.getOwner()
+                        : PlainTextComponentSerializer.plainText().serialize(score.getDisplay());
+                objectiveLines
+                        .computeIfAbsent(score.getObjective(),
+                                key -> new java.util.concurrent.ConcurrentHashMap<>())
+                        .put(score.getOwner(), new ScoreLine(score.getValue(), line));
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.scoreboard.ClientboundResetScorePacket reset) {
+                var lines = objectiveLines.get(reset.getObjective());
+                if (lines != null) {
+                    lines.remove(reset.getOwner());
+                }
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.scoreboard.ClientboundSetPlayerTeamPacket team) {
+                switch (team.getAction()) {
+                    case CREATE, UPDATE -> {
+                        teamText.put(team.getTeamName(), new TeamText(
+                                plain(team.getPrefix()), plain(team.getSuffix())));
+                        // CREATE carries members; UPDATE does not, and passes null.
+                        if (team.getPlayers() != null) {
+                            for (String entry : team.getPlayers()) {
+                                entryTeam.put(entry, team.getTeamName());
+                            }
+                        }
+                    }
+                    case ADD_PLAYER -> {
+                        for (String entry : team.getPlayers()) {
+                            entryTeam.put(entry, team.getTeamName());
+                        }
+                    }
+                    case REMOVE_PLAYER -> {
+                        for (String entry : team.getPlayers()) {
+                            entryTeam.remove(entry, team.getTeamName());
+                        }
+                    }
+                    case REMOVE -> {
+                        teamText.remove(team.getTeamName());
+                        entryTeam.values().remove(team.getTeamName());
+                    }
+                    default -> { }
+                }
+            }
         }
 
         /**
