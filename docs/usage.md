@@ -406,10 +406,11 @@ no PLAYER within 2.0 blocks of 120.0 64.0 -40.0. Nearby: VILLAGER at 121.5 64.0 
 
 That distinguishes wrong coordinates from a radius too tight from an NPC that was never in view.
 
-> Only `INTERACT` is sent, not the `INTERACT_AT` a vanilla client sends first. Paper turns those
-> into `PlayerInteractAtEntityEvent` and `PlayerInteractEntityEvent`, and the former extends the
-> latter — so sending both would make a plugin listening for the plain event see one right-click as
-> two.
+> `INTERACT_AT` and then `INTERACT` are sent, which is what a vanilla client sends for one right
+> click. Paper turns them into `PlayerInteractAtEntityEvent` and `PlayerInteractEntityEvent`, so a
+> bot's right click produces the same pair of events a player's does. Anything less does not: NPC
+> plugins are commonly driven by the `AT` variant or by a packet listener expecting it, and sending
+> only `INTERACT` fires an event while the NPC does nothing.
 
 ## Opening a chest directly
 

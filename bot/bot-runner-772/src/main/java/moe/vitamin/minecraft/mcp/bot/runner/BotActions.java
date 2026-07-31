@@ -176,12 +176,21 @@ public final class BotActions {
      * this and to nothing else: a bot standing next to an NPC and running its command is not the
      * same code path, and is exactly the path a right-click bug would hide behind.
      *
-     * <p>Sends {@code INTERACT} alone, not the {@code INTERACT_AT} that precedes it from a real
-     * client. A vanilla client sends both, and Paper turns them into
-     * {@code PlayerInteractAtEntityEvent} and {@code PlayerInteractEntityEvent} — but the former
-     * extends the latter, so a plugin listening only for the plain event would see one right
-     * click as two. For a harness whose job is to make behaviour reproducible, firing a listener
-     * twice is worse than the small infidelity of skipping a packet nothing here depends on.
+     * <p>Sends {@code INTERACT_AT} and then {@code INTERACT}, which is what a vanilla client
+     * sends for one right click. This was originally {@code INTERACT} alone, on the reasoning
+     * that Paper turns the pair into {@code PlayerInteractAtEntityEvent} and
+     * {@code PlayerInteractEntityEvent} — the former extending the latter — so a plugin
+     * listening only for the plain event would see one click as two.
+     *
+     * <p>That reasoning was wrong, and a live server said so. Sending only {@code INTERACT}
+     * produced {@code PlayerInteractEntityEvent} and no menu, while a real player right-clicking
+     * the same NPC produced both events and opened one. NPC plugins are commonly driven by the
+     * {@code AT} variant or by a packet listener that expects it. And the double-fire being
+     * avoided is not hypothetical harm: every real player already causes it, so a plugin that
+     * cannot tolerate it is already broken for humans.
+     *
+     * <p>The target vector is the middle of a player-sized hitbox rather than where a crosshair
+     * really landed. Plugins that read it are placing or aiming, not opening.
      *
      * @param entityId the server's numeric id, resolved from coordinates by the caller
      */
@@ -189,9 +198,17 @@ public final class BotActions {
         require();
         bot.session().send(new ServerboundInteractPacket(
                 entityId,
+                InteractAction.INTERACT_AT,
+                Hand.MAIN_HAND,
+                false)              // not sneaking — sneak-click is a different interaction
+                .withTargetX(0.0f)
+                .withTargetY(1.0f)
+                .withTargetZ(0.0f));
+        bot.session().send(new ServerboundInteractPacket(
+                entityId,
                 InteractAction.INTERACT,
                 Hand.MAIN_HAND,
-                false));        // not sneaking — sneak-click is a different interaction
+                false));
         return this;
     }
 
