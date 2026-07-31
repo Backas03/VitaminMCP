@@ -710,6 +710,18 @@ public final class BotSession implements AutoCloseable {
         }
 
         /**
+         * Labels a non-chat message with where it appeared, or drops it if it says nothing.
+         *
+         * <p>Clearing the action bar is done by sending an empty one, and a scenario that
+         * asserted on messages would otherwise accumulate a blank entry every time any plugin
+         * did that.
+         */
+        private static String overlay(String where, net.kyori.adventure.text.Component component) {
+            String plain = PlainTextComponentSerializer.plainText().serialize(component);
+            return plain.isBlank() ? null : "[" + where + "] " + plain;
+        }
+
+        /**
          * Follows the entities the server has told this bot about.
          *
          * <p>Needed because the protocol addresses an entity by a numeric id the server invents,
@@ -758,10 +770,18 @@ public final class BotSession implements AutoCloseable {
          * one that silently did nothing are indistinguishable from the server side, which is
          * exactly the wall this hit on a real server.
          *
-         * <p>Three packet types because the server picks between them by how the message was
+         * <p>Three chat packet types because the server picks between them by how the message was
          * produced: plugins and command feedback use the system one, player chat the signed one,
          * and anything relayed on a player's behalf the disguised one. A test does not care
          * which, so they all land in the same place.
+         *
+         * <p>The action bar and the title are here for the same reason the chat ones are, and
+         * were added after a refusal went missing. A plugin declining an interaction had put its
+         * reason above the hotbar rather than in chat, which is an ordinary thing to do and left
+         * {@code messages} showing nothing at all — indistinguishable from a plugin that never
+         * ran. They carry a prefix so the reader knows where the player would have seen it,
+         * since "above the hotbar, briefly" and "in chat, persistently" are different claims
+         * about what a person would notice.
          */
         private void trackMessages(Packet packet) {
             String text = null;
@@ -774,6 +794,15 @@ public final class BotSession implements AutoCloseable {
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.ClientboundPlayerChatPacket chat) {
                 text = chat.getContent();
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.title.ClientboundSetActionBarTextPacket actionBar) {
+                text = overlay("action bar", actionBar.getText());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.title.ClientboundSetTitleTextPacket title) {
+                text = overlay("title", title.getText());
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.title.ClientboundSetSubtitleTextPacket subtitle) {
+                text = overlay("subtitle", subtitle.getText());
             }
             if (text == null) {
                 return;
