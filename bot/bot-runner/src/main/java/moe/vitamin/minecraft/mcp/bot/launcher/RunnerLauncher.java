@@ -64,12 +64,17 @@ public final class RunnerLauncher {
             }
 
             backend.start(host, port);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             // Reported on stdout as a protocol line, not merely thrown. The parent is waiting to
             // read `ready`, and a process that dies silently reaches it as "it said: null" —
             // which describes the symptom and hides every one of these causes.
-            out.println(RunnerProtocol.encode(
-                    RunnerProtocol.ERROR, "startup", String.valueOf(e.getMessage())));
+            //
+            // Throwable, not Exception: loading a backend is exactly where an *Error* shows up.
+            // A class the jar is missing or a method that moved between library versions arrives
+            // as NoClassDefFoundError or NoSuchMethodError, and catching only Exception let the
+            // most informative failure this launcher can have escape as silence.
+            out.println(RunnerProtocol.encode(RunnerProtocol.ERROR, "startup",
+                    e.getClass().getSimpleName() + ": " + e.getMessage()));
             e.printStackTrace(System.err);
             System.exit(1);
             return;

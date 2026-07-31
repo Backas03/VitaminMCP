@@ -159,14 +159,9 @@ public final class BotActions {
      */
     public BotActions useBlock(int x, int y, int z, Direction face) {
         require();
-        bot.session().send(new ServerboundUseItemOnPacket(
-                Vector3i.from(x, y, z),
-                face == null ? Direction.UP : face,
-                Hand.MAIN_HAND,
-                0.5f, 0.5f, 0.5f,
-                false,          // not inside a block
-                false,          // world border not involved
-                ++sequence));
+        // Through BlockUse because 1.21.2 added an argument to the packet, and that difference
+        // belongs in a file a backend can replace whole.
+        BlockUse.useBlock(bot.session(), x, y, z, face, ++sequence);
         return this;
     }
 

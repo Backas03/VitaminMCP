@@ -12,16 +12,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.geysermc.mcprotocollib.network.ClientSession;
+import org.geysermc.mcprotocollib.network.Session;
 import org.geysermc.mcprotocollib.network.event.session.DisconnectedEvent;
 import org.geysermc.mcprotocollib.network.event.session.SessionAdapter;
 import org.geysermc.mcprotocollib.network.packet.Packet;
-import org.geysermc.mcprotocollib.network.session.ClientNetworkSession;
-import org.geysermc.mcprotocollib.protocol.MinecraftProtocol;
 import org.geysermc.mcprotocollib.protocol.packet.handshake.serverbound.ClientIntentionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
 
@@ -50,7 +47,16 @@ public final class BotSession implements AutoCloseable {
     public static final Duration DEFAULT_LOGIN_TIMEOUT = Duration.ofSeconds(30);
 
     private final BotIdentity identity;
-    private final ClientSession session;
+
+    /**
+     * The connection, as the one type every version has.
+     *
+     * <p>Not {@code ClientSession}: that type does not exist before 1.21.2, where a client was a
+     * {@code TcpClientSession} instead. {@link Session} carries everything used here — listeners,
+     * send, isConnected, disconnect — and creating one is {@link SessionFactory}'s job precisely
+     * because that part does differ.
+     */
+    private final Session session;
     private final CountDownLatch joined = new CountDownLatch(1);
     private final AtomicReference<String> disconnectReason = new AtomicReference<>();
 
@@ -240,7 +246,7 @@ public final class BotSession implements AutoCloseable {
                 .collect(java.util.stream.Collectors.joining("; "));
     }
 
-    private BotSession(BotIdentity identity, ClientSession session) {
+    private BotSession(BotIdentity identity, Session session) {
         this.identity = identity;
         this.session = session;
     }
@@ -274,26 +280,7 @@ public final class BotSession implements AutoCloseable {
             String host, int port, BotIdentity identity, String claimedHost, String clientIp)
             throws Exception {
 
-        // Resolved here rather than left to connect(), so a host that does not exist says so
-        // instead of arriving later as a login that never completed.
-        InetSocketAddress target =
-                new InetSocketAddress(java.net.InetAddress.getByName(host), port);
-
-        // The username here still matters: the backend takes the UUID and skin from the
-        // forwarded fields but the name from the login packet, and a mismatch between them is
-        // the kind of thing that only shows up later as a confusing permissions result.
-        MinecraftProtocol protocol = new MinecraftProtocol(identity.name());
-
-        ClientSession session = new ClientNetworkSession(
-                target,
-                protocol,
-                Executors.newSingleThreadExecutor(runnable -> {
-                    Thread thread = new Thread(runnable, "bot-" + identity.name());
-                    thread.setDaemon(true);
-                    return thread;
-                }),
-                null,
-                null);
+        Session session = SessionFactory.open(host, port, identity.name());
 
         BotSession bot = new BotSession(identity, session);
         session.addListener(bot.new LifecycleListener(
@@ -314,7 +301,7 @@ public final class BotSession implements AutoCloseable {
      * @throws IllegalStateException if the server disconnected us, or the join never arrived
      */
     public BotSession connect(Duration timeout) throws InterruptedException {
-        session.connect(false);
+        SessionFactory.connect(session);
 
         boolean released = joined.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
         String reason = disconnectReason.get();
@@ -425,7 +412,7 @@ public final class BotSession implements AutoCloseable {
     }
 
     /** The underlying session, for sending packets. */
-    public ClientSession session() {
+    public Session session() {
         return session;
     }
 
@@ -515,67 +502,9 @@ public final class BotSession implements AutoCloseable {
                 continue;
             }
             out.add(new MenuItem(slot, item.getId(), item.getAmount(),
-                    nameOf(item), modelDataOf(item), loreOf(item)));
+                    ItemText.nameOf(item), ItemText.modelDataOf(item), ItemText.loreOf(item)));
         }
         return out;
-    }
-
-    private static String nameOf(
-            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
-        var components = item.getDataComponentsPatch();
-        if (components == null) {
-            return "";
-        }
-        var custom = components.get(
-                org.geysermc.mcprotocollib.protocol.data.game.item.component
-                        .DataComponentTypes.CUSTOM_NAME);
-        if (custom == null) {
-            custom = components.get(
-                    org.geysermc.mcprotocollib.protocol.data.game.item.component
-                            .DataComponentTypes.ITEM_NAME);
-        }
-        return custom == null ? "" : PlainTextComponentSerializer.plainText().serialize(custom);
-    }
-
-    private static String loreOf(
-            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
-        var components = item.getDataComponentsPatch();
-        if (components == null) {
-            return "";
-        }
-        var lore = components.get(
-                org.geysermc.mcprotocollib.protocol.data.game.item.component
-                        .DataComponentTypes.LORE);
-        if (lore == null || lore.isEmpty()) {
-            return "";
-        }
-        return lore.stream()
-                .map(line -> PlainTextComponentSerializer.plainText().serialize(line))
-                .collect(java.util.stream.Collectors.joining(" | "));
-    }
-
-    /** @return the first float of the model data component, or empty when it carries none */
-    private static String modelDataOf(
-            org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack item) {
-        var components = item.getDataComponentsPatch();
-        if (components == null) {
-            return "";
-        }
-        var model = components.get(
-                org.geysermc.mcprotocollib.protocol.data.game.item.component
-                        .DataComponentTypes.CUSTOM_MODEL_DATA);
-        if (model == null) {
-            return "";
-        }
-        // Strings first: a pack keyed on them is the modern idiom, and the floats are often
-        // absent entirely when it is.
-        if (model.strings() != null && !model.strings().isEmpty()) {
-            return String.join(",", model.strings());
-        }
-        if (model.floats() != null && !model.floats().isEmpty()) {
-            return String.valueOf(model.floats().get(0));
-        }
-        return "";
     }
 
     /** Messages the server sent this bot, oldest first. */
@@ -986,23 +915,24 @@ public final class BotSession implements AutoCloseable {
          * there" rather than as stale data.
          */
         private void trackEntities(Packet packet) {
-            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
-                    .entity.ClientboundAddEntityPacket add) {
-                entities.put(add.getEntityId(), new TrackedEntity(
-                        add.getEntityId(),
-                        add.getType() == null ? "" : add.getType().toString(),
-                        add.getX(), add.getY(), add.getZ()));
-            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+            EntitySync.Spawn spawn = EntitySync.spawnOf(packet);
+            if (spawn != null) {
+                entities.put(spawn.id(), new TrackedEntity(
+                        spawn.id(), spawn.type(), spawn.x(), spawn.y(), spawn.z()));
+                return;
+            }
+            EntitySync.Teleport teleport = EntitySync.teleportOf(packet);
+            if (teleport != null) {
+                entities.computeIfPresent(teleport.id(),
+                        (id, known) -> known.at(teleport.x(), teleport.y(), teleport.z()));
+                return;
+            }
+
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.entity.ClientboundRemoveEntitiesPacket remove) {
                 for (int id : remove.getEntityIds()) {
                     entities.remove(id);
                 }
-            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
-                    .clientbound.entity.ClientboundTeleportEntityPacket teleport) {
-                entities.computeIfPresent(teleport.getId(), (id, known) -> known.at(
-                        teleport.getPosition().getX(),
-                        teleport.getPosition().getY(),
-                        teleport.getPosition().getZ()));
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.entity.ClientboundMoveEntityPosPacket move) {
                 entities.computeIfPresent(move.getEntityId(), (id, known) -> known.moveBy(

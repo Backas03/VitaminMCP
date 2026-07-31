@@ -1,4 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+// Imported rather than written out: inside a build script `java` is the JavaPluginExtension, so
+// `java.util.zip.ZipFile` does not resolve to the package.
+import java.util.zip.ZipFile
 
 plugins {
     id("vitaminmcp.java-conventions")
@@ -45,8 +48,17 @@ sourceSets {
         // would read as the same rule and is not — a pattern is matched inside *every* source
         // directory, so it would drop the backend's own copy as well and leave a
         // missing-symbol error that names neither file.
+        //
+        // Files only. Excluding a *directory* prunes everything under it, and every backend that
+        // overrides anything has a `moe/` directory of its own — so without this guard the whole
+        // shared tree disappeared from the compile. It still built, because the override files
+        // do not reference what went missing, and the jar was simply short of every shared
+        // class. What that reaches the user as is `ServiceConfigurationError: Provider ... not
+        // found`, three layers from the cause.
         java.exclude { element ->
-            element.file.startsWith(sharedJava) && File(localJava, element.path).exists()
+            !element.isDirectory
+                    && element.file.startsWith(sharedJava)
+                    && File(localJava, element.path).exists()
         }
     }
     named("test") {
@@ -89,6 +101,23 @@ sourceSets.named("main") {
 
 tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName = project.name
+
+    // The jar must actually contain the implementation its service file names. This is checked
+    // rather than assumed because the way it goes missing is silent: the shared tree drops out
+    // of the compile, the override files still build on their own, and the first sign of it is
+    // `ServiceConfigurationError: Provider not found` at runtime on someone else's machine.
+    doLast {
+        val implementation = "moe/vitamin/minecraft/mcp/bot/runner/Backend.class"
+        val jar = archiveFile.get().asFile
+        val present = ZipFile(jar).use { zip -> zip.getEntry(implementation) != null }
+        if (!present) {
+            throw GradleException(
+                "${jar.name} does not contain $implementation. The shared backend source did " +
+                    "not reach this module's compile — check the source-set wiring in " +
+                    "vitaminmcp.bot-backend."
+            )
+        }
+    }
 }
 
 // Live tests connect to a real server, so they stay off unless asked for. Every property has to
