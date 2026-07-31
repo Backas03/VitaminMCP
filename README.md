@@ -244,7 +244,7 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 | | |
 |---|---|
 | Minecraft server | **Paper 1.21.8 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
-| Java | 21, for both building and running |
+| Java | 21. Needed to run it; only needed to build it if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP/releases/latest) |
 
 ### Version support
 
@@ -271,11 +271,16 @@ join it — inspection, logs and events all still work without them.
 
 ### Three artifacts
 
+**Download them from [Releases](https://github.com/Backas03/VitaminMCP/releases/latest)** — all
+three are attached to every release, so nothing has to be built to try this.
+
+To build them yourself instead:
+
 ```bash
 ./gradlew dist
 ```
 
-Three files land in `build/dist/`. **Each goes somewhere different.**
+Either way you end up with the same three files, and **each goes somewhere different.**
 
 | File | Where | What |
 |---|---|---|
