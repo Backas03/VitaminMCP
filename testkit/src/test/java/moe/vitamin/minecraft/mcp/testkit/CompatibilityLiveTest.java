@@ -208,6 +208,27 @@ class CompatibilityLiveTest {
                     "no slot carried the 3 diamonds that were put in: " + view.items());
         });
 
+        // The agent reads the custom model data component reflectively, because it is 1.21.4 API
+        // and the agent compiles against the floor. Reflection is not type-checked by anything,
+        // so the only way to know it still reads is to put one in and ask for it back.
+        check("model data through the agent", () -> {
+            String item = bots.protocol() >= 769
+                    ? "minecraft:diamond[minecraft:custom_model_data={strings:[\"compat\"]}]"
+                    : "minecraft:diamond[minecraft:custom_model_data=7]";
+            console(agent, "item replace block " + (cx + 1) + " " + by + " " + cz
+                    + " container.1 with " + item + " 1");
+
+            ObjectNode query = AgentClient.arguments();
+            query.put("kind", "inventory");
+            query.put("target", "Tester1");
+            query.put("which", "menu");
+            require(await(() -> agent.call("state_query", query).toString().contains("modelData")
+                            || agent.call("state_query", query).toString()
+                                    .contains("customModelData")),
+                    "the agent reported no model data for an item that has some: "
+                            + agent.call("state_query", query));
+        });
+
         check("click and close", () -> {
             bot.clickSlot(0, "left");
             bot.closeMenu();

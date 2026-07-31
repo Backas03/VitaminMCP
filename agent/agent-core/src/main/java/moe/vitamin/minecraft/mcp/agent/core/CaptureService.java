@@ -376,9 +376,7 @@ public final class CaptureService implements AgentQueries {
                 if (meta.hasCustomModelData()) {
                     customModelData = meta.getCustomModelData();
                 }
-                if (meta.hasCustomModelDataComponent()) {
-                    modelData = describe(meta.getCustomModelDataComponent());
-                }
+                modelData = modelDataOf(meta);
             }
         }
         return new InventorySnapshot.Item(slot, stack.getType().name(), stack.getAmount(),
@@ -388,17 +386,53 @@ public final class CaptureService implements AgentQueries {
     /**
      * Flattens the custom model data component.
      *
-     * @return the component, or {@code null} if it carries nothing — an empty one says the same
-     *         as no component at all, and reporting it would put four empty lists on every item
+     * <p>Reflective for the same reason {@code getTPS} is: the component is 1.21.4 API and the
+     * agent compiles against the floor, so naming the type directly would not compile — and
+     * hardcoding the floor's shape would drop a field every plugin on a newer server uses. The
+     * agent is one jar across the whole supported range (docs/design.md §5.3), and this is what
+     * that costs at the two points where the API actually moved.
+     *
+     * @return the component, or {@code null} if the server predates it or it carries nothing —
+     *         an empty one says the same as no component at all, and reporting it would put four
+     *         empty lists on every item
      */
-    private static InventorySnapshot.ModelData describe(
-            org.bukkit.inventory.meta.components.CustomModelDataComponent component) {
-        InventorySnapshot.ModelData data = new InventorySnapshot.ModelData(
-                component.getFloats(),
-                component.getFlags(),
-                component.getStrings(),
-                component.getColors().stream().map(CaptureService::hex).toList());
-        return data.carriesNothing() ? null : data;
+    @SuppressWarnings("unchecked")
+    private static InventorySnapshot.ModelData modelDataOf(
+            org.bukkit.inventory.meta.ItemMeta meta) {
+        try {
+            if (!(boolean) meta.getClass().getMethod("hasCustomModelDataComponent").invoke(meta)) {
+                return null;
+            }
+            Object component =
+                    meta.getClass().getMethod("getCustomModelDataComponent").invoke(meta);
+            if (component == null) {
+                return null;
+            }
+
+            List<String> colors = new java.util.ArrayList<>();
+            for (Object color : (List<Object>) read(component, "getColors")) {
+                // org.bukkit.Color itself is ancient, so only the component around it needs
+                // reflection.
+                colors.add(hex((org.bukkit.Color) color));
+            }
+
+            InventorySnapshot.ModelData data = new InventorySnapshot.ModelData(
+                    (List<Float>) read(component, "getFloats"),
+                    (List<Boolean>) read(component, "getFlags"),
+                    (List<String>) read(component, "getStrings"),
+                    colors);
+            return data.carriesNothing() ? null : data;
+        } catch (ReflectiveOperationException | RuntimeException olderServer) {
+            // A server without the component, or one whose shape moved again. Neither is worth
+            // failing an inventory snapshot over — the name and lore are what identify a button.
+            return null;
+        }
+    }
+
+    private static List<?> read(Object component, String getter)
+            throws ReflectiveOperationException {
+        Object value = component.getClass().getMethod(getter).invoke(component);
+        return value == null ? List.of() : (List<?>) value;
     }
 
     /** A colour as {@code #RRGGBB}, which is how a pack author writes it. */

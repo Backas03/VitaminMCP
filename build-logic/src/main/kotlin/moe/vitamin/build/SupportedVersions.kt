@@ -18,7 +18,7 @@ package moe.vitamin.build
 object SupportedVersions {
 
     /** The oldest Minecraft version this project supports. See docs/design.md §5. */
-    const val FLOOR = "1.21.8"
+    const val FLOOR = "1.21"
 
     /** Paper API to compile the agent against — always the floor, never newer. */
     val paperApiCoordinate: String = "io.papermc.paper:paper-api:$FLOOR-R0.1-SNAPSHOT"
