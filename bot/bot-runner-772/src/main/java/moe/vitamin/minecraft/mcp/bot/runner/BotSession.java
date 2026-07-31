@@ -102,6 +102,80 @@ public final class BotSession implements AutoCloseable {
     /** No menu open. The player's own inventory is container 0, so -1 is the free sentinel. */
     public static final int NO_CONTAINER = -1;
 
+    /** No entity matched. Entity ids are non-negative, so -1 is free here too. */
+    public static final int NO_ENTITY = -1;
+
+    /**
+     * An entity this bot has been told about, and where it currently is.
+     *
+     * <p>Only what is needed to find one again. A test names an entity by where it stands, so
+     * position and type are the whole of it — the numeric id exists on the wire and nowhere a
+     * scenario author could have seen it.
+     */
+    private record TrackedEntity(int id, String type, double x, double y, double z) {
+
+        TrackedEntity at(double x, double y, double z) {
+            return new TrackedEntity(id, type, x, y, z);
+        }
+
+        TrackedEntity moveBy(double dx, double dy, double dz) {
+            return new TrackedEntity(id, type, x + dx, y + dy, z + dz);
+        }
+
+        double distanceTo(double px, double py, double pz) {
+            double dx = x - px;
+            double dy = y - py;
+            double dz = z - pz;
+            return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        }
+    }
+
+    /** Entities the server has spawned for this bot, by entity id. */
+    private final java.util.Map<Integer, TrackedEntity> entities
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * The nearest tracked entity to a point, or {@link #NO_ENTITY}.
+     *
+     * <p>Nearest rather than first, so that two NPCs standing close together resolve to the one
+     * actually named. {@code type} is matched case-insensitively against the entity type and
+     * ignored when blank — most useful for a Citizens NPC, which is a {@code PLAYER} standing
+     * among mobs.
+     */
+    public int entityNear(double x, double y, double z, double radius, String type) {
+        TrackedEntity best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (TrackedEntity candidate : entities.values()) {
+            if (type != null && !type.isBlank()
+                    && !candidate.type().equalsIgnoreCase(type.trim())) {
+                continue;
+            }
+            double distance = candidate.distanceTo(x, y, z);
+            if (distance <= radius && distance < bestDistance) {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+        return best == null ? NO_ENTITY : best.id();
+    }
+
+    /**
+     * What is actually near a point, for when {@link #entityNear} found nothing.
+     *
+     * <p>"No entity within 2 blocks of x/y/z" leaves the author guessing between a wrong
+     * coordinate, a radius that is too small, and an NPC the bot cannot see because it is out of
+     * render distance. Listing what is there answers all three at once.
+     */
+    public String describeEntitiesNear(double x, double y, double z, double radius) {
+        return entities.values().stream()
+                .filter(e -> e.distanceTo(x, y, z) <= Math.max(radius * 4, 16))
+                .sorted(java.util.Comparator.comparingDouble(e -> e.distanceTo(x, y, z)))
+                .limit(8)
+                .map(e -> String.format(java.util.Locale.ROOT, "%s at %.1f %.1f %.1f (%.1f away)",
+                        e.type(), e.x(), e.y(), e.z(), e.distanceTo(x, y, z)))
+                .collect(java.util.stream.Collectors.joining("; "));
+    }
+
     private BotSession(BotIdentity identity, ClientSession session) {
         this.identity = identity;
         this.session = session;
@@ -558,10 +632,14 @@ public final class BotSession implements AutoCloseable {
             // the identity, this means the player is actually in a world.
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
+                // Joining a world invalidates every id from the previous one. Keeping them would
+                // let a lookup match an entity that is no longer anywhere.
+                entities.clear();
             }
 
             trackContainer(packet);
             trackMessages(packet);
+            trackEntities(packet);
             // The join packet does not say where the player is; the server follows it with a
             // position. Waiting for that too means a bot is only "ready" once it knows where it
             // stands, which is what any action needing coordinates depends on.
@@ -632,6 +710,47 @@ public final class BotSession implements AutoCloseable {
         }
 
         /**
+         * Follows the entities the server has told this bot about.
+         *
+         * <p>Needed because the protocol addresses an entity by a numeric id the server invents,
+         * and nothing outside this client ever sees it. A scenario says "the NPC at these
+         * coordinates"; only the tracker can turn that into the id an interact packet carries.
+         *
+         * <p>Position is followed through teleports and relative moves as well as the initial
+         * spawn. A stationary NPC needs none of that, but a wandering one would otherwise be
+         * looked up at where it first appeared, and the resulting miss reads as "no entity
+         * there" rather than as stale data.
+         */
+        private void trackEntities(Packet packet) {
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
+                    .entity.ClientboundAddEntityPacket add) {
+                entities.put(add.getEntityId(), new TrackedEntity(
+                        add.getEntityId(),
+                        add.getType() == null ? "" : add.getType().toString(),
+                        add.getX(), add.getY(), add.getZ()));
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.entity.ClientboundRemoveEntitiesPacket remove) {
+                for (int id : remove.getEntityIds()) {
+                    entities.remove(id);
+                }
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.entity.ClientboundTeleportEntityPacket teleport) {
+                entities.computeIfPresent(teleport.getId(), (id, known) -> known.at(
+                        teleport.getPosition().getX(),
+                        teleport.getPosition().getY(),
+                        teleport.getPosition().getZ()));
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.entity.ClientboundMoveEntityPosPacket move) {
+                entities.computeIfPresent(move.getEntityId(), (id, known) -> known.moveBy(
+                        move.getMoveX(), move.getMoveY(), move.getMoveZ()));
+            } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
+                    .clientbound.entity.ClientboundMoveEntityPosRotPacket move) {
+                entities.computeIfPresent(move.getEntityId(), (id, known) -> known.moveBy(
+                        move.getMoveX(), move.getMoveY(), move.getMoveZ()));
+            }
+        }
+
+        /**
          * Keeps what the server said to this bot.
          *
          * <p>Almost every plugin refusal is a message and nothing else — no exception, no console
@@ -670,6 +789,7 @@ public final class BotSession implements AutoCloseable {
             inGame = false;
             containerId = NO_CONTAINER;
             containerTitle = null;
+            entities.clear();
             disconnectReason.set(describe(event));
             // Released so a caller waiting on login fails immediately with the server's reason
             // rather than sitting out the full timeout.

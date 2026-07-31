@@ -292,6 +292,7 @@ state the scenario never described makes those failures meaningless.
 | `move_to` | `bot`, `x`, `y`, `z` | |
 | `break_block` | `bot`, `x`, `y`, `z` | |
 | `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Right-click — opens chests and menus |
+| `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Right-click the nearest entity — an NPC, a villager |
 | `command` | `bot`, `command` | a command typed by the bot |
 | `chat` | `bot`, `message` | |
 | `console` | `command` | a command typed by the console (via `command_exec`) |
@@ -371,6 +372,44 @@ expected the title to contain 'Shop' but it was '§cError'
 no menu is open for Tester1 — the view is CREATIVE. If a command should have opened one,
 wait_for inventory_open first.
 ```
+
+## Right-clicking an NPC
+
+A shop or quest giver on an NPC reacts to `PlayerInteractEntityEvent` and to nothing else. Standing
+next to it and running its command is a different code path, and it is the path a right-click bug
+hides behind.
+
+```json
+{"action": "use_entity", "bot": "Tester1", "x": 120, "y": 64, "z": -40,
+ "entityType": "PLAYER", "radius": 2},
+{"action": "wait_for",   "condition": "inventory_open", "name": "Tester1", "title": "Shop"}
+```
+
+**The NPC is named by where it stands.** The protocol addresses entities by a numeric id the server
+invents, which never leaves the connection, so there is nothing stable for a scenario to have been
+written against. The runner tracks what the server spawned for this bot and picks the nearest match.
+
+- `radius` defaults to 2 and should stay small. A generous radius does not fail when the
+  coordinates are wrong — it quietly right-clicks a different entity.
+- `entityType` narrows the match, and is worth setting for a Citizens NPC: those are `PLAYER`
+  entities, and a `PLAYER` filter skips the mobs that may be standing around it.
+- **The bot has to be close enough to have been sent the entity.** Outside its view distance the
+  server never spawns it client-side, so it cannot be found however right the coordinates are.
+  `move_to` first if the NPC is far from where the bot spawned.
+
+When nothing matches, the failure lists what is actually nearby rather than only saying no:
+
+```
+no PLAYER within 2.0 blocks of 120.0 64.0 -40.0. Nearby: VILLAGER at 121.5 64.0 -39.5
+(1.6 away); PLAYER at 118.0 64.0 -44.0 (4.5 away)
+```
+
+That distinguishes wrong coordinates from a radius too tight from an NPC that was never in view.
+
+> Only `INTERACT` is sent, not the `INTERACT_AT` a vanilla client sends first. Paper turns those
+> into `PlayerInteractAtEntityEvent` and `PlayerInteractEntityEvent`, and the former extends the
+> latter — so sending both would make a plugin listening for the plain event see one right-click as
+> two.
 
 ## Opening a chest directly
 
@@ -470,6 +509,7 @@ When the cause is not visible there, dig in this order:
 | The menu opened but `occupiedSlots: 0` | It may be a packet-drawn GUI. Use `bot_inspect` to see what the client received |
 | A command silently does nothing | Check `bot_inspect`'s `messages` — the refusal is in there |
 | A chest will not open | An opaque block sits directly above it (a game rule) |
+| `use_entity` reports no entity there | Either the coordinates are off, or the bot is too far away to have been sent the entity at all. The failure lists what is nearby — `move_to` first if the list is empty |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
 | The bot connected but nothing works | It has not landed. `bot_spawn` waits for that, but when driving manually the ground under it may still be air |
 | It breaks from the second run onward | State from the previous run survived. Use `session_reset`, and if the scenario depends on the world, have it create that state |

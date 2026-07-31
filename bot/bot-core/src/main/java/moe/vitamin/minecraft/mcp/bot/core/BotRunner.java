@@ -201,6 +201,24 @@ public final class BotRunner implements AutoCloseable {
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));
         }
 
+        /**
+         * Right-clicks the nearest entity to a point — an NPC, a villager, an armour stand.
+         *
+         * <p>Named by position because the entity id the protocol uses is the server's own and is
+         * never visible to whoever writes the scenario.
+         *
+         * @param radius how far from the point to look. Small on purpose: a generous radius
+         *               silently picks a different NPC rather than failing
+         * @param type   optional entity type filter, e.g. {@code PLAYER} for a Citizens NPC
+         *               standing among mobs. Null or blank matches anything
+         */
+        public void useEntity(double x, double y, double z, double radius, String type)
+                throws IOException {
+            runner.send(RunnerProtocol.USE_ENTITY, name,
+                    String.valueOf(x), String.valueOf(y), String.valueOf(z),
+                    String.valueOf(radius), type == null ? "" : type);
+        }
+
         public void breakBlock(int x, int y, int z) throws IOException {
             runner.send(RunnerProtocol.BREAK, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));

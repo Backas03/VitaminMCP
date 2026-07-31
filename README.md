@@ -8,6 +8,7 @@ without opening the game.
 - Spawn and control test players — real protocol clients, not mock `Player` objects
 - Execute commands as the console or as a player
 - Open, read, click and assert on inventories and plugin GUIs
+- Right-click NPCs and villagers, the way a shop or quest giver is actually triggered
 - Move players, break and use blocks, chat
 - Wait for events and conditions instead of sleeping
 - Assert on blocks, players, events, inventories and the messages a player received
@@ -189,7 +190,8 @@ Available inside `bot_run_scenario`.
 |---|---|
 | `spawn` / `despawn` | connect or disconnect a bot |
 | `move_to` | move to coordinates |
-| `break_block` / `use_block` | break, or right-click — `use_block` is how you open a chest |
+| `break_block` / `use_block` | break, or right-click a block — `use_block` is how you open a chest |
+| `use_entity` | right-click an NPC, villager or armour stand, named by the coordinates it stands at |
 | `click_slot` | click a slot: `left`, `right`, `shift_left`, `shift_right` |
 | `close_menu` | close the open menu |
 | `chat` / `command` | say something, or run a command as the bot |

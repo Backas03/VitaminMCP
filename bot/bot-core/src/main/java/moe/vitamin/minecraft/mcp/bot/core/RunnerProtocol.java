@@ -59,6 +59,15 @@ public final class RunnerProtocol {
     /** Right-click a block: {@code use <bot> <x> <y> <z> [face]}. Opens containers. */
     public static final String USE = "use";
 
+    /**
+     * Right-click an entity: {@code use_entity <bot> <x> <y> <z> [radius] [type]}.
+     *
+     * <p>Addressed by where it stands rather than by entity id. The id is invented by the server
+     * and never leaves the protocol, so it is not something a scenario could have been written
+     * against; the runner resolves the nearest match itself.
+     */
+    public static final String USE_ENTITY = "use_entity";
+
     /** Click a slot in the open menu: {@code click <bot> <slot> <left|right|shift_*>}. */
     public static final String CLICK = "click";
 

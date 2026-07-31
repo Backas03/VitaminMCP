@@ -9,6 +9,7 @@ import java.util.Map;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.InteractAction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ClickItemAction;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ContainerAction;
@@ -17,6 +18,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.inventory.ShiftClickItemAct
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundChatCommandPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundContainerClickPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundContainerClosePacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundInteractPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
@@ -163,6 +165,33 @@ public final class BotActions {
                 false,          // not inside a block
                 false,          // world border not involved
                 ++sequence));
+        return this;
+    }
+
+    /**
+     * Right-clicks an entity — an NPC, a villager, an armour stand.
+     *
+     * <p>The counterpart to {@link #useBlock} for things that are not blocks. A Citizens NPC, a
+     * shop villager and a plugin listening for {@code PlayerInteractEntityEvent} all react to
+     * this and to nothing else: a bot standing next to an NPC and running its command is not the
+     * same code path, and is exactly the path a right-click bug would hide behind.
+     *
+     * <p>Sends {@code INTERACT} alone, not the {@code INTERACT_AT} that precedes it from a real
+     * client. A vanilla client sends both, and Paper turns them into
+     * {@code PlayerInteractAtEntityEvent} and {@code PlayerInteractEntityEvent} — but the former
+     * extends the latter, so a plugin listening only for the plain event would see one right
+     * click as two. For a harness whose job is to make behaviour reproducible, firing a listener
+     * twice is worse than the small infidelity of skipping a packet nothing here depends on.
+     *
+     * @param entityId the server's numeric id, resolved from coordinates by the caller
+     */
+    public BotActions useEntity(int entityId) {
+        require();
+        bot.session().send(new ServerboundInteractPacket(
+                entityId,
+                InteractAction.INTERACT,
+                Hand.MAIN_HAND,
+                false));        // not sneaking — sneak-click is a different interaction
         return this;
     }
 

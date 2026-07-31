@@ -228,6 +228,15 @@ public final class ScenarioRunner {
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
+            case "use_entity" -> {
+                act(step, bot -> bot.useEntity(
+                        step.path("x").asDouble(), step.path("y").asDouble(),
+                        step.path("z").asDouble(),
+                        step.path("radius").asDouble(2.0),
+                        step.path("entityType").asText(null)));
+                yield ScenarioResult.StepResult.ok(index, action, "sent");
+            }
+
             case "click_slot" -> {
                 act(step, bot -> bot.clickSlot(
                         step.path("slot").asInt(), step.path("click").asText("left")));

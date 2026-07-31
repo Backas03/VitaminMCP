@@ -139,6 +139,36 @@ public final class RunnerMain {
                 yield RunnerProtocol.encode(RunnerProtocol.OK, verb);
             }
 
+            case RunnerProtocol.USE_ENTITY -> {
+                BotSession bot = require(command[1]);
+                double x = Double.parseDouble(command[2]);
+                double y = Double.parseDouble(command[3]);
+                double z = Double.parseDouble(command[4]);
+                double radius = command.length > 5 && !command[5].isBlank()
+                        ? Double.parseDouble(command[5])
+                        : 2.0;
+                String type = command.length > 6 ? command[6] : null;
+
+                int entityId = bot.entityNear(x, y, z, radius, type);
+                if (entityId == BotSession.NO_ENTITY) {
+                    // Saying what is actually nearby separates the three ways this fails: wrong
+                    // coordinates, a radius too tight, and an entity the bot was never sent
+                    // because it is outside its view distance.
+                    String nearby = bot.describeEntitiesNear(x, y, z, radius);
+                    yield RunnerProtocol.encode(RunnerProtocol.ERROR, verb,
+                            "no " + (type == null || type.isBlank() ? "entity" : type)
+                                    + " within " + radius + " blocks of " + x + " " + y + " " + z
+                                    + (nearby.isEmpty()
+                                            ? ". The bot has been told about no entities near "
+                                                    + "there at all — check the coordinates, and "
+                                                    + "that the bot is close enough to have them "
+                                                    + "in view."
+                                            : ". Nearby: " + nearby));
+                }
+                bot.actions().useEntity(entityId);
+                yield RunnerProtocol.encode(RunnerProtocol.OK, verb, String.valueOf(entityId));
+            }
+
             case RunnerProtocol.CLICK -> {
                 require(command[1]).actions().clickSlot(
                         Integer.parseInt(command[2]),

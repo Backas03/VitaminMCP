@@ -90,11 +90,14 @@ final class SessionTools {
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
-                        + "command, chat, console, use_block, click_slot, close_menu, wait_for, "
-                        + "assert_block, assert_player, assert_event, assert_inventory. There is "
-                        + "no sleep step — use wait_for and name what you are waiting for. To "
-                        + "test a menu GUI: command, then wait_for inventory_open, then "
-                        + "assert_inventory with the slots you expect. On failure the response "
+                        + "use_block, use_entity, command, chat, console, click_slot, "
+                        + "close_menu, wait_for, assert_block, assert_player, assert_event, "
+                        + "assert_inventory, assert_message. There is no sleep step — use "
+                        + "wait_for and name what you are waiting for. To test a menu GUI: "
+                        + "command, then wait_for inventory_open, then assert_inventory with the "
+                        + "slots you expect. use_entity right-clicks an NPC or villager, named by "
+                        + "the coordinates it stands at rather than by an entity id, since the id "
+                        + "is the server's own and never visible here. On failure the response "
                         + "says which step failed, why, and what the server was doing at that "
                         + "moment.",
                 properties -> string(properties, "scenario",
