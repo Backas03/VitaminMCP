@@ -187,7 +187,13 @@ final class SessionTools {
     }
 
     private JsonNode sessionReset() {
-        require().reset();
+        try {
+            require().reset();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(
+                    "Bots were disconnected, but the replacement runner did not start: "
+                            + e.getMessage() + ". Call session_start again.", e);
+        }
         ObjectNode result = MAPPER.createObjectNode();
         result.put("reset", true);
         result.put("session", session.describe());

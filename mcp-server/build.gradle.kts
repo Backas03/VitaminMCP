@@ -23,6 +23,26 @@ tasks.shadowJar {
     }
 }
 
+// Live tests are skipped unless asked for, so `./gradlew build` needs no server:
+//   ./gradlew :mcp-server:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.token=...
+//
+// Each key is forwarded explicitly. Gradle does not pass -D through to the test JVM, and a key
+// missing from this list reads as absent to the gate — the test skips, and the run goes green
+// having tested nothing.
+tasks.test {
+    listOf(
+        "vitaminmcp.liveServer",
+        "vitaminmcp.host",
+        "vitaminmcp.port",
+        "vitaminmcp.mcpPort",
+        "vitaminmcp.token",
+        "vitaminmcp.runnerJar",
+    ).forEach { key ->
+        providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
+    }
+    testLogging { showStandardStreams = true }
+}
+
 // Invariant 1: this module must never compile against agent-*. The agent is a jar injected
 // into whichever server is under test, and the only thing joining the two is the contract —
 // which is what allows a different agent build per Minecraft version without anything here
