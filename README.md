@@ -14,7 +14,7 @@ without opening the game.
 - Assert on blocks, players, events, inventories and the messages a player received
 - Read the player's whole screen: menus, chat, action bar, titles, boss bars, scoreboard
 - Read live server state: events, logs, exceptions, permissions
-- Paper / Purpur 1.21.8+
+- Paper / Purpur 1.21+
 
 Full usage is in [docs/usage.md](docs/usage.md), design rationale in
 [docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -248,22 +248,31 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 
 ### Version support
 
-| Versions | Status | |
+| Versions | Protocol | Status |
 |---|---|---|
-| 1.18 – 1.21.6 | Planned | Below the current agent floor. Needs the floor lowered and a runner per protocol |
-| **1.21.7, 1.21.8** | **Supported** | Protocol 772 — one runner covers both. Both run in the matrix ([versions.yaml](versions.yaml)) |
-| 1.21.9 – 26.2 | Planned | Changed protocol. Needs a sibling `bot-runner-<protocol>` built against the matching MCProtocolLib release |
+| 1.18 – 1.20.6 | 757 – 766 | Planned. Below the agent floor; needs it lowered, and backends across MCProtocolLib's package rename |
+| **1.21, 1.21.1** | **767** | **Supported** |
+| **1.21.2, 1.21.3** | **768** | **Supported** |
+| **1.21.4** | **769** | **Supported** |
+| **1.21.5** | **770** | **Supported** |
+| **1.21.6** | **771** | **Supported** |
+| **1.21.7, 1.21.8** | **772** | **Supported** |
+| 1.21.9 – 26.2 | 773 – 776 | Planned. Needs a `bot/backends/backend-<protocol>` directory and a coordinate |
 
-**1.21.7 and 1.21.8 are supported today.** The other rows are on the roadmap without a date
-attached.
+**1.21 through 1.21.8 are supported today**, and every one of them runs in the matrix
+([versions.yaml](versions.yaml)). The other rows are on the roadmap without a date attached.
+
+**You install one runner whatever the version.** It carries a backend per protocol and picks the
+right one by asking the server what it speaks, so there is no version to choose and none to get
+wrong.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
-to load the agent, and a bot with no runner for the server's protocol is turned away with
-`Outdated client!`.
+to load the agent, and a server whose protocol has no backend is named as such at startup — which
+protocols the runner carries, and which one the server asked for.
 
 Agent support and bot support can also differ. The agent needs a compatible Paper API; bots need a
-runner built for the server's protocol. So a server may be readable by the agent before bots can
-join it — inspection, logs and events all still work without them.
+backend for the server's protocol. So a server may be readable by the agent before bots can join
+it — inspection, logs and events all still work without them.
 
 ---
 
@@ -286,11 +295,10 @@ Either way you end up with the same three files, and **each goes somewhere diffe
 |---|---|---|
 | `VitaminMCP.jar` | the server's `plugins/` | the agent plugin |
 | `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
-| `bot-runner-772.jar` | anywhere (remember the path) | `mcp-server` launches it as a child process |
+| `bot-runner.jar` | anywhere (remember the path) | `mcp-server` launches it as a child process |
 
-The number in the runner's filename is a **protocol number**, not a Minecraft version. The single
-772 runner covers both 1.21.7 and 1.21.8. A server speaking a different protocol needs its own
-runner (see [versions.yaml](versions.yaml)).
+**One runner, every supported version.** It carries a backend per protocol inside it and chooses
+one by pinging the server before any bot connects, so the same file works on 1.21 and on 1.21.8.
 
 ### 1. Install the agent
 
@@ -399,12 +407,12 @@ Call `session_start` first. Every other tool depends on it.
   "port": 25565,
   "mcpPort": 25585,
   "token": "auth-token from config.yml",
-  "runnerJar": "/absolute/path/bot-runner-772.jar"
+  "runnerJar": "/absolute/path/bot-runner.jar"
 }
 ```
 
-`runnerJar` can be omitted — it looks for a `bot-runner-*.jar` next to `mcp-server.jar`. Since
-`dist` puts all three in one folder, you rarely need to write it.
+`runnerJar` can be omitted — it looks for the runner next to `mcp-server.jar`. Since `dist` puts
+all three in one folder, you rarely need to write it.
 
 A successful connection returns the server version, TPS and plugin list.
 
@@ -505,7 +513,7 @@ other plugins:
 |---|---|---|
 | Jackson | `VitaminMCP.jar`, `mcp-server.jar` | Apache-2.0 |
 | ClassGraph | `VitaminMCP.jar` | MIT |
-| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner-772.jar` | MIT / Apache-2.0 |
+| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner.jar` (one build per protocol) | MIT / Apache-2.0 |
 
 Their license and notice files travel inside the jars under `META-INF/` — relocating a package
 renames it, it does not lift the obligation to carry the notice.

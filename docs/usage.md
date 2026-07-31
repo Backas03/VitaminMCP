@@ -240,9 +240,9 @@ description. When output is cut, the response says so:
 }
 ```
 
-Omit `runnerJar` and it looks for a `bot-runner-*.jar` next to `mcp-server.jar`. With several, it
-asks which one to use — picking a runner whose protocol does not match gets the bot rejected with
-`Outdated client!`, a failure far enough from its cause that guessing is not worth it.
+Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`. There is one, whatever
+versions are supported: it carries a backend per protocol and picks the right one by asking the
+server what it speaks, so there is nothing here to get wrong.
 
 **For a server on another machine** the agent prints a block to paste, in its startup log:
 

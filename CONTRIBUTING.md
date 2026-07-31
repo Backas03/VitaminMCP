@@ -24,8 +24,9 @@ one-to-one, while the `agent/` and `bot/` grouping is kept on disk.
 | `contract` | MCP tool schemas and DTOs. **Pure Java, zero external dependencies** |
 | `agent-core` | Capture engine and state queries, on the Bukkit API |
 | `agent-mcp` | The agent's MCP server, on the JDK's `HttpServer` |
-| `bot-core` | MCProtocolLib wrapper and forwarding-handshake injection |
-| `bot-runner-772` | Bot runner for protocol 772 (1.21.7, 1.21.8). Runs as a child process |
+| `bot-core` | Runner handle, line protocol, handshake injection, server ping, and the `bot.spi` contract. No protocol library |
+| `bot-runner` | The runner jar: launcher, backend selection, dispatch. Runs as a child process |
+| `backend-<n>` | One per protocol, under `bot/backends/`. A coordinate plus whatever actually differs; the rest comes from `bot/backends/shared` |
 | `orchestrator` | Native server startup, world reset, version matrix |
 | `testkit` | Scenario runner, `wait_for`, assertions |
 | `mcp-server` | Tool exposure and assembly. The entry point |
@@ -35,9 +36,10 @@ one-to-one, while the `agent/` and `bot/` grouping is kept on disk.
 Dependencies flow **one way only**:
 
 ```
-mcp-server   → testkit → {bot-core, orchestrator, contract}
-bot-runner-* → bot-core → contract
-agent-mcp    → agent-core → contract
+mcp-server  → testkit → {bot-core, orchestrator, contract}
+bot-runner  → bot-core → contract
+backend-*   → bot-core → contract
+agent-mcp   → agent-core → contract
 ```
 
 Three boundaries are load-bearing, and each is there for a reason that is not obvious from the code:
@@ -112,7 +114,7 @@ The full list is in [CLAUDE.md](CLAUDE.md). The ones easiest to break by acciden
 | `build` | Gradle, dependencies, toolchain |
 | `chore` | everything else |
 
-`scope` is the module name: `contract`, `agent-core`, `agent-mcp`, `bot-core`, `bot-runner-772`,
+`scope` is the module name: `contract`, `agent-core`, `agent-mcp`, `bot-core`, `bot-runner`,
 `orchestrator`, `testkit`, `mcp-server`, `build-logic`. Use a comma for a change that genuinely
 spans two.
 

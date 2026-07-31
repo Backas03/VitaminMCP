@@ -173,6 +173,38 @@ A thin layer over stages 1–3. Do not create new logic here.
 
 ---
 
+## Stage 6 — many protocols, one runner (done 2026-08-01)
+
+Planned in `multi-version.md`, which holds the reasoning. Summarised here because the DoDs are what
+anything new is held to.
+
+- [x] `bot.spi.BotBackend` — the contract between the launcher and a backend. Library-free, and a
+      test asserts it
+- [x] One `bot-runner.jar`: backends embedded as resources, chosen by pinging the server, loaded in
+      a parent-last class loader
+- [x] The line protocol moves into the launcher, compiled once for every version there will ever be
+- [x] `bot/backends/shared` compiled into each backend, overridden by file where a version differs
+- [x] `vitaminmcp.bot-backend` convention plugin, directory-scanned includes, pattern whitelist —
+      a protocol is a directory and a coordinate
+- [x] Backends 767, 768, 769, 770, 771 beside the existing 772
+- [x] Floor to 1.21, so the compiler enforces the range the matrix demonstrates (design.md §5.6)
+- [x] `CompatibilityLiveTest` — seventeen features against a server it starts itself
+
+**DoD — all met**
+
+- `gradlew dist` produces exactly one runner jar, whatever versions are supported
+- The compatibility check passes on 1.21.1, 1.21.3, 1.21.4, 1.21.5, 1.21.6 and 1.21.8, each against
+  a real server of that version
+- One matrix run covers all seven entries in `versions.yaml` and passes
+- After the run, `exceptions_recent` holds no `IncompatibleClassChangeError`, `NoSuchMethodError`,
+  `NoSuchFieldError`, `NoClassDefFoundError` or `AbstractMethodError` on any version
+- Adding a protocol is a directory and a coordinate: no edit to `settings.gradle.kts`, the
+  dependency whitelist, or `dist`
+- The protocol number appears in the module directory, the generated descriptor and nowhere else —
+  not in `versions.yaml`, not in a package name
+
+---
+
 ## Order of work, in short
 
 ```

@@ -1,8 +1,22 @@
 # Multi-version support — plan
 
-**Status: proposal.** Nothing here is implemented, and two settled decisions are reversed by it.
-The reversals are listed in §7 so that `CLAUDE.md` and `design.md` get edited deliberately rather
-than drifting.
+> **Status: §2 and §3's upward half are built and verified (2026-08-01).** One runner jar with a
+> backend per protocol, backends 767 through 772, the floor at 1.21, and the whole matrix green.
+> `CLAUDE.md`, `design.md` §4.4 and §5.6, and `roadmap.md` Stage 6 now hold the settled version;
+> this document keeps the reasoning that got there, including the parts that turned out wrong.
+>
+> **Still a proposal:** everything below 1.21 — the Java 17 floor, per-version JVMs in the matrix,
+> and the MCProtocolLib package seam at 1.20.4. Nothing has asked for it yet.
+>
+> **What the build disagreed with**, kept because being wrong in a predictable way is the useful
+> part:
+> - §2.1 said "nothing typed crosses the class loader boundary" and that the launcher would hand
+>   the backend a `String[]`. A typed SPI is better, and §2.1.1 says why. The dispatch is
+>   version-independent, so compiling it once rather than once per backend was the whole win.
+> - "Why not an interface that each version implements" argued inheritance could not compile.
+>   It can. The reason to start with file override is cost, not impossibility — corrected in place.
+> - The measured cost of the seam was five files, not the "one file that diverged" §2.1 guessed —
+>   and 1.21.5 onward needs none of them.
 
 Two asks drive it:
 

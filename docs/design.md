@@ -117,15 +117,62 @@ all of §4.3's risk.
 **Write and maintain per-version code where versions actually differ.** Branch only at the points
 where the protocol genuinely diverges; where it does not, one implementation covers the range.
 
-- The bot speaks the supported range's protocol directly (currently MCProtocolLib `1.21.7-1`,
-  protocol 772)
+- The bot speaks each supported protocol directly, through a backend built against the matching
+  MCProtocolLib release
 - Servers are started natively (§15)
 - When a version really diverges, that is when a branch gets written. No abstracting in advance
 
 The `bot-via` module was left empty at the time of this revision and has since been removed
-entirely; what exists instead is one `bot-runner-<protocol>` per protocol. If a real demand for
-older versions appears, Via gets re-examined then — and at that point the cost of lowering the floor
-(§5.4) has to be counted too.
+entirely. If a real demand for versions below the floor appears, Via gets re-examined then — and at
+that point the cost of lowering the floor (§5.4) has to be counted too.
+
+### 4.4 One runner jar, a backend per protocol (revised 2026-08-01)
+
+> **Revised.** §4.2 originally shipped one `bot-runner-<protocol>` **jar** per protocol, each its
+> own process. The processes were right; the jars were not.
+
+Two things went wrong with a jar per protocol.
+
+- **The caller had to pick one.** `session_start` looked for a runner beside the server jar and
+  refused to guess when it found more than one — correct, and unusable the moment a second protocol
+  existed. Nothing in the install knew which one the server spoke.
+- **The runner source was copied per version.** 1620 lines of it, most of which is not
+  protocol-specific at all: bookkeeping of which bots exist, the scoreboard, the container, the line
+  protocol's own switch statement.
+
+What replaced it is **one `bot-runner.jar` carrying a backend per protocol as an embedded
+resource.** At startup it pings the server — a status handshake needs no protocol library and has
+not changed since 1.7 — reads the protocol out of the reply, and loads that backend in a
+parent-last class loader.
+
+**The isolation is unchanged in strength.** Two MCProtocolLib builds cannot share a *class path*,
+because every build occupies the same package names. They can share a *process*: a class loader is
+what separates them, and only one backend is ever loaded per process because a process serves one
+server. The child process remains, and it is still the crash boundary and still the cleanup.
+
+**Two boundaries, deliberately different.** The process boundary stays the text line protocol —
+it has to be serialized anyway, and killing the process is what guarantees no protocol state
+survives a `session_reset`. The class loader boundary is a Java interface, `bot.spi.BotBackend`,
+because there is nothing to serialize and a type contract buys three things text cannot: the
+dispatch stops being per-version and is compiled once, a backend that misses a command does not
+compile, and the escaping question at that seam disappears.
+
+**The SPI names no protocol library type.** That is not a restriction to design around — the line
+protocol already carries every command as text, which proves a library-free signature exists for
+each. A test asserts it, because the failure it prevents is a runtime linkage error rather than a
+compile one.
+
+**Backends share source and override by file.** `bot/backends/shared` is not a module: it has no
+build of its own and is compiled *into* each backend, against that backend's library. A version
+that differs drops its own copy of the file that differs, at the same path. Measured across 1.21 to
+1.21.8, what actually differs is five small files — `PlayerSync`, `SessionFactory`, `EntitySync`,
+`ItemText`, `BlockUse` — and 1.21.5 onward needs none of them.
+
+An interface with a subclass per version would work too, inside a library band. It is not used
+because it requires deciding the seams in advance and materialising every seam in every backend,
+including the ones where nothing differs; under file override a backend that differs nowhere is an
+empty directory. Promote a seam to a base class when two backends have actually diverged at the
+same point — that is §4.2 applied one level down.
 
 ### 4.3 The original argument (preserved)
 
@@ -136,14 +183,31 @@ native**, that risk disappears wholesale — the largest side benefit of droppin
 
 ---
 
-## 5. Supported floor: 1.21.8+ (settled, second revision 2026-07-29)
+## 5. Supported floor: 1.21+ (third revision 2026-08-01)
 
 > **Revision history.**
 > 1. Originally **1.13**. The judgement was that flattening (the `Material` enum and `ItemStack`
 >    data handling) is the real boundary, which is still true in itself. But **a live startup showed
 >    that the JVM constraint bites first** (§5.1).
 > 2. → **1.18**. Dropped to Java 17 bytecode, giving up 1.13–1.17.
-> 3. → **1.21.8** (current). See §5.2.
+> 3. → **1.21.8**. See §5.2.
+> 4. → **1.21** (current). See §5.6.
+
+### 5.6 Why it went back down to 1.21
+
+Bot backends for protocols 767 to 771 brought the matrix down to 1.21.1, and the agent passed on
+every one of them — but only *empirically*. Compiled against `paper-api:1.21.8`, nothing stopped a
+call to API those older servers do not have; the first sign would have been a `NoSuchMethodError`
+on somebody's server.
+
+Lowering `FLOOR` is what turns that into a compile error, which is what §5.4 said the mechanism was
+for. It cost nothing in bytecode — 1.21 is already Java 21, so `release` stays 21 — and it found
+exactly one offender: `ItemMeta.getCustomModelDataComponent()`, which is 1.21.4 API. That now goes
+through reflection like `getTPS` beside it, so one jar still covers the range and still reports the
+field on the versions that have it.
+
+**The floor is where the agent is verified, not where the bots stop.** Below 1.21 the cost is §5.4's
+table again, and nothing has asked for it.
 
 ### 5.1 Why 1.13 was impossible
 
@@ -257,8 +321,12 @@ agent/
   agent-core/        capture engine, state queries (Bukkit API)
   agent-mcp/         MCP server (the JDK's built-in HttpServer)
 bot/
-  bot-core/          MCProtocolLib wrapper, forwarding handshake
-  bot-runner-772/    bot runner for protocol 772. Runs as a child process (§4.2)
+  bot-core/          runner handle, line protocol, handshake, server ping, and the
+                     bot.spi contract. No protocol library
+  bot-runner/        THE runner jar: launcher, backend selection, dispatch (§4.4)
+  backends/
+    shared/          backend source compiled into every protocol, not a module
+    backend-<n>/     one per protocol: a coordinate, plus what differs
 orchestrator/        native server startup / world reset / version matrix
 testkit/             scenario runner, wait_for, assertions
 mcp-server/          tool exposure + assembly (entry point)
@@ -272,9 +340,10 @@ keeping the contract in sync.
 ### Dependency direction
 
 ```
-mcp-server   → testkit → {bot-core, orchestrator, contract}
-bot-runner-* → bot-core → contract
-agent-mcp    → agent-core → contract
+mcp-server  → testkit → {bot-core, orchestrator, contract}
+bot-runner  → bot-core → contract
+backend-*   → bot-core → contract
+agent-mcp   → agent-core → contract
 ```
 
 The essential point is that **`mcp-server` does not compile against `agent-*`**. The agent is only
@@ -504,6 +573,11 @@ versions:
   - id: "1.21.11"
     paper: { version: "1.21.11" }
 ```
+
+**The protocol is deliberately absent from it.** The runner asks the server what it speaks and
+loads the matching backend (§4.4), so writing the number here would be a second place for it to be
+wrong. What a new *protocol* needs is a `bot/backends/backend-<n>` directory; what a new *version*
+needs is this block.
 
 ### 15.1 Why not Docker (revised)
 

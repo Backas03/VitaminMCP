@@ -10,7 +10,8 @@ plugins {
 // Dependency direction, from CLAUDE.md ("dependencies flow one way only") and docs/design.md §6:
 //
 //     mcp-server → testkit → {bot-core, orchestrator, contract}
-//     bot-runner-* → bot-core → contract
+//     bot-runner   → bot-core → contract
+//     backend-*    → bot-core → contract
 //     agent-mcp  → agent-core → contract
 //
 // The whitelist is exhaustive — a module with no entry here fails the build, so adding a
