@@ -447,6 +447,20 @@ answers the moment it becomes true. One request, and nothing can slip through be
 | `player_state` | `name`, plus whichever of `online` / `gameMode` / `op` to check |
 | `inventory_open` | `name`, `title` (substring, colour ignored) |
 | `inventory_contains` | `name`, `material`, `slot`, `which` |
+| `log_matches` | `pattern` (Java regex), `level` (minimum severity, optional) |
+
+**`log_matches` is for work that changes nothing you can see.** A plugin loading a player's data
+asynchronously is the usual case: no block moves, no menu opens, no event you can name fires — the
+only signal it finished is the line it logs. Without this the alternative is `ticks`, which is a
+sleep wearing another name, and it will be calibrated to whichever machine wrote it.
+
+```json
+{"action": "wait_for", "condition": "log_matches",
+ "pattern": "Loaded affinity player data for 889dcaa5", "timeoutMillis": 15000}
+```
+
+Only lines written **during the wait** count, so a match is something that just happened rather than
+a leftover from the previous run.
 
 `timeoutMillis` defaults to 10000, capped at 60000.
 

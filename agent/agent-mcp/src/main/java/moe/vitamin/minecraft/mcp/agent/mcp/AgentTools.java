@@ -151,8 +151,11 @@ final class AgentTools {
                         + "block_is_not (world,x,y,z,material), event (eventType, player), "
                         + "player_online / player_offline (name), player_near (name,x,y,z,distance), "
                         + "inventory_open (name, title), inventory_contains (name, material, slot, "
-                        + "which). Wait for inventory_open before reading a menu — opening one is "
-                        + "not synchronous with the command that caused it.",
+                        + "which), log_matches (pattern, level). Wait for inventory_open before "
+                        + "reading a menu — opening one is not synchronous with the command that "
+                        + "caused it. Use log_matches for work that changes nothing observable, "
+                        + "such as a plugin loading a player's data asynchronously: waiting a "
+                        + "fixed number of ticks for that is a sleep by another name.",
                 properties -> {
                     stringProperty(properties, "condition",
                             "Condition type, e.g. 'block_is_not' or 'event'.");
@@ -180,6 +183,13 @@ final class AgentTools {
                     numberProperty(properties, "sinceSequence",
                             "For condition='event': only count events at or after this sequence. "
                                     + "Omit to count only events that happen during the wait.");
+                    stringProperty(properties, "pattern",
+                            "For condition='log_matches': a Java regular expression matched "
+                                    + "against the message. Only lines written during the wait "
+                                    + "count, so a match is something that just happened.");
+                    stringProperty(properties, "level",
+                            "For condition='log_matches': minimum severity — TRACE, DEBUG, INFO, "
+                                    + "WARN or ERROR. Omit to match any.");
                 }));
 
         // Everything above only reads. The line below is the boundary: with read-only left on,

@@ -1,5 +1,10 @@
 # VitaminMCP implementation roadmap
 
+**Stages 0–5 are done and verified.** What follows is the plan they were built to, kept because the
+definitions of done are still the standard anything new is held to — not as a description of work
+outstanding. Where a decision was later reversed, the entry says so rather than being quietly
+rewritten: the reversal is the useful part.
+
 Each stage **must meet its definition of done before the next one starts.** Do not skip ahead and
 build a later stage first.
 
@@ -67,7 +72,8 @@ Stand up the Gradle multi-module skeleton.
 
 **DoD**
 
-- The plugin installs and starts cleanly on both a Paper 1.13 and a 1.20 server
+- The plugin installs and starts cleanly on the supported range
+  (**1.13 and 1.20 as written; the floor is now 1.21.8** — design.md §5)
 - Connecting to this MCP directly from Claude Code, the `events_summary` → `events_query` flow works
 - Player joins, block breaks and chat are captured as events
 - **Load check**: with players moving actively, TPS degradation stays within the measurement floor
@@ -128,7 +134,8 @@ Not producing flaky tests is the whole job.
 
 A thin layer over stages 1–3. Do not create new logic here.
 
-- [ ] Expose the tools with the MCP Java SDK (five or six)
+- [ ] Expose the tools (five or six). **Written against the MCP Java SDK; implemented without it** —
+      see the mcp-server commit for why
 - [ ] `session_start` / `session_reset`
 - [ ] `bot_spawn` / `bot_run_scenario`
 - [ ] Agent MCP proxy — per-server tool namespaces in matrix mode
@@ -143,17 +150,26 @@ A thin layer over stages 1–3. Do not create new logic here.
 
 ## Stage 5 — version matrix
 
-- [ ] orchestrator: Docker (`itzg/minecraft-server`) start/stop and world template restore
+> **Two entries here were reversed while building it, and both reversals are in design.md.**
+> Docker was dropped for native startup (§15.1), and ViaProxy for per-protocol bot runners (§4).
+> The DoD below is written against the plan, not against what shipped.
+
+- [ ] orchestrator: start/stop and world template restore.
+      **Written for Docker (`itzg/minecraft-server`); native instead** — design.md §15.1
 - [ ] `versions.yaml` schema and loader (`design.md` §15)
-- [ ] bot-via: embed ViaProxy, bridge protocols
+- [ ] bot-via: embed ViaProxy, bridge protocols.
+      **Dropped** — one runner per protocol in a child process instead, design.md §4
 - [ ] Parallel matrix execution plus per-version result aggregation
-- [ ] Cross-check versions marked `native: true` against the native protocol
+- [ ] ~~Cross-check versions marked `native: true` against the native protocol~~ —
+      moot once every version is native
 
 **DoD**
 
-- The same scenario runs on four versions: 1.13, 1.16, 1.20 and latest
+- The same scenario runs across the matrix
+  (**1.13/1.16/1.20/latest as written; 1.21.7 and 1.21.8 in practice**, since the floor moved)
 - Adding a version is one block in `versions.yaml` and nothing more
-- When one version alone fails, the Via-routed and native results can be compared
+- ~~When one version alone fails, the Via-routed and native results can be compared~~ —
+  nothing is Via-routed any more
 
 ---
 

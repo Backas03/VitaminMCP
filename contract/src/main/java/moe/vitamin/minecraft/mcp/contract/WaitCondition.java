@@ -70,6 +70,20 @@ public record WaitCondition(String type, Map<String, Object> parameters) {
      */
     public static final String INVENTORY_CONTAINS = "inventory_contains";
 
+    /**
+     * A log line matching a regular expression has been written, optionally at or above a level.
+     *
+     * <p>The condition for waiting on work that leaves no trace in world or player state. A
+     * plugin loading a player's data asynchronously is the common case: nothing observable
+     * changes when it finishes, so every other condition here is blind to it, and the only
+     * honest signal is the line the plugin logs on its way out.
+     *
+     * <p>Without this the alternative is {@code ticks}, which is a sleep wearing a different
+     * name — and a scenario that waits a fixed number of ticks for an async load is calibrated
+     * to the machine that wrote it, which is exactly what the rest of this design refuses to do.
+     */
+    public static final String LOG_MATCHES = "log_matches";
+
     public WaitCondition {
         Objects.requireNonNull(type, "type");
         parameters = parameters == null ? Map.of() : Map.copyOf(parameters);

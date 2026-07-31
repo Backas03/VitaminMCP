@@ -73,6 +73,23 @@ public final class WaitForService {
                 ? condition.integer("sinceSequence", 0)
                 : events.written();
 
+        // Same reasoning for logs: a line already in the buffer is not something this wait saw
+        // happen, and matching one would make the wait return immediately on the previous run's
+        // output.
+        long logsFrom = logs.written();
+
+        // Compiled once rather than per tick, and before the wait so a bad pattern is rejected
+        // as the caller's mistake instead of ticking silently until the timeout.
+        java.util.regex.Pattern logPattern = WaitCondition.LOG_MATCHES.equals(condition.type())
+                ? java.util.regex.Pattern.compile(required(condition, "pattern"))
+                : null;
+        moe.vitamin.minecraft.mcp.contract.LogLevel logLevel =
+                WaitCondition.LOG_MATCHES.equals(condition.type())
+                        && condition.string("level", null) != null
+                        ? moe.vitamin.minecraft.mcp.contract.LogLevel.valueOf(
+                                condition.string("level", "").toUpperCase(Locale.ROOT))
+                        : null;
+
         CompletableFuture<Boolean> outcome = new CompletableFuture<>();
         AtomicInteger ticks = new AtomicInteger();
         int targetTicks = WaitCondition.TICKS.equals(condition.type())
@@ -86,7 +103,7 @@ public final class WaitForService {
                 try {
                     boolean done = targetTicks >= 0
                             ? elapsed >= targetTicks
-                            : holds(condition, eventsFrom);
+                            : holds(condition, eventsFrom, logsFrom, logPattern, logLevel);
                     if (done) {
                         outcome.complete(true);
                     }
@@ -134,7 +151,12 @@ public final class WaitForService {
     }
 
     /** Evaluates one condition. Runs on the main thread. */
-    private boolean holds(WaitCondition condition, long eventsFrom) {
+    private boolean holds(
+            WaitCondition condition,
+            long eventsFrom,
+            long logsFrom,
+            java.util.regex.Pattern logPattern,
+            moe.vitamin.minecraft.mcp.contract.LogLevel logLevel) {
         return switch (condition.type()) {
             case WaitCondition.BLOCK_IS -> material(condition).equals(expected(condition));
             case WaitCondition.BLOCK_IS_NOT -> !material(condition).equals(expected(condition));
@@ -225,13 +247,19 @@ public final class WaitForService {
                 yield false;
             }
 
+            case WaitCondition.LOG_MATCHES -> !logs.read(logsFrom, 1, entry ->
+                    (logLevel == null || entry.level().atLeast(logLevel))
+                            && logPattern.matcher(entry.message()).find())
+                    .items().isEmpty();
+
             default -> throw new IllegalArgumentException(
                     "Unknown wait condition '" + condition.type() + "'. Known types: "
                             + List.of(WaitCondition.TICKS, WaitCondition.BLOCK_IS,
                             WaitCondition.BLOCK_IS_NOT, WaitCondition.EVENT,
                             WaitCondition.PLAYER_ONLINE, WaitCondition.PLAYER_OFFLINE,
                             WaitCondition.PLAYER_NEAR, WaitCondition.PLAYER_STATE,
-                            WaitCondition.INVENTORY_OPEN, WaitCondition.INVENTORY_CONTAINS));
+                            WaitCondition.INVENTORY_OPEN, WaitCondition.INVENTORY_CONTAINS,
+                            WaitCondition.LOG_MATCHES));
         };
     }
 

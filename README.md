@@ -176,6 +176,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 | `player_state` | `online` / `gameMode` / `op` reached a value |
 | `player_near` | a player came within a radius |
 | `block_is` / `block_is_not` | a block became, or stopped being, a material |
+| `log_matches` | a log line matched a regex — for async work that changes nothing observable |
 | `ticks` | the server advanced N ticks |
 
 **There is no sleep, and there will not be one.** A fixed wait is a guess about timing that is right

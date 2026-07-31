@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "moe.vitamin.minecraft.mcp"
-version = "1.0.0-SNAPSHOT"
+version = "1.1.0"
 
 // Declared for every module rather than per-module. A module's *transitive* dependencies have
 // to be resolvable by whatever consumes it — testkit needs MCProtocolLib's repository purely

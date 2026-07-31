@@ -122,8 +122,10 @@ where the protocol genuinely diverges; where it does not, one implementation cov
 - Servers are started natively (§15)
 - When a version really diverges, that is when a branch gets written. No abstracting in advance
 
-The `bot-via` module is left empty. If a real demand for older versions appears, Via gets
-re-examined then — and at that point the cost of lowering the floor (§5.4) has to be counted too.
+The `bot-via` module was left empty at the time of this revision and has since been removed
+entirely; what exists instead is one `bot-runner-<protocol>` per protocol. If a real demand for
+older versions appears, Via gets re-examined then — and at that point the cost of lowering the floor
+(§5.4) has to be counted too.
 
 ### 4.3 The original argument (preserved)
 
@@ -256,7 +258,7 @@ agent/
   agent-mcp/         MCP server (the JDK's built-in HttpServer)
 bot/
   bot-core/          MCProtocolLib wrapper, forwarding handshake
-  bot-via/           (empty — §4.2)
+  bot-runner-772/    bot runner for protocol 772. Runs as a child process (§4.2)
 orchestrator/        native server startup / world reset / version matrix
 testkit/             scenario runner, wait_for, assertions
 mcp-server/          tool exposure + assembly (entry point)
@@ -270,8 +272,9 @@ keeping the contract in sync.
 ### Dependency direction
 
 ```
-mcp-server → testkit → {bot-core, bot-via, orchestrator, contract}
-agent-mcp  → agent-core → contract
+mcp-server   → testkit → {bot-core, orchestrator, contract}
+bot-runner-* → bot-core → contract
+agent-mcp    → agent-core → contract
 ```
 
 The essential point is that **`mcp-server` does not compile against `agent-*`**. The agent is only

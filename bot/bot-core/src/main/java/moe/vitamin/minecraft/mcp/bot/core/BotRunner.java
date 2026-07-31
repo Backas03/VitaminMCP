@@ -212,11 +212,15 @@ public final class BotRunner implements AutoCloseable {
          * @param type   optional entity type filter, e.g. {@code PLAYER} for a Citizens NPC
          *               standing among mobs. Null or blank matches anything
          */
-        public void useEntity(double x, double y, double z, double radius, String type)
+        public String useEntity(double x, double y, double z, double radius, String type)
                 throws IOException {
-            runner.send(RunnerProtocol.USE_ENTITY, name,
+            String[] reply = runner.send(RunnerProtocol.USE_ENTITY, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z),
                     String.valueOf(radius), type == null ? "" : type);
+            // The id it settled on. Coordinates name an entity, but two standing close together
+            // are both plausible answers, so a scenario that clicked the wrong one otherwise has
+            // to go and ask the server what was there.
+            return reply.length > 2 ? reply[2] : "";
         }
 
         public void breakBlock(int x, int y, int z) throws IOException {

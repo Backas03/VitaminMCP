@@ -229,12 +229,19 @@ public final class ScenarioRunner {
             }
 
             case "use_entity" -> {
-                act(step, bot -> bot.useEntity(
+                // Reported rather than discarded: coordinates name an entity, but two standing
+                // close together are both plausible answers, and a scenario that clicked the
+                // wrong one otherwise has to go and ask the server what was there.
+                String[] hit = new String[1];
+                act(step, bot -> hit[0] = bot.useEntity(
                         step.path("x").asDouble(), step.path("y").asDouble(),
                         step.path("z").asDouble(),
                         step.path("radius").asDouble(2.0),
                         step.path("entityType").asText(null)));
-                yield ScenarioResult.StepResult.ok(index, action, "sent");
+                yield ScenarioResult.StepResult.ok(index, action,
+                        hit[0] == null || hit[0].isBlank()
+                                ? "sent"
+                                : "sent to entity " + hit[0]);
             }
 
             case "click_slot" -> {
