@@ -12,6 +12,7 @@ without opening the game.
 - Move players, break and use blocks, chat
 - Wait for events and conditions instead of sleeping
 - Assert on blocks, players, events, inventories and the messages a player received
+- Read the player's whole screen: menus, chat, action bar, titles, boss bars, scoreboard
 - Read live server state: events, logs, exceptions, permissions
 - Paper / Purpur 1.21.8+
 
@@ -223,8 +224,9 @@ Two of these exist because the server alone cannot answer the question:
 
 **Permissions** are tested through `state_query` with `permissions: [...]` rather than a dedicated
 assertion — permission nodes can be tested but not enumerated, so you have to name the ones you care
-about. **Anything plugin-specific** (an economy balance, a scoreboard value) is reached through
-`command_exec` and its output, which is where those plugins put the answer.
+about. **A scoreboard or boss bar value** is read straight off the player's screen with
+`bot_inspect`, which is usually where a server draws money, region and quest progress. Anything
+still plugin-specific after that is reached through `command_exec` and its output.
 
 Two notes on calling them:
 
