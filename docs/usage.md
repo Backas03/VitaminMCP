@@ -546,7 +546,7 @@ When the cause is not visible there, dig in this order:
 | Symptom | Cause |
 |---|---|
 | Bot connection refused with `did you forget to enable BungeeCord in spigot.yml?` | The server is not `online-mode=false` + `bungeecord: true` ([README](../README.md) §2) |
-| `Outdated client!` | Wrong runner for the server's protocol. The number in the filename is a protocol number, not an MC version |
+| `err startup ... has no backend for protocol N` | The runner carries no backend for what this server speaks — it lists the ones it does carry. A version newer than the release needs a `bot/backends/backend-N` module ([design.md §4.4](design.md)) |
 | Events are not captured | The type is on the high-frequency list. Name it in `types`, and enable `capture-high-frequency` if needed |
 | `command_exec` is missing | `read-only: true` (the default). `session_start`'s `agentTools` lists the tools that actually exist |
 | A proxied tool refuses with something like `... needs 'kind'` | Parameters were wrapped. Pass them flat, at the top level |

@@ -14,7 +14,8 @@ without opening the game.
 - Assert on blocks, players, events, inventories and the messages a player received
 - Read the player's whole screen: menus, chat, action bar, titles, boss bars, scoreboard
 - Read live server state: events, logs, exceptions, permissions
-- Paper / Purpur 1.21+
+- Paper / Purpur **1.21 through 1.21.8**, from one install — the runner works out which protocol the
+  server speaks and adapts
 
 Full usage is in [docs/usage.md](docs/usage.md), design rationale in
 [docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -243,8 +244,8 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 
 | | |
 |---|---|
-| Minecraft server | **Paper 1.21.8 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
-| Java | 21. Needed to run it; only needed to build it if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP/releases/latest) |
+| Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
+| Java | 21. Needed to run it; only needed to build it if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) |
 
 ### Version support
 
@@ -280,7 +281,7 @@ it — inspection, logs and events all still work without them.
 
 ### Three artifacts
 
-**Download them from [Releases](https://github.com/Backas03/VitaminMCP/releases/latest)** — all
+**Download them from [Releases](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest)** — all
 three are attached to every release, so nothing has to be built to try this.
 
 To build them yourself instead:
@@ -493,12 +494,23 @@ proceeds normally.
 
 ## Running against several versions
 
-The version matrix is [versions.yaml](versions.yaml), not code — adding one is a single block.
-Server jars are downloaded from the PaperMC API and started natively (no Docker, no ViaProxy;
+The same scenario can be run across every supported version in one pass. The matrix is
+[versions.yaml](versions.yaml), not code — adding a version is a single block. Server jars are
+downloaded from the PaperMC API and started natively (no Docker, no ViaProxy;
 [design.md §15.1](docs/design.md)).
 
-Every version needs a runner that speaks its protocol. Without one the server rejects the bot with
-an honest `Outdated client!`.
+**The protocol is deliberately not in that file.** The runner asks each server what it speaks and
+loads the matching backend, so a version needs nothing there beyond the build to download.
+
+A *new protocol* — 1.21.9 and later — is a different matter: it needs a
+`bot/backends/backend-<protocol>` directory with the matching MCProtocolLib coordinate, and only
+the files that genuinely differ. Across 1.21 to 1.21.8 that came to five small files, and 1.21.5
+onward needed none. Until one exists, a server on that protocol is refused at startup by name —
+which protocols the runner carries, and which one the server asked for — rather than by an
+`Outdated client!` arriving from the server later.
+
+See [docs/design.md §4.4](docs/design.md) for why it is built this way, and
+[docs/multi-version.md](docs/multi-version.md) for the reasoning that got there.
 
 ---
 
@@ -513,7 +525,7 @@ other plugins:
 |---|---|---|
 | Jackson | `VitaminMCP.jar`, `mcp-server.jar` | Apache-2.0 |
 | ClassGraph | `VitaminMCP.jar` | MIT |
-| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner.jar` (one build per protocol) | MIT / Apache-2.0 |
+| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner.jar` — one build of it per supported protocol, each in its own embedded jar | MIT / Apache-2.0 |
 
 Their license and notice files travel inside the jars under `META-INF/` — relocating a package
 renames it, it does not lift the obligation to carry the notice.
