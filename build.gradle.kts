@@ -17,7 +17,10 @@ evaluationDependsOnChildren()
  * the part that is easy to get wrong. Putting them in one directory means the instructions can
  * name a directory rather than three paths into `build/`, each a different shape.
  */
-val dist by tasks.registering(Copy::class) {
+// Sync, not Copy: this directory is what gets uploaded to a release, and Copy leaves whatever was
+// there before. When the runner was renamed, the previous build's `bot-runner-772.jar` sat in it
+// looking exactly like something to ship.
+val dist by tasks.registering(Sync::class) {
     group = "distribution"
     description = "Gathers the agent plugin, the MCP server and the bot runner into build/dist."
 
