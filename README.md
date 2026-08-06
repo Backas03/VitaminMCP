@@ -14,6 +14,8 @@ without opening the game.
 - Assert on blocks, players, events, inventories and the messages a player received
 - Read the player's whole screen: menus, chat, action bar, titles, boss bars, scoreboard
 - Read live server state: events, logs, exceptions, permissions
+- Drive **several servers at once** — one session per backend of a BungeeCord network, bots staying
+  connected across all of them
 - Paper / Purpur **1.21 through 1.21.8**, from one install — the runner works out which protocol the
   server speaks and adapts
 
@@ -416,6 +418,20 @@ Call `session_start` first. Every other tool depends on it.
 all three in one folder, you rarely need to write it.
 
 A successful connection returns the server version, TPS and plugin list.
+
+**A proxied network is several servers.** Open one session per backend — they coexist, and starting
+one never disturbs another, which matters because closing a session disconnects its bots. `port` is
+the proxy's in every session; what tells them apart is `mcpPort`, the agent inside each backend.
+
+```jsonc
+session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
+session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
+bot_spawn     {"session": "lobby", "name": "Tester1"}
+```
+
+Every other tool takes `session`. Omit it and it resolves only while one session is open; with
+several it is an error naming them, rather than a guess about which server you meant. The full
+walkthrough is in [docs/usage.md](docs/usage.md).
 
 #### Or just ask
 
