@@ -459,6 +459,8 @@ public final class BotSession implements AutoCloseable {
         @Override
         public void packetReceived(org.geysermc.mcprotocollib.network.Session session, Packet packet) {
 
+            answerResourcePack(session, packet);
+
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
 
@@ -489,6 +491,16 @@ public final class BotSession implements AutoCloseable {
                 }
 
                 joined.countDown();
+            }
+        }
+
+        /** Declines a resource pack the server pushed, so the login can carry on. */
+        private void answerResourcePack(Session session, Packet packet) {
+            if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.common.clientbound
+                    .ClientboundResourcePackPushPacket push) {
+                session.send(new org.geysermc.mcprotocollib.protocol.packet.common.serverbound
+                        .ServerboundResourcePackPacket(push.getId(),
+                        org.geysermc.mcprotocollib.protocol.data.game.ResourcePackStatus.DECLINED));
             }
         }
 
