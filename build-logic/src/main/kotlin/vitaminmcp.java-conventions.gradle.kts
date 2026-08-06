@@ -23,6 +23,17 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-Xlint:all", "-parameters"))
 }
 
+// So a jar can say which build it is without the number being written down a second time in Java,
+// where it goes stale silently. ShadowJar is a Jar, so this reaches the shipped artifacts too.
+tasks.withType<Jar>().configureEach {
+    manifest {
+        attributes(
+            "Implementation-Title" to project.name,
+            "Implementation-Version" to project.version,
+        )
+    }
+}
+
 dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")

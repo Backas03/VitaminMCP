@@ -15,6 +15,14 @@ public final class VitaminMcpServer {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final String PROTOCOL_VERSION = "2025-06-18";
 
+    /** This build, from the jar manifest, or "dev" when running from classes rather than a jar. */
+    private static final String VERSION = version();
+
+    private static String version() {
+        String declared = VitaminMcpServer.class.getPackage().getImplementationVersion();
+        return declared == null ? "dev" : declared;
+    }
+
     private final SessionTools tools = new SessionTools();
 
     public static void main(String[] args) throws IOException {
@@ -85,7 +93,7 @@ public final class VitaminMcpServer {
 
         ObjectNode info = result.putObject("serverInfo");
         info.put("name", "VitaminMCP");
-        info.put("version", "1.0.0-SNAPSHOT");
+        info.put("version", VERSION);
 
         result.put("instructions",
                 "Drives a Minecraft server for plugin testing: real bots connect over the "
