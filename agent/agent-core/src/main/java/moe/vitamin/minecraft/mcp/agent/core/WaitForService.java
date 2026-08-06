@@ -16,29 +16,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-/**
- * Waits for a condition to become true, checking once per server tick.
- *
- * <p>This is the piece that lets scenarios stop sleeping. A caller that sleeps has guessed how
- * long something takes, and the guess is calibrated on whatever machine it was written on; the
- * same scenario on a loaded server sleeps too little and fails, and on an idle one wastes the
- * difference. Waiting for the thing itself is right on both.
- *
- * <p>The check runs on the server's main thread because that is the only place world and
- * player state can be read safely, and it runs on a tick because that is the rate at which
- * that state can actually change. Polling faster would burn main-thread time to observe
- * nothing new.
- *
- * <p>The HTTP thread blocks on the result. That is deliberate: the caller asked to wait, and
- * bounding it with a timeout means a wedged condition returns a failure with evidence rather
- * than hanging.
- */
+/** Waits for a condition to become true, checking once per server tick. */
 public final class WaitForService {
 
     /** Ticks per second, which is what one check per tick amounts to. */
     private static final long TICK_PERIOD = 1L;
 
-    /** Events and log lines attached to a timeout. Enough to explain, small enough to read. */
+    /** Events and log lines attached to a timeout. */
     private static final int SNAPSHOT_SIZE = 40;
 
     private final Plugin plugin;
@@ -57,29 +41,16 @@ public final class WaitForService {
         this.highFrequency = highFrequency;
     }
 
-    /**
-     * Blocks until {@code condition} holds, or {@code timeout} elapses.
-     *
-     * <p>Never throws on timeout — a timeout is an answer, and one the caller needs the
-     * snapshot from. Only a broken condition (an unknown type, a missing parameter) is an
-     * error.
-     */
+    /** Blocks until {@code condition} holds, or {@code timeout} elapses. */
     public WaitResult await(WaitCondition condition, Duration timeout) {
         long startedAt = System.nanoTime();
 
-        // Captured before the wait starts so an `event` condition matches things that happen
-        // during it, not whatever was already in the buffer.
         long eventsFrom = condition.integer("sinceSequence", -1) >= 0
                 ? condition.integer("sinceSequence", 0)
                 : events.written();
 
-        // Same reasoning for logs: a line already in the buffer is not something this wait saw
-        // happen, and matching one would make the wait return immediately on the previous run's
-        // output.
         long logsFrom = logs.written();
 
-        // Compiled once rather than per tick, and before the wait so a bad pattern is rejected
-        // as the caller's mistake instead of ticking silently until the timeout.
         java.util.regex.Pattern logPattern = WaitCondition.LOG_MATCHES.equals(condition.type())
                 ? java.util.regex.Pattern.compile(required(condition, "pattern"))
                 : null;
@@ -108,8 +79,7 @@ public final class WaitForService {
                         outcome.complete(true);
                     }
                 } catch (RuntimeException e) {
-                    // A condition that cannot be evaluated is the caller's mistake, not a
-                    // reason to keep spinning until the timeout.
+
                     outcome.completeExceptionally(e);
                 }
             }
@@ -139,7 +109,6 @@ public final class WaitForService {
             return WaitResult.matched(condition.describe(), elapsedMillis, ticks.get());
         }
 
-        // Only on failure: the state that explains it, while it is still there.
         return new WaitResult(
                 false,
                 condition.describe(),
@@ -150,7 +119,7 @@ public final class WaitForService {
                 logs.read(Math.max(0, logs.written() - SNAPSHOT_SIZE), SNAPSHOT_SIZE, null).items());
     }
 
-    /** Evaluates one condition. Runs on the main thread. */
+    /** Evaluates one condition. */
     private boolean holds(
             WaitCondition condition,
             long eventsFrom,
@@ -213,8 +182,7 @@ public final class WaitForService {
                     yield false;
                 }
                 org.bukkit.inventory.InventoryView view = player.getOpenInventory();
-                // The list of "this is just their own screen" view names lives in contract, so
-                // this and the snapshot cannot disagree about whether a menu is open.
+
                 if (!moe.vitamin.minecraft.mcp.contract.InventorySnapshot
                         .isMenu(view.getType().name())) {
                     yield false;
@@ -234,7 +202,7 @@ public final class WaitForService {
                                 : player.getOpenInventory().getTopInventory();
 
                 String material = required(condition, "material").toUpperCase(Locale.ROOT);
-                // A named slot checks that one; without it, anywhere in the inventory counts.
+
                 int slot = condition.integer("slot", -1);
                 if (slot >= 0) {
                     yield slot < inventory.getSize() && matches(inventory.getItem(slot), material);
@@ -268,8 +236,8 @@ public final class WaitForService {
     }
 
     /**
-     * A view's title as plain text, so a caller can match on words without knowing how the
-     * plugin coloured them.
+     * A view's title as plain text, so a caller can match on words without knowing how the plugin
+     * coloured them.
      */
     private static String plainTitle(org.bukkit.inventory.InventoryView view) {
         return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()

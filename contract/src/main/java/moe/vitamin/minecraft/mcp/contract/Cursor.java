@@ -2,17 +2,7 @@ package moe.vitamin.minecraft.mcp.contract;
 
 import java.util.Objects;
 
-/**
- * A position in one of the agent's append-only streams.
- *
- * <p>Every captured record gets a monotonically increasing sequence number, and a cursor is
- * simply the sequence to resume after. Paging therefore never re-reads or skips a record even
- * while capture continues, which is the reason cursors exist from the first version rather
- * than being retrofitted once responses start overflowing.
- *
- * <p>The stream name is part of the encoded form so that feeding an events cursor to a logs
- * query fails loudly instead of silently paging through the wrong data.
- */
+/** A position in one of the agent's append-only streams. */
 public record Cursor(String stream, long sequence) {
 
     /** Stream name for captured Bukkit events. */
@@ -39,22 +29,12 @@ public record Cursor(String stream, long sequence) {
         return new Cursor(stream, 0L);
     }
 
-    /**
-     * Encodes the cursor into the opaque token clients pass back.
-     *
-     * <p>The format is intentionally readable rather than base64: these tokens show up in logs
-     * and in LLM transcripts, and being able to tell at a glance which record a client resumed
-     * from is worth more here than hiding the representation.
-     */
+    /** Encodes the cursor into the opaque token clients pass back. */
     public String encode() {
         return stream + ':' + sequence;
     }
 
-    /**
-     * Parses a token produced by {@link #encode()}.
-     *
-     * @throws IllegalArgumentException if the token is malformed, or belongs to another stream
-     */
+    /** Parses a token produced by {@link #encode()}. */
     public static Cursor parse(String token, String expectedStream) {
         Objects.requireNonNull(token, "token");
         Objects.requireNonNull(expectedStream, "expectedStream");

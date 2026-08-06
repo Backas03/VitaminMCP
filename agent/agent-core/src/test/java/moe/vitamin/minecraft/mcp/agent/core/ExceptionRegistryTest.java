@@ -43,9 +43,6 @@ class ExceptionRegistryTest {
     void identityIgnoresTheMessage() {
         ExceptionRegistry registry = new ExceptionRegistry();
 
-        // The same bug reported with a player name baked into each message must not split into
-        // one group per player — that is exactly what grouping exists to prevent. Thrown from
-        // a single call site, because differing call sites are legitimately different groups.
         long timestamp = 1L;
         for (String player : List.of("Alice", "Bob", "Carol")) {
             registry.record(thrownFromHere("failed for " + player), timestamp++);
@@ -82,9 +79,7 @@ class ExceptionRegistryTest {
 
     @Test
     void survivesACyclicCauseChain() {
-        // initCause refuses a throwable causing itself, but nothing stops a two-step cycle,
-        // and walking one without a bound never returns. The timeout is the actual assertion:
-        // a regression here hangs the server thread that was unlucky enough to log it.
+
         RuntimeException first = new RuntimeException("first");
         RuntimeException second = new RuntimeException("second");
         first.initCause(second);
@@ -103,8 +98,6 @@ class ExceptionRegistryTest {
         ExceptionRegistry registry = new ExceptionRegistry();
         String hash = registry.record(thrownFromHere("boom"), 1L);
 
-        // Cheap by default so it is always safe to start here; the full trace costs a second
-        // call that the caller has to actually want.
         assertNull(registry.recent(10).get(0).stackTrace());
 
         ExceptionGroup detailed = registry.byHash(hash);
@@ -132,7 +125,7 @@ class ExceptionRegistryTest {
         registry.record(new RuntimeException("c") {}, 300L);
 
         assertEquals(2, registry.size());
-        // The oldest is gone; the two most recent survive.
+
         assertTrue(registry.recent(10).stream().allMatch(group -> group.lastSeen() >= 200L));
     }
 

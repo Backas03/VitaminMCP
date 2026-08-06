@@ -8,39 +8,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * The versions to test against, read from {@code versions.yaml}.
- *
- * <p>Configuration rather than code, so that adding a version is one block and never a code
- * change (CONTRIBUTING.md invariant 7). Every entry is launched natively; there is no Via path any
- * more, which is why an entry no longer has to declare whether it is translated
- * (docs/design.md §4).
- *
- * <pre>
- * versions:
- *   - id: "1.21.8"
- *     paper: { version: "1.21.8", build: 60 }
- *   - id: "1.21.11"
- *     paper: { version: "1.21.11" }
- * </pre>
- *
- * <p>Parsed by hand. The file is a list of two-field entries, and orchestrator has no other
- * reason to carry a YAML library — one whose transitive versions would then have to be kept
- * clear of the ones a Minecraft server already ships.
- */
+/** The versions to test against, read from {@code versions.yaml}. */
 public record VersionMatrix(List<Entry> versions) {
 
     public VersionMatrix {
         versions = List.copyOf(Objects.requireNonNull(versions, "versions"));
     }
 
-    /**
-     * One version to test.
-     *
-     * @param id           name used in reports; usually the Minecraft version
-     * @param paperVersion Minecraft version PaperMC publishes builds for
-     * @param build        specific build, or {@code 0} for the latest
-     */
+    /** One version to test. */
     public record Entry(String id, String paperVersion, int build) {
         public Entry {
             Objects.requireNonNull(id, "id");
@@ -52,13 +27,7 @@ public record VersionMatrix(List<Entry> versions) {
         return parse(Files.readString(file, StandardCharsets.UTF_8));
     }
 
-    /**
-     * Parses a matrix from YAML text.
-     *
-     * <p>Public alongside {@link #load(Path)} so a caller can build a matrix without a file —
-     * a test asserting how an unreachable version is reported should not have to write one to
-     * disk to do it.
-     */
+    /** Parses a matrix from YAML text. */
     public static VersionMatrix parse(String yaml) {
         List<Entry> entries = new ArrayList<>();
         String id = null;
@@ -72,8 +41,7 @@ public record VersionMatrix(List<Entry> versions) {
             }
 
             if (line.startsWith("- ")) {
-                // A new list item ends the previous entry, so entries are flushed on the way in
-                // rather than needing a sentinel at the end of the file.
+
                 if (id != null) {
                     entries.add(new Entry(id, version == null ? id : version, build));
                 }

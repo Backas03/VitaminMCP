@@ -29,8 +29,6 @@ class CursorTest {
         IllegalArgumentException thrown =
                 assertThrows(IllegalArgumentException.class, () -> Cursor.parse(eventsCursor, Cursor.LOGS));
 
-        // The whole point of putting the stream in the token: paging the wrong stream fails
-        // loudly rather than returning plausible-looking but unrelated records.
         assertTrue(thrown.getMessage().contains(Cursor.EVENTS));
         assertTrue(thrown.getMessage().contains(Cursor.LOGS));
     }

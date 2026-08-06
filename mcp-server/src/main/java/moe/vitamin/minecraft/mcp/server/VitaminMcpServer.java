@@ -9,21 +9,7 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 
-/**
- * The MCP server a client such as Claude Code launches.
- *
- * <p>Speaks JSON-RPC over stdio: one message per line on stdin, one response per line on
- * stdout. That is how local MCP servers are started, and it means no port, no token and no
- * network — the client already trusts the process it spawned.
- *
- * <p>Which is the opposite of the agent's situation, and the reason the two do not share a
- * transport. The agent listens on a socket inside someone's Minecraft server and has to assume
- * hostile traffic; this runs as a child process of the thing talking to it.
- *
- * <p><b>Nothing is written to stdout except protocol messages.</b> A stray print corrupts the
- * stream and the client sees a parse error rather than whatever was printed, so diagnostics go
- * to stderr.
- */
+/** The MCP server a client such as Claude Code launches. */
 public final class VitaminMcpServer {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -36,8 +22,7 @@ public final class VitaminMcpServer {
     }
 
     private void run() throws IOException {
-        // Captured before anything can replace it, and stdout is deliberately not wrapped in
-        // anything that might buffer a partial line.
+
         PrintStream out = new PrintStream(System.out, true, StandardCharsets.UTF_8);
         BufferedReader in = new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8));
@@ -58,7 +43,6 @@ public final class VitaminMcpServer {
         tools.close();
     }
 
-    /** @return the response, or {@code null} for a notification */
     private ObjectNode handle(String line) {
         JsonNode request;
         try {
@@ -71,7 +55,6 @@ public final class VitaminMcpServer {
         String method = request.path("method").asText("");
         JsonNode params = request.has("params") ? request.get("params") : MAPPER.createObjectNode();
 
-        // Notifications get no reply, per JSON-RPC — including ones we do not recognise.
         if (id == null || id.isNull()) {
             return null;
         }
@@ -89,8 +72,7 @@ public final class VitaminMcpServer {
                 default -> error(id, -32601, "Unknown method: " + method);
             };
         } catch (RuntimeException e) {
-            // Anything unhandled becomes a transport error rather than killing the loop; a
-            // server that exits mid-session looks to the client like a crash with no message.
+
             System.err.println("Error handling " + method + ": " + e);
             return error(id, -32603, String.valueOf(e.getMessage()));
         }
@@ -115,13 +97,7 @@ public final class VitaminMcpServer {
         return result;
     }
 
-    /**
-     * Runs a tool.
-     *
-     * <p>Failures come back as content with {@code isError} rather than as a JSON-RPC error,
-     * which is the MCP convention and the useful behaviour: a transport error is invisible to
-     * the model, whereas "call session_start first" is something it can act on.
-     */
+    /** Runs a tool. */
     private ObjectNode callTool(JsonNode params) {
         String name = params.path("name").asText("");
         ObjectNode result = MAPPER.createObjectNode();

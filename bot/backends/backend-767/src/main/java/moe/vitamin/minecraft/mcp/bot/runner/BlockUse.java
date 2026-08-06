@@ -6,12 +6,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
 
-/**
- * Right-clicking a block, on protocol 767.
- *
- * <p>Overrides the shared copy for one argument: the world-border flag was added in 1.21.2, so
- * the constructor here takes eight fields rather than nine.
- */
+/** Right-clicking a block, on protocol 767. */
 final class BlockUse {
 
     private BlockUse() {}
@@ -22,7 +17,7 @@ final class BlockUse {
                 face == null ? Direction.UP : face,
                 Hand.MAIN_HAND,
                 0.5f, 0.5f, 0.5f,
-                false,          // not inside a block
+                false,
                 sequence));
     }
 }

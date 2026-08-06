@@ -86,9 +86,9 @@ about what it may depend on.
 
 ## Invariants
 
-**Do not break these.** They are numbered, and the numbers are cited from comments throughout the
-source — `CONTRIBUTING.md invariant 5` in a Java file means the fifth entry here, so the numbering
-is part of the contract.
+**Do not break these.** They are numbered, and `checkModuleDependencies` cites the numbers back at
+you when it fails — "See invariant 2 in CONTRIBUTING.md" means the second entry here, so the
+numbering is part of the contract.
 
 1. **`mcp-server` does not compile against `agent-*`.** The agent is only injected as a jar at
    runtime, and the sole thing joining the two is `contract`. Break this and separating agents per

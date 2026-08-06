@@ -15,27 +15,10 @@ import moe.vitamin.minecraft.mcp.orchestrator.ManagedServer;
 import moe.vitamin.minecraft.mcp.orchestrator.PaperDownloader;
 import moe.vitamin.minecraft.mcp.orchestrator.VersionMatrix;
 
-/**
- * Runs one scenario against every version in the matrix.
- *
- * <p>This is the payoff for everything below it: a scenario written once tells you not just
- * whether a plugin works, but on which versions. A failure on one version and not the others is
- * a completely different investigation from a failure everywhere, and running them by hand is
- * exactly the chore nobody does often enough to catch a regression early.
- *
- * <p>Each version gets its own directory, its own ports and its own freshly restored world, so
- * versions cannot contaminate each other — which is the same isolation problem as between runs
- * (docs/design.md §13), just more obvious when two servers exist at once.
- */
+/** Runs one scenario against every version in the matrix. */
 public final class MatrixRunner {
 
-    /**
-     * Servers started at once.
-     *
-     * <p>Two by default, not one per version. Each is a real JVM with a gigabyte or more of
-     * heap, and a matrix that starves the machine measures the machine rather than the plugin —
-     * which produces timing failures that look exactly like plugin bugs.
-     */
+    /** Servers started at once. */
     public static final int DEFAULT_PARALLELISM = 2;
 
     /** Ports are allocated in pairs from here, so versions never collide. */
@@ -48,15 +31,6 @@ public final class MatrixRunner {
     private final Path javaHome;
     private final int parallelism;
 
-    /**
-     * @param workDirectory where per-version server directories live. Downloaded jars do not:
-     *                      they are cached by {@link PaperDownloader} somewhere durable, so a
-     *                      caller is free to delete this directory afterwards
-     * @param agentJar      the VitaminMCP plugin to install on each server
-     * @param runnerJar     the bot runner built for the protocol these versions speak
-     * @param worldTemplate world copied in before each run, or {@code null} for a fresh world
-     * @param javaHome      JVM used to run the servers
-     */
     public MatrixRunner(
             Path workDirectory, Path agentJar, Path runnerJar, Path worldTemplate, Path javaHome) {
         this(workDirectory, agentJar, runnerJar, worldTemplate, javaHome, DEFAULT_PARALLELISM);
@@ -76,13 +50,7 @@ public final class MatrixRunner {
         this.parallelism = parallelism;
     }
 
-    /**
-     * Runs {@code scenario} on every version.
-     *
-     * <p>Never throws for a version that fails or cannot start: a matrix exists to report on all
-     * of them, and aborting at the first problem hides whether the rest would have passed —
-     * which is the single most useful thing it could have told you.
-     */
+    /** Runs {@code scenario} on every version. */
     public MatrixResult run(VersionMatrix matrix, String scenario, Duration startupTimeout) {
         ExecutorService pool = Executors.newFixedThreadPool(parallelism, runnable -> {
             Thread thread = new Thread(runnable, "matrix");
@@ -124,8 +92,7 @@ public final class MatrixRunner {
             VersionMatrix.Entry entry, String scenario, int port, int agentPort, Duration timeout) {
 
         return () -> {
-            // A token per version, generated per run. A shared constant would work and would
-            // also mean every managed server on the machine accepts the same secret.
+
             String token = generateToken();
             Path directory = workDirectory.resolve("servers").resolve(entry.id());
 
@@ -136,8 +103,6 @@ public final class MatrixRunner {
                 server.prepare(worldTemplate, agentJar, token);
                 server.start(javaHome, timeout);
 
-                // The runner built for this version's protocol. Launching the wrong one is
-                // the failure this whole structure exists to make impossible to do silently.
                 try (BotRunner bots =
                              BotRunner.launch(runnerJar, javaHome, "127.0.0.1", port)) {
                     AgentClient agent = new AgentClient("127.0.0.1", agentPort, token);

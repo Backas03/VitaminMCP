@@ -13,23 +13,12 @@ import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import moe.vitamin.minecraft.mcp.bot.spi.OpenMenu;
 import moe.vitamin.minecraft.mcp.bot.spi.Position;
 
-/**
- * One protocol version's bots, behind the version-free {@link BotBackend}.
- *
- * <p>Loaded by the runner's launcher into a class loader of its own, which is what allows several
- * MCProtocolLib builds to live in one jar — every one of them occupies the same package names,
- * so they can share a process but never a class path (docs/multi-version.md §2.1).
- *
- * <p>Shared by every backend. A version that genuinely differs overrides the file that differs —
- * usually {@link PlayerSync} — rather than this one. Nothing here is protocol-specific: it is the
- * bookkeeping of which bots exist, and the translation between a name and a session.
- */
+/** One protocol version's bots, behind the version-free {@link BotBackend}. */
 public final class Backend implements BotBackend {
 
     /**
      * Written by the build from the module's own name, so it cannot disagree with which jar this
-     * is. A hand-written constant in shared source could not vary per backend at all, and one
-     * per backend would be the first thing to go stale after a copy-paste.
+     * is.
      */
     private static final String DESCRIPTOR = "/META-INF/vitaminmcp-backend.properties";
 
@@ -63,8 +52,7 @@ public final class Backend implements BotBackend {
 
     @Override
     public Position spawn(String name, String clientIp) throws Exception {
-        // Null for the claimed host, so the backend is told the host actually dialled;
-        // hardcoding one made every server believe it had been reached as "localhost".
+
         BotSession bot = BotSession
                 .open(host, port, BotIdentity.of(name), null, clientIp)
                 .connect(Duration.ofSeconds(30));
@@ -115,9 +103,7 @@ public final class Backend implements BotBackend {
         BotSession bot = require(name);
         int entityId = bot.entityNear(x, y, z, radius, type);
         if (entityId == BotSession.NO_ENTITY) {
-            // Saying what is actually nearby separates the three ways this fails: wrong
-            // coordinates, a radius too tight, and an entity the bot was never sent because it
-            // is outside its view distance.
+
             String nearby = bot.describeEntitiesNear(x, y, z, radius);
             throw new IllegalStateException(
                     "no " + (type == null || type.isBlank() ? "entity" : type)

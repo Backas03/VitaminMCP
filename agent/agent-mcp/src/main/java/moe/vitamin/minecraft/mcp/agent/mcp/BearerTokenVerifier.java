@@ -15,18 +15,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
 
-/**
- * Decides whether a bearer token may act on this server.
- *
- * <p>Two ways in, and they are not equivalent. The static token is a shared secret: anyone
- * holding it is indistinguishable from anyone else holding it, it never expires, and revoking
- * it means editing a file and restarting. That is acceptable for a loopback endpoint on a
- * machine you already control, and it is why the agent shipped with it.
- *
- * <p>OAuth exists for everything else. A token issued by an authorization server carries an
- * identity, an audience and an expiry, can be revoked centrally, and — through the audience
- * check below — cannot be replayed against a different server by whoever it was issued for.
- */
+/** Decides whether a bearer token may act on this server. */
 final class BearerTokenVerifier {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -44,7 +33,6 @@ final class BearerTokenVerifier {
         this.logger = logger;
     }
 
-    /** @return why the token was refused, or {@code null} if it is good */
     String refuse(String authorizationHeader) {
         if (authorizationHeader == null
                 || !authorizationHeader.regionMatches(true, 0, "Bearer ", 0, 7)) {
@@ -55,8 +43,6 @@ final class BearerTokenVerifier {
             return "a bearer token is required";
         }
 
-        // Compared with MessageDigest.isEqual because String.equals returns at the first
-        // differing byte, leaking the secret a character at a time to anyone timing responses.
         if (MessageDigest.isEqual(presented.getBytes(StandardCharsets.UTF_8), staticToken)) {
             return null;
         }
@@ -66,12 +52,7 @@ final class BearerTokenVerifier {
         return introspect(presented);
     }
 
-    /**
-     * Asks the authorization server whether a token is currently good (RFC 7662).
-     *
-     * <p>Asked rather than decided locally, so a revoked token stops working immediately
-     * instead of at its expiry.
-     */
+    /** Asks the authorization server whether a token is currently good (RFC 7662). */
     private String introspect(String token) {
         try {
             String form = "token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)
@@ -113,8 +94,7 @@ final class BearerTokenVerifier {
             return checkScopes(claims);
         } catch (java.io.IOException e) {
             logger.log(Level.WARNING, "Could not reach the introspection endpoint", e);
-            // Refused rather than allowed: an authorization server that cannot be reached is a
-            // reason to stop, never a reason to wave requests through.
+
             return "the authorization server is unreachable";
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -125,13 +105,7 @@ final class BearerTokenVerifier {
         }
     }
 
-    /**
-     * Checks the token was minted for this server.
-     *
-     * <p>Without it, a token a user granted to some other MCP server could be replayed here by
-     * that server — the confused-deputy problem the MCP authorization spec calls out, and the
-     * reason resource indicators exist.
-     */
+    /** Checks the token was minted for this server. */
     private String checkAudience(JsonNode claims) {
         if (oauth.resourceUrl().isEmpty()) {
             return null;

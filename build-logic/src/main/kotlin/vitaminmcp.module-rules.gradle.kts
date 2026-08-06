@@ -2,22 +2,10 @@ import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 
 plugins {
-    // Applied so that `compileClasspath` and `check` exist no matter what order a module
-    // lists its plugins in. Re-applying is a no-op.
+
     `java-library`
 }
 
-// Dependency direction, from CONTRIBUTING.md ("dependencies flow one way only") and docs/design.md §6:
-//
-//     mcp-server → testkit → {bot-core, orchestrator, contract}
-//     bot-runner   → bot-core → contract
-//     backend-*    → bot-core → contract
-//     agent-mcp  → agent-core → contract
-//
-// The whitelist is exhaustive — a module with no entry here fails the build, so adding a
-// module forces an explicit decision about what it may depend on. Invariant 1 (mcp-server
-// must never compile against agent-*) falls out of this automatically: agent-core and
-// agent-mcp appear in nobody's allowed set except each other's.
 val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":contract" to emptySet(),
     ":agent-core" to setOf(":contract"),
@@ -29,17 +17,12 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
 )
 
-// Backends are created by copying a directory, so they are matched by shape rather than listed —
-// otherwise the one edit needed to add a protocol would be two. The whitelist stays exhaustive:
-// a module matching neither the map nor this pattern still fails the build.
 fun allowedFor(path: String): Set<String>? = when {
     allowedProjectDependencies.containsKey(path) -> allowedProjectDependencies[path]
     path.startsWith(":backend-") -> setOf(":bot-core", ":contract")
     else -> null
 }
 
-// The invariant is about what a module may *compile* against, so runtime-only and test
-// configurations are deliberately out of scope.
 val checkedConfigurations = listOf("api", "implementation", "compileOnly")
 
 val modulePath = project.path
@@ -49,9 +32,6 @@ val checkModuleDependencies = tasks.register("checkModuleDependencies") {
     description = "Fails if this module declares a dependency the architecture does not allow."
 }
 
-// Dependencies are declared *after* this plugin is applied, so the whitelist can only be
-// compared once the module's build script has finished evaluating. Both sides are captured
-// here as plain strings, which keeps the task usable with the configuration cache.
 afterEvaluate {
     val allowed = allowedFor(modulePath)
     val declared = checkedConfigurations
@@ -95,9 +75,6 @@ tasks.named("check") {
     dependsOn(checkModuleDependencies)
 }
 
-// CONTRIBUTING.md invariant 2: contract holds pure Java types only. Checking the resolved
-// classpath rather than the declared dependencies also catches anything that arrives
-// transitively. Test configurations are excluded so contract can still use JUnit.
 if (modulePath == ":contract") {
     fun externalArtifactsOf(configurationName: String) =
         configurations.named(configurationName).flatMap { configuration ->

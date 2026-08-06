@@ -10,13 +10,7 @@ class ForwardingHandshakeTest {
 
     private static final UUID NOTCH = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
 
-    /**
-     * The field separator, referenced rather than written inline.
-     *
-     * <p>A literal NUL in source is invisible in every editor and makes the file binary as far
-     * as git and grep are concerned, so these tests build their inputs from the same constant
-     * the production code uses.
-     */
+    /** The field separator, referenced rather than written inline. */
     private static final String SEP = String.valueOf(ForwardingHandshake.SEPARATOR);
 
     @Test
@@ -24,12 +18,8 @@ class ForwardingHandshakeTest {
         String field = ForwardingHandshake.addressField(
                 "mc.example.com", "203.0.113.7", BotIdentity.of("Notch", NOTCH));
 
-        // Asserted through parse() rather than against a literal, because what matters is what
-        // the backend will split out, not how this class concatenated it.
         String[] parts = ForwardingHandshake.parse(field);
 
-        // Three, not four: a bot with no skin sends what BungeeCord sends, which omits the
-        // properties field entirely rather than sending an empty array.
         assertEquals(3, parts.length);
         assertEquals("mc.example.com", parts[0]);
         assertEquals("203.0.113.7", parts[1]);
@@ -41,8 +31,6 @@ class ForwardingHandshakeTest {
         String[] parts = ForwardingHandshake.parse(ForwardingHandshake.addressField(
                 "localhost", "127.0.0.1", BotIdentity.of("Notch", NOTCH)));
 
-        // A dashed UUID here is rejected by the backend, and it is an easy thing to get wrong
-        // because every other place in the codebase uses the dashed form.
         assertEquals(32, parts[2].length());
         assertEquals(-1, parts[2].indexOf('-'));
     }
@@ -63,8 +51,6 @@ class ForwardingHandshakeTest {
     void rejectsASeparatorSmuggledIntoHostOrIp() {
         BotIdentity identity = BotIdentity.of("Notch", NOTCH);
 
-        // A separator in either half shifts every field after it, so the backend would read
-        // the wrong UUID and admit a different player entirely — silently.
         assertThrows(IllegalArgumentException.class, () ->
                 ForwardingHandshake.addressField("evil" + SEP + "host", "127.0.0.1", identity));
         assertThrows(IllegalArgumentException.class, () ->
@@ -73,8 +59,7 @@ class ForwardingHandshakeTest {
 
     @Test
     void parseKeepsEmptyTrailingFields() {
-        // split() drops trailing empties by default, which would silently turn a malformed
-        // three-field handshake into something that looks well formed.
+
         assertEquals(4, ForwardingHandshake.parse("a" + SEP + "b" + SEP + "c" + SEP).length);
     }
 }

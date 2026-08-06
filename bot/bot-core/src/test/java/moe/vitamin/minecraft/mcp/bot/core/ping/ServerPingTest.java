@@ -7,13 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
-/**
- * Reading the protocol out of a status reply.
- *
- * <p>Worth testing on its own because getting it wrong picks the wrong backend, and the symptom
- * of that is {@code Outdated client!} arriving from the server several layers away from the
- * cause.
- */
+/** Reading the protocol out of a status reply. */
 class ServerPingTest {
 
     @Test
@@ -25,12 +19,7 @@ class ServerPingTest {
                 """));
     }
 
-    /**
-     * A server that mentions "protocol" elsewhere must not be read instead.
-     *
-     * <p>The description is written by whoever runs the server, so it can contain anything —
-     * including the word this parser is looking for.
-     */
+    /** A server that mentions "protocol" elsewhere must not be read instead. */
     @Test
     void ignoresTheWordProtocolOutsideTheVersionObject() throws Exception {
         assertEquals(769, ServerPing.protocolOf("""

@@ -4,20 +4,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 
-/**
- * Reading what a menu button says.
- *
- * <p><b>A seam.</b> Item components arrived in 1.20.5 and the accessor was renamed on the way:
- * {@code getDataComponents()} up to 1.21.1, {@code getDataComponentsPatch()} from 1.21.2, with
- * the constants moving from {@code DataComponentType} to {@code DataComponentTypes} at the same
- * time. Nothing about what is being read changed at all.
- *
- * <p>The name and lore are what identify a button in practice — the item id is a registry index
- * the protocol carries no names for — so this is the difference between a readable menu and a
- * list of numbers.
- *
- * <p>This copy is the modern one: protocol 768 and later.
- */
+/** Reading what a menu button says. */
 final class ItemText {
 
     private ItemText() {}
@@ -60,8 +47,7 @@ final class ItemText {
         if (model == null) {
             return "";
         }
-        // Strings first: a pack keyed on them is the modern idiom, and the floats are often
-        // absent entirely when it is.
+
         if (model.strings() != null && !model.strings().isEmpty()) {
             return String.join(",", model.strings());
         }

@@ -34,13 +34,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/**
- * Drives the real HTTP server over a real socket.
- *
- * <p>Worth the setup: the auth check, the JSON-RPC framing and the refusal to start without a
- * token are all things that only fail at the transport boundary, which a unit test of the tool
- * layer would never reach.
- */
+/** Drives the real HTTP server over a real socket. */
 class McpHttpServerTest {
 
     private static final String TOKEN = "test-token-do-not-reuse";
@@ -84,8 +78,6 @@ class McpHttpServerTest {
         }
     }
 
-    // ------------------------------------------------------------------ auth
-
     @Test
     void refusesToStartWithoutAToken() {
         AgentSettings unauthenticated = settings("  ", "127.0.0.1");
@@ -94,7 +86,6 @@ class McpHttpServerTest {
                 new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, true),
                 mapper, Logger.getLogger("test"), "1.0.0-test");
 
-        // docs/design.md §14: a missing token stops startup, it does not warn and continue.
         IllegalStateException thrown = assertThrows(IllegalStateException.class, unstarted::start);
         assertTrue(thrown.getMessage().contains("auth-token"));
     }
@@ -118,12 +109,9 @@ class McpHttpServerTest {
 
     @Test
     void rejectsATokenThatIsOnlyAPrefixOfTheRealOne() throws Exception {
-        // Guards the constant-time comparison against being replaced by something that treats
-        // a prefix as a match.
+
         assertEquals(401, post("tools/list", "{}", TOKEN.substring(0, 5)).statusCode());
     }
-
-    // -------------------------------------------------------------- protocol
 
     @Test
     void initializeEchoesASupportedProtocolVersion() throws Exception {
@@ -146,7 +134,6 @@ class McpHttpServerTest {
     void advertisesOnlyTheCapabilitiesItImplements() throws Exception {
         JsonNode capabilities = resultOf(post("initialize", "{}", TOKEN)).get("capabilities");
 
-        // Claiming resources or prompts would invite calls that cannot be served.
         assertEquals(List.of("tools"), iteratorToList(capabilities.fieldNames()));
     }
 
@@ -154,7 +141,6 @@ class McpHttpServerTest {
     void listsTools() throws Exception {
         JsonNode result = resultOf(post("tools/list", "{}", TOKEN));
 
-        // Seven read-only tools; command_exec is not among them by default.
         assertEquals(7, result.get("tools").size());
     }
 
@@ -173,8 +159,6 @@ class McpHttpServerTest {
         HttpResponse<String> response = post("tools/call",
                 "{\"name\":\"nonexistent_tool\",\"arguments\":{}}", TOKEN);
 
-        // 200 with isError, not a JSON-RPC error: the model has to be able to read what went
-        // wrong and try something else.
         assertEquals(200, response.statusCode());
         JsonNode result = resultOf(response);
         assertTrue(result.get("isError").asBoolean());
@@ -246,21 +230,15 @@ class McpHttpServerTest {
         assertEquals(405, response.statusCode());
     }
 
-    // -------------------------------------------------------------- activity
-
     @Test
     void logsWhatWasCalledAndWhatCameBack() throws Exception {
         post("tools/call", "{\"name\":\"state_query\",\"arguments\":{\"kind\":\"player\","
                 + "\"target\":\"Notch\"}}", TOKEN);
 
-        // The arrival line names the tool and the arguments. "tools/call" alone would say
-        // nothing about what the server was asked to do.
         String arrival = console.firstContaining("state_query");
         assertTrue(arrival.contains("kind"), arrival);
         assertTrue(arrival.contains("Notch"), arrival);
 
-        // The completion line carries the answer, which is the half an operator cannot
-        // reconstruct from the request.
         String completion = console.firstContaining("ok in");
         assertTrue(completion.contains("Notch"), completion);
     }
@@ -271,7 +249,7 @@ class McpHttpServerTest {
 
         String refusal = console.firstContaining("rejected");
         assertEquals(java.util.logging.Level.WARNING, console.levelOf(refusal));
-        // A rejected guess is still someone's secret, and console logs get pasted into issues.
+
         assertFalse(refusal.contains("hunter2-guessed-token"), refusal);
     }
 
@@ -306,15 +284,13 @@ class McpHttpServerTest {
             silent.stop();
         }
 
-        // Turning the console quiet is not the same as giving up the record of the agent
-        // changing the server, and the record has to include which command it was.
         String logged = recorder.firstContaining("command_exec");
         assertTrue(logged.contains("say hello"), logged);
     }
 
-    // --------------------------------------------------------------- helpers
-
-    /** A {@link Logger} that keeps what was written to it, so the console output can be asserted. */
+    /**
+     * A {@link Logger} that keeps what was written to it, so the console output can be asserted.
+     */
     private static final class RecordingLogger extends java.util.logging.Handler {
 
         private static final java.util.concurrent.atomic.AtomicInteger COUNTER =
@@ -422,8 +398,7 @@ class McpHttpServerTest {
                 HttpResponse.BodyHandlers.ofString());
 
         String challenge = response.headers().firstValue("WWW-Authenticate").orElse("");
-        // RFC 9728: a client with no credentials has to be able to discover where to get some,
-        // otherwise the only recovery is a human reading documentation.
+
         assertTrue(challenge.contains("resource_metadata="), challenge);
         assertTrue(challenge.contains("oauth-protected-resource"), challenge);
     }
@@ -438,7 +413,6 @@ class McpHttpServerTest {
                         .build(),
                 HttpResponse.BodyHandlers.ofString());
 
-        // Requiring a token to read the document that explains how to get a token is circular.
         assertEquals(200, response.statusCode());
         JsonNode metadata = mapper.readTree(response.body());
         assertNotNull(metadata.get("resource"));
@@ -453,8 +427,6 @@ class McpHttpServerTest {
                 new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, true),
                 mapper, Logger.getLogger("test"), "1.0.0-test");
 
-        // The token grants console access; over plain HTTP across a network anything on the
-        // path can read it. Refusing is the only response that cannot be ignored.
         IllegalStateException thrown = assertThrows(IllegalStateException.class, unstarted::start);
         assertTrue(thrown.getMessage().contains("clear text"), thrown.getMessage());
         assertTrue(thrown.getMessage().contains("tls.enabled"), thrown.getMessage());
@@ -474,9 +446,7 @@ class McpHttpServerTest {
                 new AgentTools(new StubQueries(), mapper, ResponseBudget.DEFAULT, true),
                 mapper, Logger.getLogger("test"), "1.0.0-test");
         try {
-            // An operator asserting a proxy handles TLS is a supported deployment, not a
-            // loophole — many servers already run one, and refusing it would push people to
-            // the genuinely unsafe option instead.
+
             proxied.start();
             assertTrue(proxied.boundPort() > 0);
         } finally {
@@ -551,7 +521,6 @@ class McpHttpServerTest {
             return new moe.vitamin.minecraft.mcp.contract.InventorySnapshot(
                     "CHEST", "§aShop", 27, 0, List.of(), false);
         }
-
 
         @Override
         public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(

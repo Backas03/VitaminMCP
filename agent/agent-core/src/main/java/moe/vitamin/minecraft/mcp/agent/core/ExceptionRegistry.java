@@ -10,43 +10,16 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import moe.vitamin.minecraft.mcp.contract.ExceptionGroup;
 
-/**
- * Collapses repeated exceptions into one entry each.
- *
- * <p>This is what makes exception data usable. A server left running overnight will hold the
- * same NullPointerException tens of thousands of times; listed individually it buries the two
- * or three other failures that actually explain the problem, and it exhausts a response budget
- * on near-identical text. Reported as "this one, ×34281, first seen 03:11" the same data fits
- * in a few lines (docs/design.md §9).
- *
- * <p><b>Identity is the stack, not the message.</b> Messages routinely carry a player name, a
- * coordinate or an id, so hashing them would split one recurring bug into thousands of groups
- * and defeat the whole mechanism. Two exceptions are the same here when they are the same
- * exception type thrown from the same place.
- *
- * <p>Thread-safe: log events arrive from the main thread, async chat threads, and whatever
- * threads other plugins use.
- */
+/** Collapses repeated exceptions into one entry each. */
 public final class ExceptionRegistry {
 
     /** Distinct exceptions retained before the least recently seen is evicted. */
     public static final int DEFAULT_MAX_GROUPS = 1_000;
 
-    /**
-     * Stack frames folded into the identity hash, counted from the throw site.
-     *
-     * <p>Deep enough that two genuinely different code paths separate, shallow enough that one
-     * bug reached through slightly different callers still folds into a single group.
-     */
+    /** Stack frames folded into the identity hash, counted from the throw site. */
     private static final int HASHED_FRAME_DEPTH = 12;
 
-    /**
-     * Cause links followed before giving up.
-     *
-     * <p>A bound rather than a visited-set: {@code initCause} rejects a throwable causing
-     * itself, but nothing stops {@code a.initCause(b); b.initCause(a)}, and that cycle would
-     * otherwise spin here forever. Real cause chains are a handful of links deep.
-     */
+    /** Cause links followed before giving up. */
     private static final int MAX_CAUSE_DEPTH = 10;
 
     /** Ceiling on one stored stack trace, so a pathological trace cannot dominate memory. */
@@ -66,11 +39,7 @@ public final class ExceptionRegistry {
         this.maxGroups = maxGroups;
     }
 
-    /**
-     * Records one occurrence.
-     *
-     * @return the hash identifying this exception's group, for {@code LogEntry.throwableHash}
-     */
+    /** Records one occurrence. */
     public String record(Throwable throwable, long timestamp) {
         if (throwable == null) {
             return null;
@@ -87,12 +56,7 @@ public final class ExceptionRegistry {
         return hash;
     }
 
-    /**
-     * The most recently seen exceptions, newest first, without stack traces.
-     *
-     * <p>Traces are omitted so that this call stays cheap enough to always be the first thing
-     * asked for; {@link #byHash} fetches one when it is actually wanted.
-     */
+    /** The most recently seen exceptions, newest first, without stack traces. */
     public List<ExceptionGroup> recent(int limit) {
         if (limit < 1) {
             throw new IllegalArgumentException("limit must be at least 1 but was: " + limit);
@@ -121,13 +85,7 @@ public final class ExceptionRegistry {
                 .ifPresent(oldest -> groups.remove(oldest.hash));
     }
 
-    /**
-     * Derives a stable identity from the exception type and where it was thrown.
-     *
-     * <p>FNV-1a over the frames rather than a cryptographic digest: this runs on the logging
-     * path, the hash only has to separate distinct bugs on one server, and 64 bits is ample
-     * for that.
-     */
+    /** Derives a stable identity from the exception type and where it was thrown. */
     static String hashOf(Throwable throwable) {
         long hash = 0xcbf29ce484222325L;
 
@@ -156,7 +114,7 @@ public final class ExceptionRegistry {
             result ^= value.charAt(i);
             result *= 0x100000001b3L;
         }
-        return result ^ 0x2dL; // separator, so "ab"+"c" and "a"+"bc" differ
+        return result ^ 0x2dL;
     }
 
     private static String stackTraceOf(Throwable throwable) {
@@ -182,8 +140,7 @@ public final class ExceptionRegistry {
             this.hash = hash;
             this.type = throwable.getClass().getName();
             this.message = throwable.getMessage();
-            // Captured once, from the first occurrence. Every later occurrence has the same
-            // frames by construction, so re-rendering them would be pure waste.
+
             this.stackTrace = stackTraceOf(throwable);
             this.firstSeen = timestamp;
             this.lastSeen = new AtomicLong(timestamp);

@@ -9,15 +9,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 
-/**
- * The backends carried inside this jar, and where they are unpacked to run.
- *
- * <p>Each backend is a complete shaded jar sitting in the bundle as a resource — never on the
- * class path, because two of them together would be exactly the collision the bundle exists to
- * avoid. They are described by a generated index rather than discovered by scanning, so this
- * works the same whether the launcher is running from the jar or from a directory during a
- * build.
- */
+/** The backends carried inside this jar, and where they are unpacked to run. */
 final class BackendCatalog {
 
     private static final String INDEX = "/backends/index.properties";
@@ -46,13 +38,7 @@ final class BackendCatalog {
         return protocols;
     }
 
-    /**
-     * Unpacks the backend for {@code protocol} and returns the jar.
-     *
-     * <p>Cached beside the Paper downloads, outside any working directory, so it survives
-     * between runs — and keyed by the bundle's version, so a new build never runs against the
-     * previous build's extracted backend.
-     */
+    /** Unpacks the backend for {@code protocol} and returns the jar. */
     Path extract(int protocol) throws IOException {
         String module = index.getProperty(PROTOCOL_PREFIX + protocol);
         if (module == null) {
@@ -61,9 +47,6 @@ final class BackendCatalog {
                     + " Add a bot/backends/backend-" + protocol + " module and rebuild.");
         }
 
-        // Keyed on what the backend *is*, not on which build produced it. A version number does
-        // not change while it is being worked on, so keying on one meant a rebuilt backend went
-        // on running from the previously unpacked copy.
         Path directory = cacheDirectory().resolve(String.valueOf(protocol))
                 .resolve(index.getProperty("hash." + protocol, "unversioned"));
         Files.createDirectories(directory);
@@ -73,11 +56,8 @@ final class BackendCatalog {
             return jar;
         }
 
-        // Written beside the target and moved into place, so a second runner starting at the
-        // same moment either sees no file or a complete one, never a half-written jar.
         Path partial = Files.createTempFile(directory, module, ".part");
-        // `.backend`, not `.jar`: shadow unzips anything inside the bundle that looks like an
-        // archive, and the extension is what keeps this one whole. See bot-runner's build.
+
         try (InputStream in = BackendCatalog.class
                 .getResourceAsStream("/backends/" + module + ".backend")) {
             if (in == null) {

@@ -66,7 +66,6 @@ class SequencedRingBufferTest {
             appendValue(buffer, "v" + i);
         }
 
-        // Only the last 4 survive; a reader that asked from the start must be told so.
         SequencedRingBuffer.Batch<Item> batch = buffer.read(0, 100, null);
 
         assertEquals(List.of("v6", "v7", "v8", "v9"), batch.items().stream().map(Item::value).toList());
@@ -96,8 +95,6 @@ class SequencedRingBufferTest {
 
         SequencedRingBuffer.Batch<Item> batch = buffer.read(0, 3, item -> item.value().equals("hit"));
 
-        // A selective filter must still fill the page rather than returning whatever happened
-        // to match within the first three slots.
         assertEquals(3, batch.items().size());
         assertFalse(batch.exhausted());
     }
@@ -128,10 +125,6 @@ class SequencedRingBufferTest {
             appendValue(buffer, "v" + i);
         }
 
-        // This is how a cursor-less query reaches the buffer. Reading from 0 rather than from
-        // oldestRetainedSequence() is what makes the loss visible: starting at the oldest
-        // retained record would report nothing dropped, on exactly the request where the caller
-        // most needs to know it is seeing 4 records out of 100.
         SequencedRingBuffer.Batch<Item> batch = buffer.read(0, 10, null);
 
         assertEquals(96L, batch.dropped());
@@ -166,7 +159,6 @@ class SequencedRingBufferTest {
         int perThread = 4_000;
         int total = threads * perThread;
 
-        // Capacity large enough that nothing is overwritten, so every sequence must be present.
         SequencedRingBuffer<Item> buffer = bufferOf(total * 2);
 
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -192,7 +184,6 @@ class SequencedRingBufferTest {
         assertEquals(total, batch.items().size());
         assertEquals(0L, batch.dropped());
 
-        // Sequences must be dense and strictly increasing — no gaps, no duplicates.
         long expected = 0;
         for (Item item : batch.items()) {
             assertEquals(expected++, item.sequence());

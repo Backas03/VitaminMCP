@@ -22,19 +22,7 @@ import org.geysermc.mcprotocollib.network.packet.Packet;
 import org.geysermc.mcprotocollib.protocol.packet.handshake.serverbound.ClientIntentionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
 
-/**
- * One bot's connection to a server.
- *
- * <p>Connecting is deliberately not "the TCP socket opened". A Minecraft login has several
- * more steps after that, and a bot that reports success at connect time will have tests
- * racing against a login that has not finished — or that is about to be rejected. {@link
- * #connect} waits for the play-state join packet, which is the first moment the bot exists in
- * the world as far as the server and its plugins are concerned.
- *
- * <p>Identity is injected through the handshake rather than authenticated (docs/design.md
- * §3.1): the intention packet's hostname is rewritten on the way out to carry the
- * forwarded fields.
- */
+/** One bot's connection to a server. */
 public final class BotSession implements AutoCloseable {
 
     /** Consecutive unchanged positions taken as "landed". */
@@ -48,91 +36,44 @@ public final class BotSession implements AutoCloseable {
 
     private final BotIdentity identity;
 
-    /**
-     * The connection, as the one type every version has.
-     *
-     * <p>Not {@code ClientSession}: that type does not exist before 1.21.2, where a client was a
-     * {@code TcpClientSession} instead. {@link Session} carries everything used here — listeners,
-     * send, isConnected, disconnect — and creating one is {@link SessionFactory}'s job precisely
-     * because that part does differ.
-     */
+    /** The connection, as the one type every version has. */
     private final Session session;
     private final CountDownLatch joined = new CountDownLatch(1);
     private final AtomicReference<String> disconnectReason = new AtomicReference<>();
 
     private volatile boolean inGame;
 
-    /**
-     * Where the server last said this bot is.
-     *
-     * <p>Three plain doubles, not the protocol library's vector. The position packet was reworked
-     * in 1.21.2 and its vector type is not the same shape across the supported range, so holding
-     * one here would spread that difference to the ticker, the settle loop, the accessors and the
-     * failure message. Converted where the packet arrives — {@link PlayerSync} — the difference
-     * stays in the one file that is allowed to know about it.
-     */
+    /** Where the server last said this bot is. */
     private volatile Position position;
     private volatile java.util.concurrent.ScheduledExecutorService ticker;
     private volatile boolean loadedSent;
 
-    /**
-     * The menu the server has opened for this bot, if any.
-     *
-     * <p>Tracked because a click has to name the container it is in, and the id is assigned by
-     * the server when it opens the screen — there is no way to ask for it later.
-     */
+    /** The menu the server has opened for this bot, if any. */
     private volatile int containerId = NO_CONTAINER;
 
-    /**
-     * The server's synchronisation counter for the open container.
-     *
-     * <p>Sent back with every click. The server uses it to notice that the client acted on a
-     * stale view of the container, and a click carrying an old value is applied but immediately
-     * followed by a full re-send. Tracking it is what keeps a bot's clicks from being treated as
-     * a desynchronised client's.
-     */
+    /** The server's synchronisation counter for the open container. */
     private volatile int containerStateId;
 
     /** Title of the open menu, as plain text, for diagnostics and matching. */
     private volatile String containerTitle;
 
-    /**
-     * The menu's contents as the client was told them.
-     *
-     * <p>Kept because the server-side inventory is not always the same thing. A plugin that
-     * draws its menu by sending packets — the usual approach when ProtocolLib or packetevents is
-     * involved — leaves the Bukkit inventory empty and paints the screen directly. Asking the
-     * server then reports an empty chest while the player is looking at a full one, and the
-     * only place the truth exists is here, in what arrived on the wire.
-     */
+    /** The menu's contents as the client was told them. */
     private volatile org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[] containerItems
             = new org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[0];
 
     /** Most recent messages the server sent this bot, oldest first. */
     private final java.util.Deque<String> messages = new java.util.concurrent.ConcurrentLinkedDeque<>();
 
-    /**
-     * How many messages to keep.
-     *
-     * <p>Enough for the join sequence plus whatever a command replies, and bounded because a bot
-     * left connected to a busy server would otherwise accumulate every public chat line for as
-     * long as it lives.
-     */
+    /** How many messages to keep. */
     private static final int MAX_MESSAGES = 100;
 
-    /** No menu open. The player's own inventory is container 0, so -1 is the free sentinel. */
+    /** No menu open. */
     public static final int NO_CONTAINER = -1;
 
-    /** No entity matched. Entity ids are non-negative, so -1 is free here too. */
+    /** No entity matched. */
     public static final int NO_ENTITY = -1;
 
-    /**
-     * An entity this bot has been told about, and where it currently is.
-     *
-     * <p>Only what is needed to find one again. A test names an entity by where it stands, so
-     * position and type are the whole of it — the numeric id exists on the wire and nowhere a
-     * scenario author could have seen it.
-     */
+    /** An entity this bot has been told about, and where it currently is. */
     private record TrackedEntity(int id, String type, double x, double y, double z) {
 
         TrackedEntity at(double x, double y, double z) {
@@ -155,18 +96,6 @@ public final class BotSession implements AutoCloseable {
     private final java.util.Map<Integer, TrackedEntity> entities
             = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /**
-     * A boss bar the server is showing this bot.
-     *
-     * <p>Kept as current state rather than as a message, because that is what it is: a boss bar
-     * stays on screen until removed, and asking "is it showing, and what does it say" is a
-     * different question from "what was I told". Plugins use them for timers, event progress and
-     * region names, none of which appear anywhere the agent can see.
-     */
-    // The record itself is moe.vitamin.minecraft.mcp.bot.spi.BossBar: what the client would draw
-    // is the same shape whoever is asking, and defining it twice would mean converting between
-    // two identical records on the way out.
-
     /** Boss bars currently shown, by the id the server addresses them with. */
     private final java.util.Map<java.util.UUID, BossBar> bossBars
             = new java.util.concurrent.ConcurrentHashMap<>();
@@ -185,15 +114,7 @@ public final class BotSession implements AutoCloseable {
     /** Which objective is in the sidebar slot, or null when none is. */
     private volatile String sidebarObjective;
 
-    /**
-     * The text a team wraps its members' names in.
-     *
-     * <p>Needed because of how scoreboards are actually written. A sidebar line's "entry" is the
-     * key, not the text: servers register one blank-looking entry per line — a colour code, since
-     * entries must be unique — and put the words the player reads in that entry's team prefix and
-     * suffix. Read the scores alone and a fifteen-line scoreboard comes back as
-     * {@code ["§e", "§d", "§c", ...]}, which looks like data and is not.
-     */
+    /** The text a team wraps its members' names in. */
     private record TeamText(String prefix, String suffix) {}
 
     /** Team name to its prefix and suffix. */
@@ -204,14 +125,7 @@ public final class BotSession implements AutoCloseable {
     private final java.util.Map<String, String> entryTeam
             = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /**
-     * The nearest tracked entity to a point, or {@link #NO_ENTITY}.
-     *
-     * <p>Nearest rather than first, so that two NPCs standing close together resolve to the one
-     * actually named. {@code type} is matched case-insensitively against the entity type and
-     * ignored when blank — most useful for a Citizens NPC, which is a {@code PLAYER} standing
-     * among mobs.
-     */
+    /** The nearest tracked entity to a point, or {@link #NO_ENTITY}. */
     public int entityNear(double x, double y, double z, double radius, String type) {
         TrackedEntity best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -229,13 +143,7 @@ public final class BotSession implements AutoCloseable {
         return best == null ? NO_ENTITY : best.id();
     }
 
-    /**
-     * What is actually near a point, for when {@link #entityNear} found nothing.
-     *
-     * <p>"No entity within 2 blocks of x/y/z" leaves the author guessing between a wrong
-     * coordinate, a radius that is too small, and an NPC the bot cannot see because it is out of
-     * render distance. Listing what is there answers all three at once.
-     */
+    /** What is actually near a point, for when {@link #entityNear} found nothing. */
     public String describeEntitiesNear(double x, double y, double z, double radius) {
         return entities.values().stream()
                 .filter(e -> e.distanceTo(x, y, z) <= Math.max(radius * 4, 16))
@@ -251,31 +159,12 @@ public final class BotSession implements AutoCloseable {
         this.session = session;
     }
 
-    /**
-     * Opens a session, presenting the connection as what it actually is.
-     *
-     * <p>The backend is told the host that was really dialled and the address this machine
-     * really connects from. Use {@link #open(String, int, BotIdentity, String, String)} to claim
-     * something else.
-     */
+    /** Opens a session, presenting the connection as what it actually is. */
     public static BotSession open(String host, int port, BotIdentity identity) throws Exception {
         return open(host, port, identity, null, null);
     }
 
-    /**
-     * Opens a session against a backend that trusts proxy forwarding.
-     *
-     * @param host        the server to connect to
-     * @param port        the server's port
-     * @param identity    who the bot claims to be
-     * @param claimedHost the host the backend should believe was dialled, or {@code null} for
-     *                    {@code host} — which is what a real client dialling it would send, and
-     *                    what a server routing on forced hosts matches against
-     * @param clientIp    the address the backend should attribute the connection to, or
-     *                    {@code null} for the one this machine really uses. Worth setting only
-     *                    to reproduce a specific address — an IP ban, a geo lookup — because a
-     *                    made-up one is a lie the rest of the test then has to live with
-     */
+    /** Opens a session against a backend that trusts proxy forwarding. */
     public static BotSession open(
             String host, int port, BotIdentity identity, String claimedHost, String clientIp)
             throws Exception {
@@ -294,22 +183,13 @@ public final class BotSession implements AutoCloseable {
         return value == null || value.isBlank();
     }
 
-    /**
-     * Connects and waits until the bot is in the world.
-     *
-     * @return this session, connected
-     * @throws IllegalStateException if the server disconnected us, or the join never arrived
-     */
+    /** Connects and waits until the bot is in the world. */
     public BotSession connect(Duration timeout) throws InterruptedException {
         SessionFactory.connect(session);
 
         boolean released = joined.await(timeout.toMillis(), TimeUnit.MILLISECONDS);
         String reason = disconnectReason.get();
 
-        // The latch is released by *either* arriving in the world or being disconnected, so it
-        // alone does not mean success. Treating it as success let a rejected bot report
-        // "never settled" from a later call instead of the reason the server actually gave —
-        // which turned a plain protocol mismatch into a mystery.
         if (reason != null || position == null) {
             close();
             throw new IllegalStateException(reason != null
@@ -321,17 +201,7 @@ public final class BotSession implements AutoCloseable {
         return this;
     }
 
-    /**
-     * Starts behaving like a client.
-     *
-     * <p>A real client sends its position every tick, and the server relies on that. Without
-     * it the player is never processed as moving, never falls, never lands, and stays wherever
-     * it was put — which is usually the air above the spawn point. Everything downstream then
-     * fails in confusing ways: block actions target air, reach checks fail against a position
-     * the server no longer agrees with, and none of it produces an error.
-     *
-     * <p>This is the difference between "the bot connected" and "the bot is a player".
-     */
+    /** Starts behaving like a client. */
     private void startTicking() {
         java.util.concurrent.ScheduledExecutorService executor =
                 java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -344,39 +214,18 @@ public final class BotSession implements AutoCloseable {
             try {
                 Position current = position;
                 if (current != null && session.isConnected()) {
-                    // Reporting the position the server last gave us, with onGround true, is
-                    // what a client does when standing still; the server applies gravity and
-                    // corrects us with a teleport if we are wrong, which updates `position`.
+
                     PlayerSync.sendStanding(session, current);
                 }
             } catch (RuntimeException ignored) {
-                // A tick that fails must not kill the scheduler and silently stop the bot.
+
             }
         }, 0, 50, TimeUnit.MILLISECONDS);
 
         this.ticker = executor;
     }
 
-    /**
-     * Waits until the bot has stopped falling.
-     *
-     * <p>Landing is not something the protocol announces, and it cannot be asked of the server
-     * either: {@code isOnGround} for a player is whatever the client last claimed, and this
-     * client claims it every tick — reading it back would be reading our own assertion.
-     *
-     * <p>So the observable used is the one thing the server does control: it corrects a
-     * client's position when it disagrees, and those corrections are what stop arriving once
-     * the player is at rest. Waiting for the correction stream to settle is therefore waiting
-     * for the server to agree about where the bot is, which is the real precondition for
-     * acting on coordinates.
-     *
-     * <p>This is a poll, and unlike the others it cannot be replaced by an agent-side
-     * predicate, because the fact being waited on lives in this process rather than on the
-     * server.
-     *
-     * @param timeout how long to allow for the fall
-     * @throws IllegalStateException if the position never settles
-     */
+    /** Waits until the bot has stopped falling. */
     public BotSession awaitGrounded(Duration timeout) throws InterruptedException {
         long deadline = System.nanoTime() + timeout.toNanos();
         double lastY = Double.NaN;
@@ -386,8 +235,7 @@ public final class BotSession implements AutoCloseable {
             Position current = position;
             if (current != null) {
                 if (Math.abs(current.y() - lastY) < 1.0e-6) {
-                    // Several checks, not one: a fall passes through frames where Y happens to
-                    // repeat, and one sample would call those landed.
+
                     if (++settledChecks >= SETTLED_CHECKS) {
                         return this;
                     }
@@ -469,30 +317,14 @@ public final class BotSession implements AutoCloseable {
         return containerId != NO_CONTAINER;
     }
 
-    /**
-     * Forgets the open menu, because this client is the one closing it.
-     *
-     * <p>The server does not echo a close the client asked for — it acts on it and says nothing.
-     * So a bot that sends the packet and keeps its own record would go on believing the screen
-     * is up, and the next click would be addressed to a container that is no longer open. A real
-     * client clears its state at exactly this point, and so does this one.
-     */
+    /** Forgets the open menu, because this client is the one closing it. */
     void forgetContainer() {
         containerId = NO_CONTAINER;
         containerTitle = null;
         containerItems = new org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack[0];
     }
 
-    /**
-     * The open menu's slots as the client received them, one entry per occupied slot.
-     *
-     * <p><b>The item is a numeric id, not a name.</b> The protocol carries a registry index and
-     * MCProtocolLib ships no table to turn it back into {@code DIAMOND_SWORD}; the mapping lives
-     * in the game jar. The agent's own {@code state_query} gives real material names — this is
-     * for the case where that comes back empty because the menu was never in the server's
-     * inventory to begin with. Names, lore and model data do come through, and for a menu those
-     * are what identify a button anyway.
-     */
+    /** The open menu's slots as the client received them, one entry per occupied slot. */
     public List<MenuItem> clientMenuItems() {
         var items = containerItems;
         List<MenuItem> out = new ArrayList<>();
@@ -517,13 +349,7 @@ public final class BotSession implements AutoCloseable {
         return List.copyOf(bossBars.values());
     }
 
-    /**
-     * The sidebar scoreboard, or {@code null} when nothing is displayed there.
-     *
-     * <p>Lines are sorted highest score first, here rather than by the caller, because the sort
-     * is part of what the player sees: the scores are a layout instruction, not data anyone
-     * reads.
-     */
+    /** The sidebar scoreboard, or {@code null} when nothing is displayed there. */
     public Scoreboard clientScoreboard() {
         String objective = sidebarObjective;
         if (objective == null) {
@@ -539,14 +365,7 @@ public final class BotSession implements AutoCloseable {
         return new Scoreboard(objectiveTitles.getOrDefault(objective, objective), rendered);
     }
 
-    /**
-     * One sidebar line as the client would draw it.
-     *
-     * <p>The entry is wrapped in its team's prefix and suffix, which is where the words live on
-     * every scoreboard written since teams became the way to do it. Since 1.20.3 a score may
-     * instead carry its own display text, and that wins outright — it is the whole line, not
-     * something to wrap.
-     */
+    /** One sidebar line as the client would draw it. */
     private String renderLine(String entry, ScoreLine line) {
         if (!line.text().equals(entry)) {
             return line.text();
@@ -559,14 +378,7 @@ public final class BotSession implements AutoCloseable {
         return text.prefix() + stripLegacyCodes(entry) + text.suffix();
     }
 
-    /**
-     * Drops legacy section-sign codes, which are formatting rather than text.
-     *
-     * <p>Applied to the entry only. The client reads {@code §e} as "colour the rest yellow" and
-     * draws nothing for it, so leaving it in makes every line of a blank-entry scoreboard look
-     * like it ends in stray characters. Prefix and suffix have already been through the plain
-     * text serializer and carry no codes to remove.
-     */
+    /** Drops legacy section-sign codes, which are formatting rather than text. */
     private static String stripLegacyCodes(String entry) {
         return entry.replaceAll("(?i)§[0-9a-fk-or]", "");
     }
@@ -590,8 +402,7 @@ public final class BotSession implements AutoCloseable {
     public void close() {
         java.util.concurrent.ScheduledExecutorService executor = ticker;
         if (executor != null) {
-            // Stopped before disconnecting, so the last tick cannot fire against a closed
-            // session and log a spurious failure.
+
             executor.shutdownNow();
             ticker = null;
         }
@@ -607,26 +418,12 @@ public final class BotSession implements AutoCloseable {
         private final String claimedHost;
         private final String clientIp;
 
-        /** @param clientIp {@code null} to report the address the socket really uses */
         LifecycleListener(String claimedHost, String clientIp) {
             this.claimedHost = claimedHost;
             this.clientIp = clientIp;
         }
 
-        /**
-         * Replaces the handshake's hostname with the forwarded identity.
-         *
-         * <p>Done by rewriting the packet rather than by disguising the address the session
-         * connects to. Both would work — MCProtocolLib copies the hostname out of the remote
-         * address, so a fake label on it ends up on the wire — but that is an implementation
-         * detail of the library, whereas the intention packet is part of the protocol.
-         * Rewriting the packet says what is actually meant, and does not quietly stop injecting
-         * if the library changes how it derives the host.
-         *
-         * <p>The field is assembled here, not at construction, because until the socket is
-         * connected there is no local address to report — and the handshake is the first thing
-         * sent after it connects, so here is the earliest moment it is known.
-         */
+        /** Replaces the handshake's hostname with the forwarded identity. */
         @Override
         public void packetSending(
                 org.geysermc.mcprotocollib.network.event.session.PacketSendingEvent event) {
@@ -649,41 +446,22 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
-        /**
-         * The address this machine is connecting from.
-         *
-         * <p>What the server would have seen had nothing been forwarding on our behalf — so
-         * reporting it means the bot looks like a client at this machine rather than at a
-         * fictional loopback address, which is what anything keyed on the address (bans,
-         * per-IP connection limits, geo lookups) then sees.
-         *
-         * <p>Exact when nothing translates addresses between here and the server, and close
-         * enough to be useful when something does; a NAT would have the server seeing the
-         * public address instead, which no client can determine for itself. Pass an explicit
-         * clientIp when the test needs a specific one.
-         */
+        /** The address this machine is connecting from. */
         private String localAddress() {
             if (session.getLocalAddress() instanceof InetSocketAddress local
                     && local.getAddress() != null) {
                 return local.getAddress().getHostAddress();
             }
-            // Only reachable if the channel has no local address, which for a socket that is
-            // mid-handshake means it is already gone. The connection is about to fail either
-            // way; loopback keeps the field well-formed so it fails with the server's reason
-            // rather than an exception on a Netty thread.
+
             return "127.0.0.1";
         }
 
         @Override
         public void packetReceived(org.geysermc.mcprotocollib.network.Session session, Packet packet) {
-            // The join packet, not the login-success one: success means the server accepted
-            // the identity, this means the player is actually in a world.
+
             if (packet instanceof ClientboundLoginPacket) {
                 inGame = true;
-                // Joining a world invalidates every id from the previous one. Keeping them would
-                // let a lookup match an entity that is no longer anywhere. The same applies to
-                // the screen: boss bars and scoreboards are re-sent on join, so anything held
-                // from before would be shown alongside its own replacement.
+
                 entities.clear();
                 bossBars.clear();
                 objectiveTitles.clear();
@@ -698,24 +476,13 @@ public final class BotSession implements AutoCloseable {
             trackEntities(packet);
             trackBossBars(packet);
             trackScoreboard(packet);
-            // The join packet does not say where the player is; the server follows it with a
-            // position. Waiting for that too means a bot is only "ready" once it knows where it
-            // stands, which is what any action needing coordinates depends on.
+
             Position arrived = PlayerSync.positionOf(packet);
             if (arrived != null) {
                 BotSession.this.position = arrived;
 
-                // The server will not act on anything this player sends until the teleport is
-                // acknowledged — a real client replies with the id it was given, and until it
-                // does, block actions and movement are dropped without a word. Skipping this
-                // is why the first bot appeared to connect fine and then do nothing.
                 PlayerSync.confirmTeleport(session, packet);
 
-                // The client declares it has finished loading and is ready to play. Until that
-                // arrives the server holds the player in a loading state and ignores world
-                // interactions — silently, so a bot that skips it connects, stands there, and
-                // has every dig discarded with no event and no error. This was the actual cause
-                // of BlockBreakEvent never appearing.
                 if (!loadedSent) {
                     loadedSent = true;
                     PlayerSync.sendLoaded(session);
@@ -725,14 +492,7 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
-        /**
-         * Follows the open menu and its synchronisation counter.
-         *
-         * <p>The state id arrives on three different packets and every one of them advances it.
-         * Missing any means the next click carries a stale id, which the server answers by
-         * resending the whole container — harmless once, but it makes a test that clicks twice
-         * behave differently from one that clicks once, for reasons nothing reports.
-         */
+        /** Follows the open menu and its synchronisation counter. */
         private void trackContainer(Packet packet) {
             if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
                     .inventory.ClientboundOpenScreenPacket open) {
@@ -746,8 +506,7 @@ public final class BotSession implements AutoCloseable {
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.inventory.ClientboundContainerSetSlotPacket slot) {
                 containerStateId = slot.getStateId();
-                // One slot at a time is how a menu is usually filled after it opens, so
-                // following only the full sends would show a permanently empty screen.
+
                 var current = containerItems;
                 if (slot.getSlot() >= 0 && slot.getSlot() < current.length) {
                     var updated = java.util.Arrays.copyOf(current, current.length);
@@ -756,22 +515,12 @@ public final class BotSession implements AutoCloseable {
                 }
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.inventory.ClientboundContainerClosePacket) {
-                // The server can close a menu on its own — a plugin moving the player to
-                // another screen, or rejecting what they did. Forgetting it here means a later
-                // click reports "no menu open" rather than being sent into a container that is
-                // no longer there.
+
                 containerId = NO_CONTAINER;
                 containerTitle = null;
             }
         }
 
-        /**
-         * Labels a non-chat message with where it appeared, or drops it if it says nothing.
-         *
-         * <p>Clearing the action bar is done by sending an empty one, and a scenario that
-         * asserted on messages would otherwise accumulate a blank entry every time any plugin
-         * did that.
-         */
         /** A component as plain text, treating absent as empty. */
         private static String plain(net.kyori.adventure.text.Component component) {
             return component == null
@@ -779,18 +528,13 @@ public final class BotSession implements AutoCloseable {
                     : PlainTextComponentSerializer.plainText().serialize(component);
         }
 
+        /** Labels a non-chat message with where it appeared, or drops it if it says nothing. */
         private static String overlay(String where, net.kyori.adventure.text.Component component) {
             String plain = PlainTextComponentSerializer.plainText().serialize(component);
             return plain.isBlank() ? null : "[" + where + "] " + plain;
         }
 
-        /**
-         * Follows the boss bars on this bot's screen.
-         *
-         * <p>The server sends one packet per change rather than the whole bar each time, so the
-         * current state only exists by accumulating them — which is exactly why nothing else can
-         * answer "what does the boss bar say right now".
-         */
+        /** Follows the boss bars on this bot's screen. */
         private void trackBossBars(Packet packet) {
             if (!(packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
                     .ClientboundBossEventPacket event)) {
@@ -812,23 +556,12 @@ public final class BotSession implements AutoCloseable {
                 case UPDATE_STYLE -> bossBars.computeIfPresent(event.getUuid(), (id, bar) ->
                         new BossBar(bar.title(), bar.progress(),
                                 event.getColor() == null ? "" : event.getColor().name()));
-                // UPDATE_FLAGS carries darken-sky and boss-music, which nothing here reads.
+
                 default -> { }
             }
         }
 
-        /**
-         * Follows the sidebar scoreboard.
-         *
-         * <p>Assembled from three packet types, none of which is the whole picture: one names
-         * the objective, one puts an objective in a display slot, and one sets a single line.
-         * A scoreboard is the most common place a server puts a player's live state — money,
-         * region, quest progress — and it reaches the client only, so this is the only side that
-         * can be asked what it says.
-         *
-         * <p>Only the sidebar is followed. The player-list and below-name slots hold numbers
-         * rather than the lines anyone writes a test about.
-         */
+        /** Follows the sidebar scoreboard. */
         private void trackScoreboard(Packet packet) {
             if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
                     .scoreboard.ClientboundSetObjectivePacket objective) {
@@ -848,15 +581,14 @@ public final class BotSession implements AutoCloseable {
                     .clientbound.scoreboard.ClientboundSetDisplayObjectivePacket display) {
                 if (display.getPosition() == org.geysermc.mcprotocollib.protocol.data.game
                         .scoreboard.ScoreboardPosition.SIDEBAR) {
-                    // An empty name clears the slot, which is how a plugin hides its scoreboard.
+
                     sidebarObjective = display.getName() == null || display.getName().isEmpty()
                             ? null
                             : display.getName();
                 }
             } else if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame
                     .clientbound.scoreboard.ClientboundSetScorePacket score) {
-                // Since 1.20.3 a line can carry its own text; before that the entry name was the
-                // line, which is why servers used to fill scoreboards with colour-code entries.
+
                 String line = score.getDisplay() == null
                         ? score.getOwner()
                         : PlainTextComponentSerializer.plainText().serialize(score.getDisplay());
@@ -876,7 +608,7 @@ public final class BotSession implements AutoCloseable {
                     case CREATE, UPDATE -> {
                         teamText.put(team.getTeamName(), new TeamText(
                                 plain(team.getPrefix()), plain(team.getSuffix())));
-                        // CREATE carries members; UPDATE does not, and passes null.
+
                         if (team.getPlayers() != null) {
                             for (String entry : team.getPlayers()) {
                                 entryTeam.put(entry, team.getTeamName());
@@ -902,18 +634,7 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
-        /**
-         * Follows the entities the server has told this bot about.
-         *
-         * <p>Needed because the protocol addresses an entity by a numeric id the server invents,
-         * and nothing outside this client ever sees it. A scenario says "the NPC at these
-         * coordinates"; only the tracker can turn that into the id an interact packet carries.
-         *
-         * <p>Position is followed through teleports and relative moves as well as the initial
-         * spawn. A stationary NPC needs none of that, but a wandering one would otherwise be
-         * looked up at where it first appeared, and the resulting miss reads as "no entity
-         * there" rather than as stale data.
-         */
+        /** Follows the entities the server has told this bot about. */
         private void trackEntities(Packet packet) {
             EntitySync.Spawn spawn = EntitySync.spawnOf(packet);
             if (spawn != null) {
@@ -944,27 +665,7 @@ public final class BotSession implements AutoCloseable {
             }
         }
 
-        /**
-         * Keeps what the server said to this bot.
-         *
-         * <p>Almost every plugin refusal is a message and nothing else — no exception, no console
-         * line, no event. Without this, a command that was declined for lack of permission and
-         * one that silently did nothing are indistinguishable from the server side, which is
-         * exactly the wall this hit on a real server.
-         *
-         * <p>Three chat packet types because the server picks between them by how the message was
-         * produced: plugins and command feedback use the system one, player chat the signed one,
-         * and anything relayed on a player's behalf the disguised one. A test does not care
-         * which, so they all land in the same place.
-         *
-         * <p>The action bar and the title are here for the same reason the chat ones are, and
-         * were added after a refusal went missing. A plugin declining an interaction had put its
-         * reason above the hotbar rather than in chat, which is an ordinary thing to do and left
-         * {@code messages} showing nothing at all — indistinguishable from a plugin that never
-         * ran. They carry a prefix so the reader knows where the player would have seen it,
-         * since "above the hotbar, briefly" and "in chat, persistently" are different claims
-         * about what a person would notice.
-         */
+        /** Keeps what the server said to this bot. */
         private void trackMessages(Packet packet) {
             String text = null;
             if (packet instanceof org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound
@@ -989,9 +690,7 @@ public final class BotSession implements AutoCloseable {
             if (text == null) {
                 return;
             }
-            // Stored as it arrived. Making it safe to put on the wire is the launcher's job —
-            // a backend that pre-mangled text would be answering a question about the transport
-            // rather than about what the player was told.
+
             messages.addLast(text);
             while (messages.size() > MAX_MESSAGES) {
                 messages.pollFirst();
@@ -1005,8 +704,7 @@ public final class BotSession implements AutoCloseable {
             containerTitle = null;
             entities.clear();
             disconnectReason.set(describe(event));
-            // Released so a caller waiting on login fails immediately with the server's reason
-            // rather than sitting out the full timeout.
+
             joined.countDown();
         }
 

@@ -8,23 +8,7 @@ import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 
-/**
- * Captures server logs by attaching a log4j2 appender.
- *
- * <p>Paper logs through log4j2, so an appender receives the level, the logger name and the
- * throwable already structured. The alternative — tailing {@code latest.log} and parsing it
- * with regular expressions — throws all of that away and then tries to reconstruct it from
- * text, badly: multi-line stack traces have to be re-associated with their message, the
- * throwable is no longer an object that can be hashed for grouping, and any plugin logging a
- * message that resembles a log line corrupts the parse (docs/design.md §9).
- *
- * <p>This class is the one place CONTRIBUTING.md permits a direct log4j2 dependency, and it is
- * confined to attaching and detaching. Nothing else in the agent references log4j2.
- *
- * <p>Failure to attach is not fatal. Log capture going missing degrades the agent to events
- * only, which is still useful; refusing to start would be a worse trade. That is a different
- * judgement from the auth token, where starting without it would expose console access.
- */
+/** Captures server logs by attaching a log4j2 appender. */
 public final class LogCapture {
 
     private static final String APPENDER_NAME = "VitaminMCP";
@@ -45,11 +29,7 @@ public final class LogCapture {
         this.pluginLogger = pluginLogger;
     }
 
-    /**
-     * Attaches the appender to the root logger.
-     *
-     * @return whether log capture is active
-     */
+    /** Attaches the appender to the root logger. */
     public boolean attach() {
         if (appender != null) {
             throw new IllegalStateException("Log capture is already attached");
@@ -76,7 +56,7 @@ public final class LogCapture {
         }
     }
 
-    /** Detaches the appender. Safe to call when attach failed or never ran. */
+    /** Detaches the appender. */
     public void detach() {
         if (appender == null) {
             return;
@@ -98,13 +78,7 @@ public final class LogCapture {
         return appender != null;
     }
 
-    /**
-     * Maps a log4j2 level onto the small set the contract exposes.
-     *
-     * <p>log4j2 orders levels by ascending {@code intLevel} as severity <em>falls</em>, so the
-     * comparisons read backwards from the usual intuition. FATAL is folded into ERROR: nothing
-     * downstream treats them differently.
-     */
+    /** Maps a log4j2 level onto the small set the contract exposes. */
     static LogLevel toContractLevel(int intLevel) {
         if (intLevel <= org.apache.logging.log4j.Level.ERROR.intLevel()) {
             return LogLevel.ERROR;
@@ -121,14 +95,7 @@ public final class LogCapture {
         return LogLevel.TRACE;
     }
 
-    /**
-     * The appender itself.
-     *
-     * <p>Built through the deprecated four-argument {@code AbstractAppender} constructor on
-     * purpose. It has existed since log4j2 2.0 and is still present across the 2.x line, while
-     * the {@code Property[]} replacement only arrived in 2.11.2. Compiling against the older
-     * signature is what lets one jar attach on both a 1.13 server and a current one.
-     */
+    /** The appender itself. */
     private final class CapturingAppender extends AbstractAppender {
 
         @SuppressWarnings("deprecation")
@@ -148,8 +115,7 @@ public final class LogCapture {
                 buffer.append(sequence ->
                         new LogEntry(sequence, timestamp, level, logger, message, throwableHash));
             } catch (RuntimeException | LinkageError e) {
-                // Swallowed deliberately, and without logging. Anything logged from inside an
-                // appender re-enters this method and spins.
+
             }
         }
     }

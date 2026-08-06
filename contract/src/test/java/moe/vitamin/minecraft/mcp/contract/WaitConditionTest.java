@@ -17,15 +17,7 @@ class WaitConditionTest {
         return new WaitCondition("ticks", parameters);
     }
 
-    /**
-     * The bug this pins down made a wait stop waiting.
-     *
-     * <p>These parameters cross a JSON boundary and can arrive quoted, because the tool that
-     * forwards them does not know which are numbers. A quoted one used to miss the {@code
-     * instanceof Number} check and take the default instead, so {@code wait_for count: 20}
-     * waited a single tick and reported success — on a real server, against a real menu, with
-     * nothing to suggest anything was wrong.
-     */
+    /** The bug this pins down made a wait stop waiting. */
     @Test
     void aQuotedNumberIsStillANumber() {
         assertEquals(20, with("count", "20").integer("count", 1));
@@ -47,7 +39,7 @@ class WaitConditionTest {
 
     /**
      * Present but unusable is refused rather than defaulted — the same mistake in the other
-     * direction. Quietly waiting one tick because someone typed "twenty" is not a kindness.
+     * direction.
      */
     @Test
     void aValueThatIsNotANumberIsRefused() {
@@ -62,7 +54,7 @@ class WaitConditionTest {
         assertTrue(with("op", "true").bool("op", false));
         assertFalse(with("op", "false").bool("op", true));
         assertTrue(with("op", true).bool("op", false));
-        // has() is what lets a caller mean "op must be false" rather than "I did not say".
+
         assertTrue(with("op", false).has("op"));
         assertFalse(new WaitCondition("ticks", Map.of()).has("op"));
     }

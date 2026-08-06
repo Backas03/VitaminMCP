@@ -53,18 +53,7 @@ class AgentToolsTest {
                 Map.of("detail", payload));
     }
 
-    // ------------------------------------------------------------- discovery
-
-    /**
-     * A filter that arrives as a string is still a filter.
-     *
-     * <p>These tools are proxied by mcp-server, which publishes them without a parameter schema
-     * — it cannot know one until a session exists — so a client with no types to work from sends
-     * every argument as a string. Numbers survived that, because parsing them is forgiving.
-     * Arrays did not: the filter was dropped and the query answered a different question from
-     * the one it was asked, which on a busy server reads as "lots of events" rather than as a
-     * bug. Found by asking a live server for one event type and being handed another.
-     */
+    /** A filter that arrives as a string is still a filter. */
     @Test
     void aTypeFilterSurvivesArrivingAsAJsonString() {
         ObjectNode arguments = mapper.createObjectNode();
@@ -97,13 +86,7 @@ class AgentToolsTest {
         assertEquals(List.of("BlockBreakEvent"), List.copyOf(queries.lastTypes));
     }
 
-    /**
-     * The same leniency, for the one other array argument.
-     *
-     * <p>Worth its own test because the consequence is different in kind: a dropped permission
-     * list comes back as {@code "permissions": []}, which does not look like a lost argument. It
-     * looks like the player has none.
-     */
+    /** The same leniency, for the one other array argument. */
     @Test
     void aPermissionListSurvivesArrivingAsAJsonString() {
         ObjectNode arguments = mapper.createObjectNode();
@@ -121,7 +104,6 @@ class AgentToolsTest {
         ObjectNode arguments = mapper.createObjectNode();
         arguments.put("types", "[this is not json");
 
-        // Silently returning everything is the worst answer to an argument nobody understood.
         assertThrows(RuntimeException.class, () -> tools().call("events_query", arguments));
     }
 
@@ -137,7 +119,7 @@ class AgentToolsTest {
                 List.of("server_info", "events_summary", "events_query", "logs_query",
                         "exceptions_recent", "state_query", "wait_for"),
                 names);
-        // command_exec is absent, not merely restricted — see writeToolsAreAbsentWhenReadOnly.
+
         assertFalse(names.contains("command_exec"));
     }
 
@@ -157,15 +139,13 @@ class AgentToolsTest {
         List<String> writableNames =
                 names(new AgentTools(queries, mapper, ResponseBudget.DEFAULT, false).listTools());
 
-        // The security boundary is that a default install does not expose a way to change the
-        // server at all. Not "exposes it and refuses" — absent from the listing entirely.
         assertFalse(readOnlyNames.contains("command_exec"));
         assertTrue(writableNames.contains("command_exec"));
     }
 
     @Test
     void commandExecRefusesEvenIfCalledDirectlyWhileReadOnly() {
-        // A caller that skipped tools/list and guessed the name must not get through.
+
         AgentTools.ToolException thrown = assertThrows(AgentTools.ToolException.class,
                 () -> tools().call("command_exec", args("{\"command\":\"op Someone\"}")));
 
@@ -178,7 +158,6 @@ class AgentToolsTest {
 
         writable.call("command_exec", args("{\"command\":\"/op Tester1\",\"as\":\"Admin\"}"));
 
-        // The leading slash is stripped: Bukkit dispatches without it.
         assertEquals("op Tester1", queries.lastCommand);
         assertEquals("Admin", queries.lastCommandAs);
     }
@@ -214,8 +193,6 @@ class AgentToolsTest {
         assertTrue(info.get("readOnly").asBoolean());
     }
 
-    // ---------------------------------------------------------------- paging
-
     @Test
     void aPageThatFitsIsNotTruncatedAndEndsTheStream() {
         queries.events = new SequencedRingBuffer.Batch<>(
@@ -239,7 +216,6 @@ class AgentToolsTest {
 
         JsonNode page = toolsWith(new ResponseBudget(200, 300)).call("events_query", args("{}"));
 
-        // Cut by bytes even though the item count and the batch itself were both fine.
         assertEquals(1, page.get("items").size());
         assertTrue(page.get("truncated").asBoolean());
         assertEquals("events:11", page.get("nextCursor").asText());
@@ -251,8 +227,6 @@ class AgentToolsTest {
         queries.events = new SequencedRingBuffer.Batch<>(
                 List.of(event(0, "E", enormous), event(1, "E", enormous)), 2, 0, true);
 
-        // A single record larger than the whole budget must still be returned, otherwise paging
-        // stalls on the same cursor forever and the caller can never get past it.
         JsonNode page = toolsWith(new ResponseBudget(200, 100)).call("events_query", args("{}"));
 
         assertEquals(1, page.get("items").size());
@@ -262,7 +236,7 @@ class AgentToolsTest {
     @Test
     void anUnexhaustedBatchPagesFromTheBatchSequence() {
         queries.events = new SequencedRingBuffer.Batch<>(
-                List.of(event(0, "E", "a")), 7, 0, /* exhausted = */ false);
+                List.of(event(0, "E", "a")), 7, 0,  false);
 
         JsonNode page = tools().call("events_query", args("{}"));
 
@@ -277,8 +251,6 @@ class AgentToolsTest {
 
         JsonNode page = tools().call("events_query", args("{}"));
 
-        // Nothing was held back, but 49 records are gone for good. Conflating the two would let
-        // a reader treat permanent loss as a paging boundary.
         assertFalse(page.get("truncated").asBoolean());
         assertEquals(49, page.get("dropped").asLong());
     }
@@ -297,8 +269,6 @@ class AgentToolsTest {
         assertEquals(List.of("PlayerMoveEvent"), new ArrayList<>(queries.lastTypes));
         assertEquals("Bob", queries.lastPlayer);
     }
-
-    // ------------------------------------------------------------- arguments
 
     @Test
     void rejectsAnUnknownLogLevel() {
@@ -334,12 +304,9 @@ class AgentToolsTest {
     void blankArgumentsAreTreatedAsAbsent() {
         tools().call("events_query", args("{\"player\":\"  \",\"cursor\":\"\"}"));
 
-        // An empty string from a caller means "I did not filter", not "match the empty name".
         assertEquals(null, queries.lastPlayer);
         assertEquals(null, queries.lastCursor);
     }
-
-    // ------------------------------------------------------------ exceptions
 
     @Test
     void fetchingAnUnknownExceptionHashIsAToolError() {
@@ -364,8 +331,6 @@ class AgentToolsTest {
     void rejectsAnUnknownTool() {
         assertThrows(AgentTools.ToolException.class, () -> tools().call("drop_database", null));
     }
-
-    // ------------------------------------------------------------------ fake
 
     /** Records what it was asked and returns whatever the test set up. */
     private static final class FakeQueries implements AgentQueries {
@@ -467,7 +432,6 @@ class AgentToolsTest {
                             11, "EMERALD", 1, "§aBuy", List.of("§7Click me"), false, 7, null)),
                     false);
         }
-
 
         @Override
         public moe.vitamin.minecraft.mcp.contract.WaitResult waitFor(

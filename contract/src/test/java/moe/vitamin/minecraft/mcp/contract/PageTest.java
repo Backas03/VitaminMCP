@@ -40,8 +40,7 @@ class PageTest {
 
     @Test
     void truncationAndLossAreIndependent() {
-        // A page can be cut short by the budget while nothing was lost, and it can carry a
-        // drop count while being the last page. Readers must be able to tell these apart.
+
         Page<String> budgetLimited = new Page<>(List.of("a"), "events:1", true, 0L);
         Page<String> lossy = new Page<>(List.of("a"), null, false, 17L);
 

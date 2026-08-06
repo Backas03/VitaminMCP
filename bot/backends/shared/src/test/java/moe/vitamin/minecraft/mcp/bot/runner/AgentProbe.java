@@ -8,13 +8,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-/**
- * Minimal MCP client, for asking the agent what it sees.
- *
- * <p>bot-core must not depend on the agent — nothing outside {@code agent-*} compiles against
- * it (CONTRIBUTING.md invariant 1). So the cross-layer test talks to the agent the way any other
- * client would: over HTTP, against the published tool contract.
- */
+/** Minimal MCP client, for asking the agent what it sees. */
 final class AgentProbe {
 
     private static final HttpClient CLIENT =
@@ -32,8 +26,7 @@ final class AgentProbe {
 
     static AgentProbe fromSystemProperties() {
         return new AgentProbe(
-                // The same host the bots dial. Hardcoding loopback here would have quietly
-                // pointed the probe at a different machine than the one under test.
+
                 System.getProperty("vitaminmcp.host", "127.0.0.1"),
                 Integer.getInteger("vitaminmcp.mcpPort", 25585),
                 System.getProperty("vitaminmcp.token", ""));
@@ -83,18 +76,7 @@ final class AgentProbe {
         return call("command_exec", "{\"command\":\"%s\"}".formatted(command));
     }
 
-    /**
-     * Waits for an event, on the server rather than here.
-     *
-     * <p>This used to poll every 250ms from the test process. The agent now checks once per
-     * tick, inside the server, and answers when the condition holds — one request instead of
-     * dozens, and it cannot miss something that happened between two polls. On timeout the
-     * response carries the events and log lines from that moment, so a failure arrives with
-     * its own explanation.
-     *
-     * @param sinceSequence event sequence to count from, so an event that lands between the
-     *                      action and this call still counts
-     */
+    /** Waits for an event, on the server rather than here. */
     String awaitEvent(String type, String player, long sinceSequence, Duration timeout)
             throws Exception {
         return call("wait_for", ("""
@@ -109,13 +91,7 @@ final class AgentProbe {
         return cursor == null ? 0 : Long.parseLong(cursor.substring(cursor.indexOf(':') + 1));
     }
 
-    /**
-     * Pulls a value out of the tool's JSON text content.
-     *
-     * <p>The payload arrives as a JSON string inside a JSON envelope, so its quotes are escaped
-     * once. Crude, but bot-core has no JSON dependency and adding one to read three fields in a
-     * test would be worse.
-     */
+    /** Pulls a value out of the tool's JSON text content. */
     private static String extract(String response, String field) {
         String needle = "\\\"" + field + "\\\" : ";
         int at = response.indexOf(needle);

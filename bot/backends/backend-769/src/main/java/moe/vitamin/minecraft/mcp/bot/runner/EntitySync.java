@@ -2,17 +2,7 @@ package moe.vitamin.minecraft.mcp.bot.runner;
 
 import org.geysermc.mcprotocollib.network.packet.Packet;
 
-/**
- * Where the entities around the bot are, on protocol 769.
- *
- * <p><b>The only file this backend overrides</b>, and for one import: the spawn packet is still
- * in {@code clientbound.entity.spawn} and moves up to {@code clientbound.entity} in 1.21.5.
- * Everything else about 1.21.4 — the session, the position packet, item components, the loading
- * handshake it introduced — already matches the shared source.
- *
- * <p>Identical to backend-768's copy, for the reason given in that backend's
- * {@code SessionFactory}.
- */
+/** Where the entities around the bot are, on protocol 769. */
 final class EntitySync {
 
     private EntitySync() {}

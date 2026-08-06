@@ -10,14 +10,7 @@ import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-/**
- * The session's own lifecycle, against a real server.
- *
- * <pre>
- *   ./gradlew :mcp-server:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.token=... \
- *       -Dvitaminmcp.runnerJar=/path/to/bot-runner-772.jar
- * </pre>
- */
+/** The session's own lifecycle, against a real server. */
 @EnabledIfSystemProperty(named = "vitaminmcp.liveServer", matches = "true")
 class SessionLiveTest {
 
@@ -28,19 +21,13 @@ class SessionLiveTest {
     private static final Path RUNNER_JAR =
             Path.of(System.getProperty("vitaminmcp.runnerJar", ""));
 
-    /**
-     * The screen the server draws on a player, which it keeps nowhere else.
-     *
-     * <p>Boss bars and the sidebar are assembled from packets that each carry one change, so the
-     * current state exists only in the client. This asserts the round trip parses and reports
-     * what was actually on screen, which is the part no other tool can answer.
-     */
+    /** The screen the server draws on a player, which it keeps nowhere else. */
     @Test
     void theClientViewCarriesTheWholeScreen() throws Exception {
         Session session = new Session(HOST, PORT, MCP_PORT, TOKEN, false, null, RUNNER_JAR);
         try {
             session.bots().spawn("ResetTester");
-            // The sidebar and any boss bars arrive over the ticks after join, not with it.
+
             Thread.sleep(4000);
 
             ClientView view =
@@ -50,8 +37,6 @@ class SessionLiveTest {
             System.out.println("bossBars   = " + view.bossBars());
             System.out.println("scoreboard = " + view.scoreboard());
 
-            // Shape, not content: what a given server draws is its own business, but the fields
-            // have to survive the wire rather than arriving null or throwing.
             assertNotNull(view.messages(), "messages");
             assertNotNull(view.bossBars(), "bossBars");
             view.bossBars().forEach(bar -> {
@@ -70,11 +55,6 @@ class SessionLiveTest {
 
     /**
      * Reset has to leave the session usable, which is the whole difference between it and close.
-     *
-     * <p>Pinned because it did not. Reset disconnected the bots by destroying the runner process
-     * and never started another, so every later spawn failed with "the bot runner has exited" —
-     * and reset itself had reported success, which put the blame on whatever ran next. A tool
-     * documented as keeping the connection has to keep the thing the connection is for.
      */
     @Test
     void aBotCanStillSpawnAfterReset() throws Exception {

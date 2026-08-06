@@ -11,26 +11,11 @@ import moe.vitamin.minecraft.mcp.orchestrator.VersionMatrix;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-/**
- * The Stage 5 DoD: one scenario, every version in versions.yaml.
- *
- * <pre>
- *   ./gradlew :testkit:test --tests '*MatrixRunnerLiveTest*' \
- *     -Dvitaminmcp.liveServer=true -Dvitaminmcp.agentJar=...
- * </pre>
- *
- * <p>Starts real servers and downloads real builds, so it is gated and slow.
- */
+/** The Stage 5 DoD: one scenario, every version in versions.yaml. */
 @EnabledIfSystemProperty(named = "vitaminmcp.liveServer", matches = "true")
 class MatrixRunnerLiveTest {
 
-    /**
-     * Deliberately version-agnostic.
-     *
-     * <p>Hard-coded coordinates or blocks would make a failure mean "this version generates a
-     * different world", which is not what a matrix is for. Everything here is true of any
-     * Paper server, so a failure is genuinely about the version.
-     */
+    /** Deliberately version-agnostic. */
     private static final String SCENARIO = """
             [
               {"action":"spawn","bot":"Tester1"},
@@ -45,18 +30,7 @@ class MatrixRunnerLiveTest {
             ]
             """;
 
-    /**
-     * A working directory this test owns, cleaned up best-effort.
-     *
-     * <p>Not {@code @TempDir}. That deletes the directory the moment the test method returns and
-     * fails the test if anything is still locked — and this directory has just hosted several
-     * server JVMs, which on Windows keep files mapped for a short while after they exit. The
-     * result was a test that reported failure while every version it ran had passed: the
-     * scenario results were green and the error was about deleting a jar.
-     *
-     * <p>So cleanup is a courtesy here, not an assertion. What this test is for is whether the
-     * matrix runs, and a leftover directory must not be able to say otherwise.
-     */
+    /** A working directory this test owns, cleaned up best-effort. */
     private Path work;
 
     @org.junit.jupiter.api.BeforeEach
@@ -74,7 +48,7 @@ class MatrixRunnerLiveTest {
                 try {
                     Files.deleteIfExists(path);
                 } catch (java.io.IOException stillInUse) {
-                    // The OS has not let go yet. Nothing here depends on it being gone.
+
                     System.err.println("left behind (still locked): " + path);
                 }
             });
@@ -110,8 +84,7 @@ class MatrixRunnerLiveTest {
 
     @Test
     void aVersionThatCannotStartIsReportedRatherThanAborting() throws Exception {
-        // A matrix exists to report on all versions. Aborting at the first problem hides
-        // whether the rest would have passed, which is the most useful thing it could say.
+
         VersionMatrix matrix = VersionMatrix.parse("""
                 versions:
                   - id: "1.21.8"
@@ -128,8 +101,7 @@ class MatrixRunnerLiveTest {
 
         MatrixResult.VersionOutcome broken = result.results().get(1);
         assertFalse(broken.passed());
-        // "could not be tested" reads differently from a scenario failure on purpose: the two
-        // call for entirely different next steps.
+
         assertTrue(broken.summary().contains("could not be tested"), broken.summary());
     }
 }

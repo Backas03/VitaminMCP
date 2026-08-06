@@ -11,19 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
 
-/**
- * A Paper server this process starts, watches and stops.
- *
- * <p>Run natively rather than in a container. What is actually needed is "this version, with a
- * clean world"; a jar in a fresh directory does that in a couple of seconds, whereas a
- * container adds a daemon and — on Windows, where this is developed — a VM boundary that world
- * files then cross on every read (docs/design.md §15.1).
- *
- * <p>Each server gets its own directory, which is what makes isolation a directory copy rather
- * than a volume lifecycle. That matters more than it sounds: state leaking between runs is the
- * failure mode design.md §13 warns about, and it has already bitten this project once, when an
- * op granted during a diagnostic survived in ops.json and broke a later scenario.
- */
+/** A Paper server this process starts, watches and stops. */
 public final class ManagedServer implements AutoCloseable {
 
     /** Marker Paper prints when it is accepting connections. */
@@ -43,26 +31,11 @@ public final class ManagedServer implements AutoCloseable {
         this.agentPort = agentPort;
     }
 
-    /**
-     * Lays out a server directory from scratch.
-     *
-     * <p>Writing eula.txt is accepting Mojang's EULA on the operator's behalf. That is
-     * unavoidable for a server this process is asked to run, and worth being explicit about
-     * rather than burying.
-     *
-     * @param worldTemplate a world directory to copy in, or {@code null} for a fresh world
-     * @param agentJar      the VitaminMCP plugin
-     * @param agentToken    the token the agent will require
-     */
+    /** Lays out a server directory from scratch. */
     public void prepare(Path worldTemplate, Path agentJar, String agentToken) throws IOException {
         Files.createDirectories(directory);
         Files.writeString(directory.resolve("eula.txt"), "eula=true\n");
 
-        // enforce-secure-profile defaults to true, and a bot has no Mojang signing key. With it
-        // on, the server accepts the bot's login but refuses any command carrying a signable
-        // argument — `/say`, `/me`, `/msg` — with `chat.disabled.invalid_command_signature`,
-        // which arrives as a message to the player and nothing in the console. A scenario that
-        // ran a command as a bot then failed with no visible reason at all.
         Files.writeString(directory.resolve("server.properties"), """
                 server-port=%d
                 online-mode=false
@@ -77,9 +50,6 @@ public final class ManagedServer implements AutoCloseable {
                 sync-chunk-writes=false
                 """.formatted(port));
 
-        // Forwarding trust is what lets bots present arbitrary identities (docs/design.md §3.1).
-        // It is also why such a server must never be reachable from outside this machine:
-        // anyone who can open a socket to it can claim to be anyone.
         Files.createDirectories(directory.resolve("config"));
         Files.writeString(directory.resolve("spigot.yml"), """
                 settings:
@@ -101,12 +71,7 @@ public final class ManagedServer implements AutoCloseable {
         restoreWorld(worldTemplate);
     }
 
-    /**
-     * Replaces the world with a copy of the template.
-     *
-     * <p>The reset that makes runs independent. A directory copy, because the server is a
-     * directory — no volumes, no image layers, nothing to detach.
-     */
+    /** Replaces the world with a copy of the template. */
     public void restoreWorld(Path worldTemplate) throws IOException {
         if (worldTemplate == null || !Files.isDirectory(worldTemplate)) {
             return;
@@ -131,9 +96,6 @@ public final class ManagedServer implements AutoCloseable {
                 .redirectOutput(log.toFile())
                 .start();
 
-        // Waits for the server to say it is ready rather than for a fixed time, for the same
-        // reason nothing else here sleeps: how long a first start takes depends on the machine
-        // and on whether the world has to be generated.
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             if (!process.isAlive()) {
@@ -173,8 +135,7 @@ public final class ManagedServer implements AutoCloseable {
         }
         process.destroy();
         try {
-            // A Paper server flushes chunks on shutdown; killing it immediately corrupts the
-            // world it was about to save, which then breaks the *next* run instead of this one.
+
             if (!process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
                 process.destroyForcibly();
             }

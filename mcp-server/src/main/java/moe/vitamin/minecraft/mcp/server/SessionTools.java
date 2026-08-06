@@ -12,18 +12,7 @@ import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
 
-/**
- * The tools this server exposes, and nothing else.
- *
- * <p>Deliberately thin (docs/roadmap.md Stage 4): everything here forwards to testkit, bot-core
- * or the agent. A behaviour implemented at this layer would be one that scenarios written
- * against testkit directly could not use, and one with nowhere to be tested without starting an
- * MCP server.
- *
- * <p>The agent's own tools are proxied rather than reimplemented. That keeps one definition of
- * what {@code events_query} means, and it is what lets a matrix of servers be exposed later by
- * prefixing names rather than by writing a second set of tools.
- */
+/** The tools this server exposes, and nothing else. */
 final class SessionTools {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -113,16 +102,6 @@ final class SessionTools {
                         "JSON array of steps, e.g. "
                                 + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]")));
 
-        // Proxied verbatim: one definition of each tool, living where it is implemented.
-        //
-        // The parameters are not restated here, and the schema says so by accepting any
-        // property rather than declaring one. An earlier version declared a single string
-        // called "arguments", which was worse than saying nothing: a caller that believed it
-        // sent {"arguments": "{...}"}, the agent saw no parameters at all, and the failure came
-        // back as "state_query needs 'kind'" — blaming the caller for following the schema.
-        //
-        // What the parameters actually are comes from the agent itself, in session_start's
-        // response. That keeps one definition of each tool, in the module that implements it.
         for (String name : PROXIED) {
             tools.add(passthroughTool(name,
                     "Forwarded to the agent on the connected server. Call session_start first — "
@@ -179,18 +158,12 @@ final class SessionTools {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
 
-        // Called immediately so a bad host, port or token fails here with a clear message
-        // rather than later inside an unrelated tool.
         JsonNode info = session.agent().call("server_info", AgentClient.arguments());
 
         ObjectNode result = MAPPER.createObjectNode();
         result.put("connected", session.describe());
         result.set("server", info);
 
-        // The proxied tools' real parameters, straight from the agent that implements them.
-        // They cannot be in this server's own tool list: that list is published at startup,
-        // before any agent is connected, and which tools exist depends on the agent — a
-        // read-only one does not expose command_exec at all.
         result.set("agentTools", session.agent().listTools());
         return result;
     }
@@ -307,27 +280,14 @@ final class SessionTools {
             entry.put("passed", step.passed());
             entry.put("detail", step.detail());
             if (!step.evidence().isEmpty()) {
-                // Attached here rather than left for a follow-up call: the DoD is that a
-                // failure arrives with what is needed to understand it, and a second round trip
-                // reaches a server whose state has already moved on.
+
                 entry.put("evidence", step.evidence());
             }
         }
         return response;
     }
 
-    /**
-     * Finds the bot runner next to this server's own jar.
-     *
-     * <p>{@code gradlew dist} puts the three jars in one directory, so the caller knowing where
-     * this one is means they already know where the runner is. Asking them to type an absolute
-     * path to a file we can see from here was friction for nothing.
-     *
-     * <p>There is one runner now, whatever versions are supported: it carries a backend per
-     * protocol and picks the right one by asking the server what it speaks. The check for more
-     * than one survives because a directory with two builds of it in is still ambiguous, but it
-     * is no longer something a supported install produces.
-     */
+    /** Finds the bot runner next to this server's own jar. */
     private static java.nio.file.Path runnerBesideThisJar() {
         java.nio.file.Path here;
         try {
@@ -380,8 +340,6 @@ final class SessionTools {
         }
     }
 
-    // ---------------------------------------------------------------- schema
-
     private static ObjectNode tool(
             String name, String description, java.util.function.Consumer<ObjectNode> properties) {
         ObjectNode tool = MAPPER.createObjectNode();
@@ -394,12 +352,7 @@ final class SessionTools {
         return tool;
     }
 
-    /**
-     * A tool whose arguments belong to something else.
-     *
-     * <p>Declares an object with no named properties and {@code additionalProperties} allowed,
-     * which is the accurate description of a passthrough: whatever arrives is forwarded as-is.
-     */
+    /** A tool whose arguments belong to something else. */
     private static ObjectNode passthroughTool(String name, String description) {
         ObjectNode tool = MAPPER.createObjectNode();
         tool.put("name", name);

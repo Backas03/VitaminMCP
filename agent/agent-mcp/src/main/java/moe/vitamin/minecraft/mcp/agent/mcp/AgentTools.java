@@ -24,19 +24,7 @@ import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import moe.vitamin.minecraft.mcp.contract.Sequenced;
 import moe.vitamin.minecraft.mcp.contract.WaitCondition;
 
-/**
- * The tools this agent exposes, and what they do.
- *
- * <p>Six tools rather than thirty. A large surface of narrow tools reads well in a list and
- * then goes unused, because the caller has to guess which one applies; parameters on a few
- * broad tools are easier to get right (CONTRIBUTING.md, docs/design.md §10). {@code exceptions_recent}
- * taking an optional hash instead of gaining a sibling {@code exception_detail} tool is that
- * rule in practice.
- *
- * <p>There is no {@code logs_tail}. "The last N lines" sounds useful and is almost never what
- * was wanted — it burns the response budget on whatever happened most recently, which on a busy
- * server is join messages. A pattern search answers the actual question.
- */
+/** The tools this agent exposes, and what they do. */
 final class AgentTools {
 
     private final AgentQueries capture;
@@ -44,7 +32,9 @@ final class AgentTools {
     private final ResponseBudget budget;
     private final boolean readOnly;
 
-    /** Ceiling on a caller-supplied regex, so a pathological pattern cannot be huge as well as slow. */
+    /**
+     * Ceiling on a caller-supplied regex, so a pathological pattern cannot be huge as well as slow.
+     */
     private static final int MAX_PATTERN_LENGTH = 500;
 
     AgentTools(AgentQueries capture, ObjectMapper mapper, ResponseBudget budget, boolean readOnly) {
@@ -53,8 +43,6 @@ final class AgentTools {
         this.budget = budget;
         this.readOnly = readOnly;
     }
-
-    // ------------------------------------------------------------- discovery
 
     ArrayNode listTools() {
         ArrayNode tools = mapper.createArrayNode();
@@ -192,9 +180,6 @@ final class AgentTools {
                                     + "WARN or ERROR. Omit to match any.");
                 }));
 
-        // Everything above only reads. The line below is the boundary: with read-only left on,
-        // which is the default, there is no exposed way to change the server at all — not
-        // restricted, absent. An operator has to opt in deliberately (docs/design.md §14).
         if (!readOnly) {
             tools.add(tool("command_exec",
                     "Runs a command on the server, as the console by default. This CHANGES the "
@@ -212,25 +197,12 @@ final class AgentTools {
         return tools;
     }
 
-    /**
-     * Whether a tool changes the server rather than only reading it.
-     *
-     * <p>Lives here because this class already owns that boundary — {@code readOnly} decides
-     * what gets listed and {@code commandExec} re-checks it — and a second copy of the list
-     * elsewhere would be one to forget. The console log uses it to decide what must be recorded
-     * regardless of how quiet an operator has asked the agent to be.
-     */
+    /** Whether a tool changes the server rather than only reading it. */
     boolean changesState(String toolName) {
         return "command_exec".equals(toolName);
     }
 
-    // ------------------------------------------------------------- execution
-
-    /**
-     * Runs one tool.
-     *
-     * @throws ToolException if the arguments are unusable or the tool does not exist
-     */
+    /** Runs one tool. */
     JsonNode call(String name, JsonNode arguments) {
         JsonNode args = arguments == null || arguments.isNull() ? mapper.createObjectNode() : arguments;
 
@@ -251,7 +223,7 @@ final class AgentTools {
         ObjectNode result = mapper.valueToTree(capture.serverInfo());
         result.set("capture", mapper.valueToTree(capture.captureStatus()));
         result.put("readOnly", readOnly);
-        // Handed out so a caller can watch for what happens next without replaying history.
+
         result.put("latestEventCursor", capture.latestEventCursor());
         result.put("latestLogCursor", capture.latestLogCursor());
         return result;
@@ -318,9 +290,6 @@ final class AgentTools {
             throw new ToolException("wait_for needs 'condition'.");
         }
 
-        // Every argument is forwarded rather than matched against the condition type: the
-        // agent knows which ones each condition needs and says so, and duplicating that
-        // knowledge here would mean two places to update for every new condition.
         Map<String, Object> parameters = new LinkedHashMap<>();
         args.fields().forEachRemaining(field -> {
             if (field.getKey().equals("condition") || field.getKey().equals("timeoutMillis")) {
@@ -340,8 +309,7 @@ final class AgentTools {
         if (millis < 1) {
             throw new ToolException("timeoutMillis must be positive.");
         }
-        // Capped rather than rejected: an over-long wait is a reasonable request badly sized,
-        // and failing it just costs a round trip. Holding a request thread for an hour is not.
+
         millis = Math.min(millis, MAX_WAIT_MILLIS);
 
         try {
@@ -372,8 +340,7 @@ final class AgentTools {
                 if (target == null) {
                     throw new ToolException("state_query kind='inventory' needs 'target'.");
                 }
-                // Defaults to the menu, because that is the thing nothing else can see. A
-                // player's own inventory is at least reachable through commands.
+
                 boolean openMenu = !"player".equalsIgnoreCase(args.path("which").asText("menu"));
 
                 InventorySnapshot snapshot = capture.inventory(
@@ -407,8 +374,7 @@ final class AgentTools {
     }
 
     private JsonNode commandExec(JsonNode args) {
-        // Reachable only when the tool was listed, but checked again here: a caller that
-        // guessed the name must not get through just because it skipped tools/list.
+
         if (readOnly) {
             throw new ToolException(
                     "command_exec is unavailable: this agent is running read-only. Set "
@@ -419,8 +385,7 @@ final class AgentTools {
         if (command == null) {
             throw new ToolException("command_exec needs 'command'.");
         }
-        // Normalised here, at the boundary, so every caller is treated the same whether or not
-        // it typed the slash a human would. Bukkit dispatches without one.
+
         String normalised = command.startsWith("/") ? command.substring(1) : command;
         if (normalised.isBlank()) {
             throw new ToolException("command_exec was given an empty command.");
@@ -434,16 +399,7 @@ final class AgentTools {
         }
     }
 
-    // ---------------------------------------------------------------- paging
-
-    /**
-     * Serializes a batch, stopping at whichever limit is reached first.
-     *
-     * <p>The byte ceiling is applied by measuring each record as it is added rather than
-     * guessing from the count, because payload sizes vary by orders of magnitude between event
-     * types. One record is always included even if it alone exceeds the budget — otherwise a
-     * single oversized record would stall paging forever at the same cursor.
-     */
+    /** Serializes a batch, stopping at whichever limit is reached first. */
     private <T extends Sequenced> ObjectNode page(SequencedRingBuffer.Batch<T> batch, String stream) {
         ArrayNode items = mapper.createArrayNode();
         List<T> source = batch.items();
@@ -475,13 +431,10 @@ final class AgentTools {
         result.set("items", items);
         result.put("nextCursor", nextCursor);
         result.put("truncated", truncated);
-        // Separate from truncation on purpose: truncated means "page again", dropped means
-        // "these records no longer exist anywhere".
+
         result.put("dropped", batch.dropped());
         return result;
     }
-
-    // ------------------------------------------------------------- arguments
 
     private static String text(JsonNode node) {
         if (node == null || node.isNull() || !node.isTextual()) {
@@ -491,17 +444,7 @@ final class AgentTools {
         return value.isEmpty() ? null : value;
     }
 
-    /**
-     * An array argument, however the caller managed to express it.
-     *
-     * <p>Lenient about the shape on purpose. The tools here are proxied by mcp-server, which
-     * publishes them without a parameter schema — it cannot know them until a session exists —
-     * so a client with no types to go on sends everything as a string. Numbers survived that
-     * because parsing them is forgiving; arrays did not, and a rejected {@code types} became a
-     * null filter, so {@code events_query} quietly answered a different question from the one
-     * it was asked. Silently returning everything is the worst possible response to an argument
-     * that was not understood.
-     */
+    /** An array argument, however the caller managed to express it. */
     private Set<String> stringSet(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
@@ -519,7 +462,7 @@ final class AgentTools {
                             "Could not read as a list: " + raw, e);
                 }
             }
-            // A bare name, or several separated by commas — what someone types by hand.
+
             Set<String> parsed = new LinkedHashSet<>();
             for (String part : raw.split(",")) {
                 String value = part.trim();
@@ -567,8 +510,6 @@ final class AgentTools {
             throw new ToolException("Invalid regular expression: " + e.getDescription());
         }
     }
-
-    // ---------------------------------------------------------------- schema
 
     private ObjectNode tool(String name, String description, java.util.function.Consumer<ObjectNode> properties) {
         ObjectNode tool = mapper.createObjectNode();

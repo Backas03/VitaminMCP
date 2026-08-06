@@ -1,6 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-// Imported rather than written out: inside a build script `java` is the JavaPluginExtension, so
-// `java.util.zip.ZipFile` does not resolve to the package.
+
 import java.util.zip.ZipFile
 
 plugins {
@@ -9,18 +8,7 @@ plugins {
     id("vitaminmcp.module-rules")
 }
 
-/**
- * One protocol version's bot implementation, built to be embedded in the runner bundle.
- *
- * A backend module is meant to be **a directory and a coordinate**: everything else — which
- * source it compiles, what its jar is called, how it announces itself — is derived here from the
- * module's own name. Adding a protocol should not require reading this file.
- *
- * The jar is self-contained and unrelocated, like anything else we launch ourselves. It is never
- * on a class path beside another backend; the launcher loads it through a class loader of its
- * own, which is the only reason several MCProtocolLib builds can ship in one artifact
- * (docs/multi-version.md §2.1).
- */
+/** One protocol version's bot implementation, built to be embedded in the runner bundle. */
 
 val protocol = project.name.removePrefix("backend-")
 
@@ -41,20 +29,6 @@ sourceSets {
         java.srcDir(sharedJava)
         resources.srcDir(sharedResources)
 
-        // Override is "drop a file at the same path": if this backend carries its own copy, the
-        // shared one is left out of the compile.
-        //
-        // Expressed against the absolute path on purpose. `java.exclude("**/BotSession.java")`
-        // would read as the same rule and is not — a pattern is matched inside *every* source
-        // directory, so it would drop the backend's own copy as well and leave a
-        // missing-symbol error that names neither file.
-        //
-        // Files only. Excluding a *directory* prunes everything under it, and every backend that
-        // overrides anything has a `moe/` directory of its own — so without this guard the whole
-        // shared tree disappeared from the compile. It still built, because the override files
-        // do not reference what went missing, and the jar was simply short of every shared
-        // class. What that reaches the user as is `ServiceConfigurationError: Provider ... not
-        // found`, three layers from the cause.
         java.exclude { element ->
             !element.isDirectory
                     && element.file.startsWith(sharedJava)
@@ -62,8 +36,7 @@ sourceSets {
         }
     }
     named("test") {
-        // The live smoke test is shared too, so every backend is held to the same one rather
-        // than to whatever its author remembered to copy.
+
         java.srcDir(sharedTestJava)
     }
 }
@@ -73,13 +46,7 @@ dependencies {
     "implementation"(project(":bot-core"))
 }
 
-/**
- * Says which protocol this jar speaks, from the one place that cannot be wrong: its own name.
- *
- * The backend reports this at startup and the launcher checks it against what the server said.
- * A constant in the shared source could not vary per backend, and one written by hand in each
- * would be the first thing to go stale after a module was copied.
- */
+/** Says which protocol this jar speaks, from the one place that cannot be wrong: its own name. */
 val backendDescriptor = layout.buildDirectory.dir("generated/backend-descriptor")
 
 val writeBackendDescriptor = tasks.register("writeBackendDescriptor") {
@@ -102,10 +69,6 @@ sourceSets.named("main") {
 tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName = project.name
 
-    // The jar must actually contain the implementation its service file names. This is checked
-    // rather than assumed because the way it goes missing is silent: the shared tree drops out
-    // of the compile, the override files still build on their own, and the first sign of it is
-    // `ServiceConfigurationError: Provider not found` at runtime on someone else's machine.
     doLast {
         val implementation = "moe/vitamin/minecraft/mcp/bot/runner/Backend.class"
         val jar = archiveFile.get().asFile
@@ -120,9 +83,6 @@ tasks.named<ShadowJar>("shadowJar") {
     }
 }
 
-// Live tests connect to a real server, so they stay off unless asked for. Every property has to
-// appear here or it is silently ignored — a missing one once turned a 50-iteration flakiness run
-// into 5 that reported success.
 tasks.test {
     listOf("vitaminmcp.liveServer", "vitaminmcp.host", "vitaminmcp.port",
            "vitaminmcp.token", "vitaminmcp.mcpPort", "vitaminmcp.repeat",

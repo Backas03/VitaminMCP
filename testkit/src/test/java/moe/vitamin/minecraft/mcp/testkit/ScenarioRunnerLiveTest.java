@@ -11,15 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-/**
- * Runs scenarios against a real server.
- *
- * <pre>
- *   ./gradlew :testkit:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.token=...
- * </pre>
- *
- * <p>Needs the agent running with {@code read-only: false}, since scenarios use the console.
- */
+/** Runs scenarios against a real server. */
 @EnabledIfSystemProperty(named = "vitaminmcp.liveServer", matches = "true")
 class ScenarioRunnerLiveTest {
 
@@ -35,8 +27,7 @@ class ScenarioRunnerLiveTest {
 
     @org.junit.jupiter.api.BeforeEach
     void launchRunner() throws Exception {
-        // The runner built for this server's protocol. Bots live in a child process, so this
-        // JVM never links MCProtocolLib at all.
+
         bots = BotRunner.launch(
                 Path.of(System.getProperty("vitaminmcp.runnerJar", "")),
                 Path.of(System.getProperty("java.home")), HOST, PORT);
@@ -55,9 +46,7 @@ class ScenarioRunnerLiveTest {
 
     @Test
     void aBotBreaksABlockAndTheAgentConfirmsIt() throws Exception {
-        // Coordinates are not known until the bot has landed, so the scenario is built around
-        // where it actually is. A scenario with hard-coded coordinates would be testing the
-        // world rather than the plugin.
+
         BotRunner.BotHandle scout = bots.spawn("Tester1");
         int x = scout.blockX();
         int y = scout.blockY() - 1;
@@ -81,11 +70,7 @@ class ScenarioRunnerLiveTest {
 
     @Test
     void theConsoleCanGrantOpAndTheAgentSeesIt() {
-        // Establishes its own precondition rather than assuming one. op survives in ops.json
-        // across restarts, so a scenario that assumes a fresh player fails on the second run
-        // for reasons that have nothing to do with what it tests — the accumulating,
-        // untraceable failure docs/design.md §13 warns about. Proper isolation is a world reset
-        // per run, which is Stage 5; until then a scenario sets up what it depends on.
+
         ScenarioResult result = run("""
                 [
                   {"action":"console","command":"deop Tester1"},
@@ -101,23 +86,10 @@ class ScenarioRunnerLiveTest {
         assertTrue(result.passed(), result.describe());
     }
 
-    /**
-     * The whole point of the inventory work: something opens a menu, and the menu is checked.
-     *
-     * <p>A chest with named items stands in for a plugin's GUI. It is the same path — the
-     * server opens a container view, the client is told about it, and the contents live only in
-     * that view — so a plugin menu is read the same way, without this test needing a plugin.
-     *
-     * <p>Names are set with SNBT rather than a JSON string: since 1.21.5 the {@code custom_name}
-     * component is stored as NBT, and a quoted JSON blob is taken as a literal name. The first
-     * version of this test did exactly that and asserted happily against
-     * {@code {"text":"Buy"}} as the item's name.
-     */
+    /** The whole point of the inventory work: something opens a menu, and the menu is checked. */
     @Test
     void aMenuIsOpenedReadAndClicked() throws Exception {
-        // Placed relative to where the bot actually landed, and only after it has. An earlier
-        // version scouted the position with one bot and used it for another, which drifts as
-        // soon as an earlier test has dug the ground away underneath the spawn point.
+
         BotRunner.BotHandle bot = bots.spawn("Tester1");
         int x = bot.blockX() + 1;
         int y = bot.blockY();
@@ -144,9 +116,7 @@ class ScenarioRunnerLiveTest {
                 ]
                 """.formatted(
                         x, y, z,
-                        // A chest with a solid block directly above it will not open — a rule of
-                        // the game, not of this harness, and one that makes the failure look
-                        // like the menu code is broken when the world is simply in the way.
+
                         x, y + 1, z,
                         x, y, z,
                         x, y, z, x, y, z, x, y, z));
@@ -154,15 +124,7 @@ class ScenarioRunnerLiveTest {
         assertTrue(result.passed(), result.describe());
     }
 
-    /**
-     * The wait has to be capable of not matching.
-     *
-     * <p>Pinned because it once could not. A player with no menu open reports view type
-     * {@code CREATIVE} in creative mode, and the condition only excluded {@code CRAFTING}, so it
-     * matched on the first tick for every bot — every scenario using it read a menu that had not
-     * opened, and passed because the server happened to be fast. A wait that cannot fail is
-     * worse than no wait, because it looks like protection.
-     */
+    /** The wait has to be capable of not matching. */
     @Test
     void waitingForAMenuDoesNotMatchWhenNoneIsOpen() throws Exception {
         bots.spawn("Tester1");
@@ -187,11 +149,11 @@ class ScenarioRunnerLiveTest {
                 """);
 
         assertFalse(result.passed());
-        // The DoD is that a failure points at the step, not that it merely reports failure.
+
         assertEquals(2, result.failure().index());
         assertEquals("assert_player", result.failure().action());
         assertTrue(result.describe().contains("step 2"), result.describe());
-        // And it stops: a step after a failure runs against a state nobody described.
+
         assertEquals(2, result.steps().size());
     }
 
@@ -206,7 +168,7 @@ class ScenarioRunnerLiveTest {
 
         assertFalse(result.passed());
         assertTrue(result.failure().detail().contains("timed out"), result.failure().detail());
-        // Without this a timeout sends the reader back to a server that has already moved on.
+
         assertNotNull(result.failure().evidence());
         assertTrue(result.failure().evidence().contains("events="), result.failure().evidence());
     }
@@ -218,7 +180,7 @@ class ScenarioRunnerLiveTest {
                 """);
 
         assertFalse(result.passed());
-        // Refused with the reason, so whoever reached for it learns what to use instead.
+
         assertTrue(result.failure().detail().contains("wait_for"), result.failure().detail());
     }
 

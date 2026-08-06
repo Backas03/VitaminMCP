@@ -20,19 +20,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 
-/**
- * Serves MCP over HTTP using the JDK's built-in {@link HttpServer}.
- *
- * <p>No web framework. MCP's streamable HTTP transport is a POST that carries one JSON-RPC
- * message, and answering that needs nothing a servlet container provides — while every
- * dependency added here is another library to relocate and another chance to collide with the
- * server or a plugin sharing the JVM (docs/design.md §7).
- *
- * <p><b>Security.</b> The endpoint reaches server internals, so the defaults assume a
- * production server rather than a test one: loopback only, a token required on every request,
- * and startup refused outright when no token is configured. None of these are relaxed for
- * convenience (docs/design.md §14).
- */
+/** Serves MCP over HTTP using the JDK's built-in {@link HttpServer}. */
 public final class McpHttpServer {
 
     /** The single MCP endpoint. */
@@ -45,15 +33,11 @@ public final class McpHttpServer {
     /** Revision implemented here. */
     private static final String PROTOCOL_VERSION = "2025-06-18";
 
-    /**
-     * Revisions accepted from a client. Older clients are echoed their own version rather than
-     * refused: the surface used here — initialize, tools/list, tools/call — is unchanged across
-     * all three.
-     */
+    /** Revisions accepted from a client. */
     private static final Set<String> SUPPORTED_PROTOCOL_VERSIONS =
             Set.of("2025-06-18", "2025-03-26", "2024-11-05");
 
-    /** Ceiling on a request body. Nothing legitimate here is close to this. */
+    /** Ceiling on a request body. */
     private static final int MAX_REQUEST_BYTES = 1024 * 1024;
 
     private final AgentSettings settings;
@@ -92,9 +76,6 @@ public final class McpHttpServer {
                 : HttpServer.create(address, 0);
         server.createContext(ENDPOINT, this::handle);
 
-        // RFC 9728. How a client that has no credentials discovers where to get some: it gets
-        // a 401 pointing here, reads which authorization server to use, and comes back with a
-        // token. Without it the only recovery is a human reading documentation.
         server.createContext(PROTECTED_RESOURCE_METADATA, this::describeProtectedResource);
 
         AtomicInteger threadNumber = new AtomicInteger();
@@ -106,8 +87,6 @@ public final class McpHttpServer {
         server.setExecutor(executor);
         server.start();
 
-        // boundPort() rather than the configured one: a port of 0 means "any free port", and
-        // printing the 0 back tells a reader nothing about where to connect.
         logger.info("MCP endpoint listening on " + scheme() + "://" + settings.bindAddress() + ":"
                 + boundPort() + ENDPOINT + (settings.readOnly() ? " (read-only)" : ""));
 
@@ -125,17 +104,7 @@ public final class McpHttpServer {
         }
     }
 
-    /**
-     * Prints what a client needs, in the shape it needs it.
-     *
-     * <p>Everything here is already knowable — from config.yml, from the keystore, from the
-     * machine's own address — but only by collecting it from four places and getting the format
-     * right. Connecting to a remote agent was mostly that clerical work, so the agent does it.
-     *
-     * <p>The fingerprint is the part worth having. A self-signed certificate is otherwise
-     * unusable without exporting it, copying it over and building a truststore; pinned by
-     * fingerprint it needs nothing installed on the client at all.
-     */
+    /** Prints what a client needs, in the shape it needs it. */
     private void logConnectionDetails() {
         StringBuilder block = new StringBuilder("Connect with session_start:")
                 .append(System.lineSeparator())
@@ -152,12 +121,7 @@ public final class McpHttpServer {
         logger.info(block.toString());
     }
 
-    /**
-     * A host a client could actually dial.
-     *
-     * <p>{@code 0.0.0.0} means "every interface", which is not an address anything can connect
-     * to — printing it verbatim would hand the reader something that cannot work.
-     */
+    /** A host a client could actually dial. */
     private String reachableHost() {
         if (!"0.0.0.0".equals(settings.bindAddress()) && !"::".equals(settings.bindAddress())) {
             return settings.bindAddress();
@@ -198,20 +162,13 @@ public final class McpHttpServer {
             }
             return java.util.Optional.empty();
         } catch (java.security.GeneralSecurityException | IOException e) {
-            // Not fatal: the server is already listening, and a missing fingerprint costs the
-            // reader convenience rather than correctness.
+
             logger.warning("Could not read the certificate to print its fingerprint: " + e);
             return java.util.Optional.empty();
         }
     }
 
-    /**
-     * An HTTPS server backed by the configured keystore.
-     *
-     * <p>The JDK's own HttpsServer, for the same reason the plain one is used: MCP over HTTP is
-     * a POST carrying one JSON-RPC message, and nothing a servlet container adds is needed to
-     * answer it (docs/design.md §7).
-     */
+    /** An HTTPS server backed by the configured keystore. */
     private HttpServer createHttpsServer(InetSocketAddress address) throws IOException {
         try {
             char[] password = settings.tls().keystorePassword().toCharArray();
@@ -259,16 +216,13 @@ public final class McpHttpServer {
         }
     }
 
-    // --------------------------------------------------------------- routing
-
     private void handle(HttpExchange exchange) throws IOException {
         String client = clientOf(exchange);
         try (exchange) {
             String refusal = tokens.refuse(exchange.getRequestHeaders().getFirst("Authorization"));
             if (refusal != null) {
                 activity.refused(client, refusal);
-                // Points at the metadata document, which is how a client discovers where to
-                // obtain a token rather than simply failing.
+
                 exchange.getResponseHeaders().add("WWW-Authenticate",
                         "Bearer error=\"invalid_token\", error_description=\"" + refusal
                                 + "\", resource_metadata=\"" + scheme() + "://" + settings.bindAddress()
@@ -281,12 +235,12 @@ public final class McpHttpServer {
             String method = exchange.getRequestMethod();
             switch (method) {
                 case "POST" -> handlePost(exchange, client);
-                // Nothing is pushed to the client, so there is no stream to open.
+
                 case "GET" -> {
                     activity.malformed(client, "GET, but this endpoint accepts POST only");
                     respond(exchange, 405, "{\"error\":\"this endpoint accepts POST only\"}");
                 }
-                // Sessions are not held, so a termination request is already satisfied.
+
                 case "DELETE" -> respond(exchange, 204, "");
                 default -> {
                     activity.malformed(client, "unsupported HTTP method " + method);
@@ -331,10 +285,10 @@ public final class McpHttpServer {
                 payload.has("params") ? payload.get("params") : mapper.createObjectNode());
 
         if (request.isNotification()) {
-            // No reply is coming, so there is no outcome to pair with an arrival line.
+
             activity.notification(client, request.method());
             dispatch(request);
-            // Acknowledged, with no body, per JSON-RPC.
+
             respond(exchange, 202, "");
             return;
         }
@@ -350,8 +304,6 @@ public final class McpHttpServer {
         writeJson(exchange, 200, response);
     }
 
-    // -------------------------------------------------------------- activity
-
     /** The caller's address, which is what distinguishes a local client from a remote one. */
     private static String clientOf(HttpExchange exchange) {
         InetSocketAddress remote = exchange.getRemoteAddress();
@@ -360,30 +312,17 @@ public final class McpHttpServer {
                 : remote.getAddress().getHostAddress() + ":" + remote.getPort();
     }
 
-    /**
-     * Opens the console record for a call.
-     *
-     * <p>{@code tools/call} is unwrapped so the line names the tool and its arguments rather
-     * than the envelope carrying them — "tools/call" on its own says nothing about what the
-     * server was asked to do.
-     */
+    /** Opens the console record for a call. */
     private ActivityLog.Call begin(String client, JsonRpc.Request request) {
         boolean isToolCall = "tools/call".equals(request.method());
         String toolName = isToolCall ? request.params().path("name").asText("") : null;
         JsonNode arguments = isToolCall ? request.params().get("arguments") : request.params();
-        // State-changing tools are logged even when activity logging is turned off: this is the
-        // record of the agent altering the server, and it is not noise anyone can opt out of.
+
         return activity.begin(
                 client, request.method(), toolName, arguments, tools.changesState(toolName));
     }
 
-    /**
-     * Closes that record with whatever the caller was sent.
-     *
-     * <p>A failing tool comes back as a normal result carrying {@code isError} (see
-     * {@link #callTool}), so reading the outcome means looking inside the result rather than
-     * only at the JSON-RPC envelope.
-     */
+    /** Closes that record with whatever the caller was sent. */
     private static void record(ActivityLog.Call call, ObjectNode response) {
         if (response == null) {
             call.succeeded(null);
@@ -401,18 +340,15 @@ public final class McpHttpServer {
             call.failed(text == null ? result.toString() : text);
             return;
         }
-        // The tool's own payload where there is one, so the line shows the data the caller got
-        // and not the MCP content wrapper around it.
+
         call.succeeded(text == null ? result.toString() : text);
     }
 
-    /** @return the response, or {@code null} when the request was a notification */
     private ObjectNode dispatch(JsonRpc.Request request) {
         if (request.method().isEmpty()) {
             return JsonRpc.error(request.id(), JsonRpc.INVALID_REQUEST, "Missing 'method'");
         }
 
-        // Notifications never get a reply, including ones we do not recognise.
         if (request.isNotification()) {
             return null;
         }
@@ -446,8 +382,6 @@ public final class McpHttpServer {
         ObjectNode result = mapper.createObjectNode();
         result.put("protocolVersion", negotiated);
 
-        // Only tools. No resources, prompts, sampling or logging capabilities are claimed,
-        // because none are implemented and advertising them invites calls that fail.
         result.putObject("capabilities").putObject("tools");
 
         ObjectNode info = result.putObject("serverInfo");
@@ -465,14 +399,7 @@ public final class McpHttpServer {
         return result;
     }
 
-    /**
-     * Runs a tool and wraps the outcome as MCP content.
-     *
-     * <p>A tool that fails comes back as a normal result carrying {@code isError}, not as a
-     * JSON-RPC error. That is the MCP convention and it matters: a transport error is invisible
-     * to the model, whereas "no exception is recorded under that hash" is something it can read
-     * and act on.
-     */
+    /** Runs a tool and wraps the outcome as MCP content. */
     private ObjectNode callTool(JsonNode params) {
         String name = params.path("name").asText("");
         if (name.isEmpty()) {
@@ -505,14 +432,7 @@ public final class McpHttpServer {
         }
     }
 
-    // ------------------------------------------------------------------ auth
-
-    /**
-     * Serves the metadata that tells a client how to authenticate (RFC 9728).
-     *
-     * <p>Unauthenticated on purpose — this is the document explaining how to authenticate, so
-     * requiring a token to read it would be circular.
-     */
+    /** Serves the metadata that tells a client how to authenticate (RFC 9728). */
     private void describeProtectedResource(HttpExchange exchange) throws IOException {
         try (exchange) {
             ObjectNode metadata = mapper.createObjectNode();
@@ -534,9 +454,6 @@ public final class McpHttpServer {
         }
     }
 
-    // ------------------------------------------------------------------- i/o
-
-    /** @return the body, or {@code null} if it exceeded {@link #MAX_REQUEST_BYTES} */
     private static byte[] readBody(HttpExchange exchange) throws IOException {
         try (InputStream input = exchange.getRequestBody()) {
             byte[] body = input.readNBytes(MAX_REQUEST_BYTES + 1);

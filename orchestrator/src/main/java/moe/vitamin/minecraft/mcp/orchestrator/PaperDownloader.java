@@ -14,21 +14,7 @@ import java.util.HexFormat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Fetches Paper server jars.
- *
- * <p>Against {@code fill.papermc.io/v3}. The older {@code api.papermc.io/v2} is sunset and now
- * answers every request with an error, and {@code api.papermc.io/v3} sits behind bot protection
- * that refuses non-browser clients — both of which are easy to write against by habit and only
- * discover at runtime.
- *
- * <p>Jars are cached by version and build, because a matrix run starts the same versions
- * repeatedly and a 50MB download each time would dominate everything else.
- *
- * <p>Parsed with regular expressions rather than a JSON library. orchestrator has no other
- * reason to carry one, and what is needed here is three fields from a known shape. That is a
- * judgement about these three fields, not a general licence.
- */
+/** Fetches Paper server jars. */
 public final class PaperDownloader {
 
     private static final String API = "https://fill.papermc.io/v3/projects/paper";
@@ -50,19 +36,7 @@ public final class PaperDownloader {
 
     private final Path cacheDirectory;
 
-    /**
-     * Caches into a directory of this class's choosing, shared across runs.
-     *
-     * <p>Deliberately outside whatever working directory a caller is using. A cached jar is
-     * worth keeping between runs — that is the entire point of caching a 50MB download — and a
-     * per-run directory throws it away every time.
-     *
-     * <p>It also has to outlive the servers started from it. A JVM started with {@code -jar}
-     * keeps the file mapped, and Windows does not release that lock the instant the process
-     * dies; a caller that deletes its working directory immediately afterwards hits a file it
-     * cannot remove. Keeping the cache elsewhere means nobody is racing the operating system
-     * over it.
-     */
+    /** Caches into a directory of this class's choosing, shared across runs. */
     public PaperDownloader() {
         this(defaultCacheDirectory());
     }
@@ -71,12 +45,7 @@ public final class PaperDownloader {
         this.cacheDirectory = cacheDirectory;
     }
 
-    /**
-     * Where jars are kept when the caller does not say.
-     *
-     * <p>Overridable, because a build agent may have no writable home directory and failing
-     * there for that reason would be a poor trade for a default.
-     */
+    /** Where jars are kept when the caller does not say. */
     public static Path defaultCacheDirectory() {
         String configured = System.getProperty("vitaminmcp.paperCache");
         return configured != null && !configured.isBlank()
@@ -84,11 +53,7 @@ public final class PaperDownloader {
                 : Path.of(System.getProperty("user.home"), ".vitaminmcp", "paper");
     }
 
-    /**
-     * Returns a Paper jar for {@code version}, downloading it if it is not already cached.
-     *
-     * @param build the build to fetch, or {@code 0} for the latest
-     */
+    /** Returns a Paper jar for {@code version}, downloading it if it is not already cached. */
     public Path fetch(String version, int build) throws IOException, InterruptedException {
         String listing = get(API + "/versions/" + version + "/builds");
 
@@ -111,8 +76,6 @@ public final class PaperDownloader {
 
         Files.createDirectories(cacheDirectory);
 
-        // Downloaded beside the target and moved into place, so an interrupted run cannot leave
-        // a truncated jar that looks cached and then fails to start with something unrelated.
         Path partial = Files.createTempFile(cacheDirectory, "paper-", ".part");
         HttpResponse<Path> response = http.send(
                 request(url).timeout(Duration.ofMinutes(10)).GET().build(),
@@ -124,8 +87,6 @@ public final class PaperDownloader {
                     + " could not be downloaded (HTTP " + response.statusCode() + ")");
         }
 
-        // Checked because the API publishes it and a corrupt jar otherwise surfaces much later
-        // as a server that will not start, for reasons that look nothing like a bad download.
         String actualSha = sha256(partial);
         if (!expectedSha.equalsIgnoreCase(actualSha)) {
             Files.deleteIfExists(partial);

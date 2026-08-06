@@ -12,17 +12,7 @@ import moe.vitamin.minecraft.mcp.bot.spi.OpenMenu;
 import moe.vitamin.minecraft.mcp.bot.spi.Position;
 import moe.vitamin.minecraft.mcp.bot.spi.Scoreboard;
 
-/**
- * The line protocol, in the one place it is spoken.
- *
- * <p>This used to live inside the protocol module, which meant every backend compiled its own
- * copy of a switch statement that has nothing to do with any protocol — it parses strings and
- * calls methods. Here it is compiled once for every version there will ever be, and a backend
- * cannot drift from it (docs/multi-version.md §2.1.1).
- *
- * <p><b>Only protocol lines go to stdout.</b> Anything else corrupts the stream, so diagnostics
- * go to stderr, which the parent forwards to its own.
- */
+/** The line protocol, in the one place it is spoken. */
 final class RunnerDispatch {
 
     private final BotBackend backend;
@@ -45,8 +35,7 @@ final class RunnerDispatch {
             try {
                 out.println(handle(command));
             } catch (Exception e) {
-                // The backend passes the server's own words through, so a rejected login reads
-                // as what the server said rather than as a timeout in the parent.
+
                 out.println(RunnerProtocol.encode(
                         RunnerProtocol.ERROR, command[0], String.valueOf(e.getMessage())));
             }
@@ -58,7 +47,7 @@ final class RunnerDispatch {
         String verb = command[0];
         return switch (verb) {
             case RunnerProtocol.SPAWN -> {
-                // The client IP is passed through as given — empty means the real one.
+
                 String clientIp = command.length > 2 ? command[2] : "";
                 yield position(verb, backend.spawn(command[1], clientIp));
             }
@@ -132,8 +121,7 @@ final class RunnerDispatch {
                 OpenMenu menu = backend.menu(command[1]);
                 yield RunnerProtocol.encode(RunnerProtocol.OK, verb,
                         String.valueOf(menu == null ? -1 : menu.containerId()),
-                        // Sanitised, not merely stripped of tabs: a title is written by a plugin
-                        // author and can hold any character this protocol gives meaning to.
+
                         menu == null ? "" : RunnerProtocol.sanitize(menu.title()));
             }
 

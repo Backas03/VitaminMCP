@@ -20,16 +20,7 @@ import moe.vitamin.minecraft.mcp.contract.ServerInfo;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
-/**
- * The agent's whole read surface, in one place.
- *
- * <p>Owns the two ring buffers, the exception registry and the two capture mechanisms, and
- * answers the queries the MCP tools expose. Keeping this separate from the transport is what
- * lets the capture logic be exercised without an HTTP server, and lets agent-mcp stay a thin
- * translation layer.
- *
- * <p>Every query here runs on a request thread, never on the server's main thread.
- */
+/** The agent's whole read surface, in one place. */
 public final class CaptureService implements AgentQueries {
 
     private final SequencedRingBuffer<EventRecord> events;
@@ -67,18 +58,7 @@ public final class CaptureService implements AgentQueries {
         logCaptureActive = false;
     }
 
-    // ---------------------------------------------------------------- events
-
-    /**
-     * Counts events by type over a window.
-     *
-     * <p>Reports every type, including the high-frequency ones excluded from detail queries.
-     * Seeing "PlayerMoveEvent ×48210" is exactly how a caller learns why its detail query
-     * returned nothing interesting, and what it would cost to ask for it anyway.
-     *
-     * @param from epoch millis, inclusive; {@code 0} for everything retained
-     * @param to   epoch millis, exclusive; {@code 0} for "up to now"
-     */
+    /** Counts events by type over a window. */
     public EventsSummary summarize(long from, long to) {
         long windowEnd = to <= 0 ? Long.MAX_VALUE : to;
         Map<String, long[]> counts = new HashMap<>();
@@ -102,25 +82,10 @@ public final class CaptureService implements AgentQueries {
                 total[0], dropped, typeCounts);
     }
 
-    /**
-     * Reads events matching the given filters.
-     *
-     * <p>High-frequency types are filtered out unless the caller named them in {@code types}.
-     *
-     * @param cursorToken opaque resume token, or {@code null} to start from the oldest retained
-     * @param types       simple type names to include, or {@code null} for "anything but the
-     *                    high-frequency set"
-     * @param player      restrict to one player, or {@code null}
-     * @param limit       maximum records
-     */
+    /** Reads events matching the given filters. */
     public SequencedRingBuffer.Batch<EventRecord> queryEvents(
             String cursorToken, Collection<String> types, String player, int limit) {
 
-        // A caller with no cursor is asking "what has happened", meaning from the beginning —
-        // not "from wherever the buffer happens to start now". Anchoring at 0 is what makes the
-        // returned `dropped` count the records the buffer has already overwritten. Starting at
-        // oldestRetainedSequence() instead reports 0 lost on a first query, which is precisely
-        // the moment the caller most needs to know the window is partial (docs/design.md §8).
         long from = cursorToken == null ? 0 : Cursor.parse(cursorToken, Cursor.EVENTS).sequence();
 
         return events.read(from, limit, record -> {
@@ -134,22 +99,10 @@ public final class CaptureService implements AgentQueries {
         });
     }
 
-    // ------------------------------------------------------------------ logs
-
-    /**
-     * Reads log entries matching the given filters.
-     *
-     * <p>There is deliberately no "last N lines" equivalent. A pattern search answers the
-     * question that actually gets asked, while a tail spends the whole response budget on
-     * whatever happened to be most recent (docs/design.md §10).
-     *
-     * @param minLevel minimum severity, or {@code null} for all
-     * @param pattern  regular expression matched against the message, or {@code null}
-     */
+    /** Reads log entries matching the given filters. */
     public SequencedRingBuffer.Batch<LogEntry> queryLogs(
             String cursorToken, LogLevel minLevel, Pattern pattern, int limit) {
 
-        // Anchored at 0 when there is no cursor, for the same reason as queryEvents.
         long from = cursorToken == null ? 0 : Cursor.parse(cursorToken, Cursor.LOGS).sequence();
 
         return logs.read(from, limit, entry -> {
@@ -160,8 +113,6 @@ public final class CaptureService implements AgentQueries {
         });
     }
 
-    // ------------------------------------------------------------ exceptions
-
     public List<ExceptionGroup> recentExceptions(int limit) {
         return exceptions.recent(limit);
     }
@@ -169,8 +120,6 @@ public final class CaptureService implements AgentQueries {
     public ExceptionGroup exceptionByHash(String hash) {
         return exceptions.byHash(hash);
     }
-
-    // ----------------------------------------------------------- server info
 
     public ServerInfo serverInfo() {
         List<ServerInfo.PluginInfo> plugins = new ArrayList<>();
@@ -192,13 +141,7 @@ public final class CaptureService implements AgentQueries {
                 plugins);
     }
 
-    /**
-     * Reads the server's TPS averages, if it has any.
-     *
-     * <p>Reflective because {@code getTPS()} is a Paper addition and the agent compiles against
-     * the Bukkit API at 1.13 (see agent-core/build.gradle.kts). Returning an empty list on a
-     * server without it is the right outcome — TPS is useful context, not a reason to fail.
-     */
+    /** Reads the server's TPS averages, if it has any. */
     private static List<Double> readTps() {
         try {
             Object raw = Bukkit.getServer().getClass().getMethod("getTPS").invoke(Bukkit.getServer());
@@ -210,12 +153,10 @@ public final class CaptureService implements AgentQueries {
                 return tps;
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Not a Paper-family server, or the method moved. Neither is an error.
+
         }
         return List.of();
     }
-
-    // ---------------------------------------------------------------- status
 
     /** Diagnostics about capture itself, surfaced through {@code server_info}. */
     public Map<String, Object> captureStatus() {
@@ -238,8 +179,6 @@ public final class CaptureService implements AgentQueries {
             moe.vitamin.minecraft.mcp.contract.WaitCondition condition, Duration timeout) {
         return waitForService.await(condition, timeout);
     }
-
-    // ------------------------------------------------------------ world state
 
     @Override
     public PlayerState playerState(String name, Collection<String> permissionNodes) {
@@ -273,39 +212,17 @@ public final class CaptureService implements AgentQueries {
         }, Duration.ofSeconds(5), null);
     }
 
-    /**
-     * The IP out of a socket address, without the port.
-     *
-     * <p>The port is the client's ephemeral one and changes every connection, so including it
-     * would make the field useless for the comparison anyone actually wants to make — against a
-     * ban list, a whitelist, or the address a proxy claimed to be forwarding.
-     *
-     * @return the address, or {@code null} if the player is already on the way out
-     */
+    /** The IP out of a socket address, without the port. */
     private static String hostAddress(java.net.InetSocketAddress address) {
         if (address == null) {
-            // Bukkit returns null once the connection is closing, which a query can race.
+
             return null;
         }
         java.net.InetAddress ip = address.getAddress();
         return ip == null ? address.getHostString() : ip.getHostAddress();
     }
 
-    /**
-     * Reads a player's inventory, or the menu they have open.
-     *
-     * <p><b>On {@code InventoryView} and docs/design.md §5.5.</b> That section warns against
-     * calling this type directly: it became an interface in 1.21, so a call compiled against an
-     * older API is baked in as {@code invokevirtual} and dies with
-     * {@code IncompatibleClassChangeError} on a newer server. The hazard is compiling low and
-     * running high. Here the floor <em>is</em> 1.21.8 — past the change — so the call compiles
-     * to {@code invokeinterface}, which is correct on every server this agent can be installed
-     * on. {@code EventDetails} still avoids direct calls because it touches arbitrary event
-     * types across the whole API surface; this touches one type whose shape the floor pins.
-     *
-     * <p>If the floor is ever lowered below 1.21, this breaks and the compiler will not say so.
-     * That is the same trap {@code SupportedVersions} exists to catch, and §5.4 is the checklist.
-     */
+    /** Reads a player's inventory, or the menu they have open. */
     @Override
     public InventorySnapshot inventory(String name, boolean openMenu, int limit) {
         return onMainThread(() -> {
@@ -315,9 +232,7 @@ public final class CaptureService implements AgentQueries {
             }
 
             org.bukkit.inventory.InventoryView view = player.getOpenInventory();
-            // getTopInventory() on a player with nothing open is their 2x2 crafting grid, and
-            // the view type says CRAFTING. Reporting that honestly beats pretending a menu is
-            // open, so the caller can tell "wrong contents" from "nothing opened at all".
+
             org.bukkit.inventory.Inventory inventory =
                     openMenu ? view.getTopInventory() : player.getInventory();
 
@@ -332,8 +247,7 @@ public final class CaptureService implements AgentQueries {
                 }
                 occupied++;
                 if (items.size() >= limit) {
-                    // Counting continues past the limit so occupiedSlots stays truthful about
-                    // the whole inventory rather than about the part that fit.
+
                     truncated = true;
                     continue;
                 }
@@ -342,9 +256,7 @@ public final class CaptureService implements AgentQueries {
 
             return new InventorySnapshot(
                     view.getType().name(),
-                    // title(), not the deprecated getTitle(): the component form goes through
-                    // the same encoding as the item names, so a caller compares titles and
-                    // labels the same way instead of one being coded and the other not.
+
                     openMenu ? legacy(view.title()) : null,
                     inventory.getSize(),
                     occupied,
@@ -370,8 +282,7 @@ public final class CaptureService implements AgentQueries {
                 if (meta.hasLore() && meta.lore() != null) {
                     lore = meta.lore().stream().map(CaptureService::legacy).toList();
                 }
-                // An enchanted-looking button need not carry a real enchantment; menus often
-                // fake the glow. Either way the player sees a glint, so either counts.
+
                 enchanted = enchanted || meta.hasEnchants();
                 if (meta.hasCustomModelData()) {
                     customModelData = meta.getCustomModelData();
@@ -383,19 +294,7 @@ public final class CaptureService implements AgentQueries {
                 displayName, lore, enchanted, customModelData, modelData);
     }
 
-    /**
-     * Flattens the custom model data component.
-     *
-     * <p>Reflective for the same reason {@code getTPS} is: the component is 1.21.4 API and the
-     * agent compiles against the floor, so naming the type directly would not compile — and
-     * hardcoding the floor's shape would drop a field every plugin on a newer server uses. The
-     * agent is one jar across the whole supported range (docs/design.md §5.3), and this is what
-     * that costs at the two points where the API actually moved.
-     *
-     * @return the component, or {@code null} if the server predates it or it carries nothing —
-     *         an empty one says the same as no component at all, and reporting it would put four
-     *         empty lists on every item
-     */
+    /** Flattens the custom model data component. */
     @SuppressWarnings("unchecked")
     private static InventorySnapshot.ModelData modelDataOf(
             org.bukkit.inventory.meta.ItemMeta meta) {
@@ -411,8 +310,7 @@ public final class CaptureService implements AgentQueries {
 
             List<String> colors = new java.util.ArrayList<>();
             for (Object color : (List<Object>) read(component, "getColors")) {
-                // org.bukkit.Color itself is ancient, so only the component around it needs
-                // reflection.
+
                 colors.add(hex((org.bukkit.Color) color));
             }
 
@@ -423,8 +321,7 @@ public final class CaptureService implements AgentQueries {
                     colors);
             return data.carriesNothing() ? null : data;
         } catch (ReflectiveOperationException | RuntimeException olderServer) {
-            // A server without the component, or one whose shape moved again. Neither is worth
-            // failing an inventory snapshot over — the name and lore are what identify a button.
+
             return null;
         }
     }
@@ -440,13 +337,7 @@ public final class CaptureService implements AgentQueries {
         return String.format("#%06X", color.asRGB());
     }
 
-    /**
-     * A component as the {@code §}-coded string a plugin author would have written.
-     *
-     * <p>Colour is part of whether a menu rendered correctly, so it is kept rather than
-     * stripped. Legacy rather than JSON because a test asserting on {@code "§aAccept"} is
-     * readable and one asserting on a serialised component tree is not.
-     */
+    /** A component as the {@code §}-coded string a plugin author would have written. */
     private static String legacy(net.kyori.adventure.text.Component component) {
         return component == null ? null
                 : net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
@@ -468,9 +359,6 @@ public final class CaptureService implements AgentQueries {
         String normalised = command.startsWith("/") ? command.substring(1) : command;
         String executedAs = asPlayer == null ? CommandResult.CONSOLE : asPlayer;
 
-        // The log stream is the only place most commands report anything: Bukkit tells us
-        // whether a handler ran, not what it decided. Bracketing the call with cursors turns
-        // the capture we already have into the command's output.
         long from = logs.written();
         long startedAt = System.nanoTime();
 
@@ -494,14 +382,7 @@ public final class CaptureService implements AgentQueries {
                 normalised, executedAs, Boolean.TRUE.equals(dispatched), output, millis);
     }
 
-    /**
-     * Runs something on the server's main thread and waits for it.
-     *
-     * <p>Anything touching worlds, players or commands has to run there — Bukkit is not thread
-     * safe and doing it from an HTTP thread corrupts state in ways that surface much later.
-     * The wait is bounded so a wedged main thread returns an error to the caller rather than
-     * tying up the request thread indefinitely.
-     */
+    /** Runs something on the server's main thread and waits for it. */
     private <T> T onMainThread(java.util.concurrent.Callable<T> work, Duration timeout, T fallback) {
         try {
             return Bukkit.getScheduler()

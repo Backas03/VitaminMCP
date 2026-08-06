@@ -2,19 +2,7 @@ package moe.vitamin.minecraft.mcp.agent.core;
 
 import java.util.Locale;
 
-/**
- * How much of the agent's own activity is written to the server console.
- *
- * <p>An MCP agent is invisible by default in a way nothing else on a server is: it reaches into
- * internals, and — with read-only off — runs console commands, while the only trace on the
- * console is the plugin loading. An operator watching their own server should be able to see
- * what it is being asked to do, which is why {@link #FULL} is the default rather than an
- * opt-in.
- *
- * <p>Two things are logged regardless of this setting, because they are the ones an operator
- * needs after the fact rather than during: a rejected token, and every state-changing tool
- * call. Turning activity logging off makes the console quiet, not unaccountable.
- */
+/** How much of the agent's own activity is written to the server console. */
 public enum ActivityLogging {
 
     /** One line per call as it arrives and one when it finishes, arguments included. */
@@ -36,13 +24,7 @@ public enum ActivityLogging {
         return this == FULL;
     }
 
-    /**
-     * Parses a config value, falling back to {@link #FULL} for anything unrecognised.
-     *
-     * <p>A typo in this key must not stop the server from starting — unlike the auth token,
-     * nothing here is load-bearing for safety, and the safe reading of an unclear value is the
-     * more verbose one.
-     */
+    /** Parses a config value, falling back to {@link #FULL} for anything unrecognised. */
     public static ActivityLogging parse(String raw) {
         if (raw == null) {
             return FULL;

@@ -20,27 +20,7 @@ import moe.vitamin.minecraft.mcp.orchestrator.PaperDownloader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
-/**
- * Every feature, on one version, against a server this test starts itself.
- *
- * <p>The gate for adding a protocol. A backend that connects proves only that the handshake
- * matches; what actually varies between versions is further in — the position packet, the
- * loading handshake, item components, boss bars, the scoreboard. Each of those is exercised here
- * against a real server, so "1.21.2 works" means the same thing every time it is said
- * (docs/multi-version.md §4).
- *
- * <pre>
- *   ./gradlew :testkit:test --tests '*CompatibilityLiveTest*' \
- *     -Dvitaminmcp.liveServer=true \
- *     -Dvitaminmcp.agentJar=...\VitaminMCP.jar \
- *     -Dvitaminmcp.runnerJar=...\bot-runner.jar \
- *     -Dvitaminmcp.version=1.21.4 -Dvitaminmcp.protocol=769
- * </pre>
- *
- * <p><b>Failures are collected, not thrown at the first one.</b> A run that stops at the first
- * broken feature says nothing about the twelve after it, and on a new protocol the useful
- * question is which parts work — one run should answer it.
- */
+/** Every feature, on one version, against a server this test starts itself. */
 @EnabledIfSystemProperty(named = "vitaminmcp.liveServer", matches = "true")
 class CompatibilityLiveTest {
 
@@ -87,20 +67,15 @@ class CompatibilityLiveTest {
     }
 
     private void exercise(BotRunner bots, AgentClient agent) throws Exception {
-        // The runner chose its own backend by pinging the server. If that picked the wrong one
-        // nothing below is meaningful, so it is checked before anything is attempted.
+
         if (EXPECTED_PROTOCOL != 0 && bots.protocol() != EXPECTED_PROTOCOL) {
             fail("the runner loaded the backend for protocol " + bots.protocol()
                     + " but " + VERSION + " speaks " + EXPECTED_PROTOCOL);
         }
         System.out.println("[compat] backend protocol " + bots.protocol());
 
-        // Taken before the bot connects, because the join is the first thing to be waited for
-        // and a wait that starts afterwards can only ever time out.
         long beforeJoin = eventSequence(agent);
 
-        // Spawning is not one of the collected failures: everything else needs a bot, and a run
-        // that reports twelve consequences of one cause is worse than one that reports the cause.
         BotRunner.BotHandle bot = bots.spawn("Tester1");
         System.out.println("[compat] spawned at " + bot.x() + " " + bot.y() + " " + bot.z());
         assertTrue(bot.y() > 0, "the bot spawned at y=" + bot.y() + ", which is not in a world");
@@ -132,8 +107,6 @@ class CompatibilityLiveTest {
                     "op never took effect the second time");
         });
 
-        // The whole point of the loading handshake: without it the server discards every dig
-        // silently, so this is the check that catches a backend that connects and does nothing.
         check("break a block", () -> {
             String before = block(agent, bx, by - 1, bz);
             require(!"AIR".equals(before),
@@ -147,9 +120,7 @@ class CompatibilityLiveTest {
         });
 
         check("move", () -> {
-            // Asked of the server rather than of the bot. The bot's own position only changes
-            // when the server sends a correction, so reading it back would be reading our own
-            // claim rather than whether the server accepted the move.
+
             console(agent, "tp Tester1 " + (bx + 3) + " " + by + " " + bz);
             require(await(() -> Math.abs(playerState(agent, "Tester1").path("x").asDouble()
                     - (bx + 3)) < 2.0), "the server never moved the player");
@@ -161,10 +132,6 @@ class CompatibilityLiveTest {
                             + playerState(agent, "Tester1").path("x").asDouble());
         });
 
-        // Asserted on the server rather than in the bot's inbox. What comes back from /say is a
-        // translatable component, and a client with no language file renders it as its key —
-        // "chat.type.text" — so looking for the words there would fail for a reason that has
-        // nothing to do with whether chat worked.
         check("chat", () -> {
             long since = eventSequence(agent);
             bot.chat("compat-chat-" + System.nanoTime());
@@ -172,9 +139,6 @@ class CompatibilityLiveTest {
                     "the server never saw the bot say anything. Messages: " + messages(bot));
         });
 
-        // The round trip the other way: a command the bot issues, whose reply is literal text
-        // and therefore survives to be read. This is the check that catches a server refusing
-        // bot commands outright — which it does, silently, when enforce-secure-profile is on.
         check("command", () -> {
             String marker = "compat-cmd-" + System.nanoTime();
             bot.command("/tellraw @s {\"text\":\"" + marker + "\"}");
@@ -183,7 +147,6 @@ class CompatibilityLiveTest {
                             + messages(bot));
         });
 
-        // Where the bot now stands, after the move above.
         int cx = bx + 4;
         int cz = bz;
 
@@ -208,9 +171,6 @@ class CompatibilityLiveTest {
                     "no slot carried the 3 diamonds that were put in: " + view.items());
         });
 
-        // The agent reads the custom model data component reflectively, because it is 1.21.4 API
-        // and the agent compiles against the floor. Reflection is not type-checked by anything,
-        // so the only way to know it still reads is to put one in and ask for it back.
         check("model data through the agent", () -> {
             String item = bots.protocol() >= 769
                     ? "minecraft:diamond[minecraft:custom_model_data={strings:[\"compat\"]}]"
@@ -261,8 +221,7 @@ class CompatibilityLiveTest {
                 try {
                     return !bot.useEntity(cx + 1, by, cz + 1, 3.0, null).isBlank();
                 } catch (java.io.IOException notYet) {
-                    // The spawn packet has not reached the client yet. That is the thing being
-                    // waited for, so it is not a failure until the wait runs out.
+
                     return false;
                 }
             }), "the bot was never told about the armour stand next to it");
@@ -284,9 +243,6 @@ class CompatibilityLiveTest {
                     "no PlayerQuitEvent after despawning Tester3");
         });
 
-        // A version can pass every check above and still be quietly broken: an API whose shape
-        // changed produces a linkage error at the call site, which the compiler cannot see and
-        // no assertion here would otherwise notice (docs/design.md §5.5).
         check("no linkage errors on the server", () -> {
             ObjectNode arguments = AgentClient.arguments();
             arguments.put("limit", 50);
@@ -298,8 +254,6 @@ class CompatibilityLiveTest {
             }
         });
     }
-
-    // ------------------------------------------------------------------ helpers
 
     private interface Step {
         void run() throws Exception;
@@ -322,14 +276,7 @@ class CompatibilityLiveTest {
         }
     }
 
-    /**
-     * Polls until something the server was asked to do has been observed.
-     *
-     * <p>The no-sleep rule is about waiting a fixed time and hoping; this waits for the thing
-     * itself and gives up loudly. Where the observable lives on the agent, {@code wait_for} is
-     * used instead — this is for the ones that live in the bot's own client state, which the
-     * agent cannot see.
-     */
+    /** Polls until something the server was asked to do has been observed. */
     private static boolean await(BooleanSupplier condition) {
         long deadline = System.nanoTime() + Duration.ofSeconds(15).toNanos();
         while (System.nanoTime() < deadline) {
@@ -338,7 +285,7 @@ class CompatibilityLiveTest {
                     return true;
                 }
             } catch (RuntimeException retry) {
-                // Same reasoning as above: not yet is not the same as never.
+
             }
             try {
                 Thread.sleep(100);
@@ -362,13 +309,7 @@ class CompatibilityLiveTest {
         return view(bot).messages();
     }
 
-    /**
-     * The client's view, or an empty one.
-     *
-     * <p>Swallowing the transport failure is right here and only here: these calls sit inside
-     * "has it arrived yet" polls, where "the runner is momentarily busy" and "the thing never
-     * happened" both mean keep waiting. The wait itself is what reports a real failure.
-     */
+    /** The client's view, or an empty one. */
     private static ClientView view(BotRunner.BotHandle bot) {
         try {
             return bot.inspect();
@@ -412,12 +353,7 @@ class CompatibilityLiveTest {
         return agent.call("state_query", arguments).path("block").asText();
     }
 
-    /**
-     * Where the event log is now, so a wait cannot miss what happens next.
-     *
-     * <p>Taken before acting rather than after: an event landing between the action and the wait
-     * would otherwise be missed, and the wait would start after the thing it is waiting for.
-     */
+    /** Where the event log is now, so a wait cannot miss what happens next. */
     private static long eventSequence(AgentClient agent) {
         String cursor = agent.call("server_info", AgentClient.arguments())
                 .path("latestEventCursor").asText("");
@@ -437,20 +373,14 @@ class CompatibilityLiveTest {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    /**
-     * Best-effort cleanup.
-     *
-     * <p>Not an assertion: this directory has just hosted a server JVM, and Windows keeps files
-     * mapped for a while after one exits. A locked jar must not be able to report a failure that
-     * every feature check disagrees with.
-     */
+    /** Best-effort cleanup. */
     private static void deleteQuietly(Path root) {
         try (var paths = Files.walk(root)) {
             paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
                 try {
                     Files.deleteIfExists(path);
                 } catch (java.io.IOException stillInUse) {
-                    // Left behind on purpose. Nothing here depends on it being gone.
+
                 }
             });
         } catch (java.io.IOException e) {

@@ -20,7 +20,7 @@ class VersionMatrixTest {
         assertEquals(2, matrix.versions().size());
         assertEquals("1.21.8", matrix.versions().get(0).id());
         assertEquals(60, matrix.versions().get(0).build());
-        // No build means latest, which is what an unpinned entry is for.
+
         assertEquals(0, matrix.versions().get(1).build());
     }
 
@@ -45,8 +45,6 @@ class VersionMatrixTest {
                   - id: "1.21.8"
                 """);
 
-        // The common case is that they are the same; making it explicit every time is noise
-        // that eventually gets copied wrong.
         assertEquals("1.21.8", matrix.versions().get(0).paperVersion());
     }
 
@@ -66,7 +64,7 @@ class VersionMatrixTest {
 
     @Test
     void anEmptyMatrixIsRejected() {
-        // Silently running zero versions would report success for a matrix that tested nothing.
+
         assertThrows(IllegalArgumentException.class, () -> VersionMatrix.parse("versions:\n"));
     }
 }

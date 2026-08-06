@@ -9,48 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 
-/**
- * Runs a declarative scenario against a server.
- *
- * <p>Scenarios are JSON rather than code because the main author is a language model, and a
- * list of steps is both easy to produce and easy to report against: a failure names the step
- * that failed, in the same form it was written (docs/design.md §11).
- *
- * <pre>
- * [
- *   {"action": "spawn",       "bot": "Tester1"},
- *   {"action": "break_block", "bot": "Tester1", "x": 10, "y": 63, "z": 20},
- *   {"action": "wait_for",    "condition": "block_is", "x": 10, "y": 63, "z": 20,
- *                             "material": "AIR"},
- *   {"action": "assert_event","eventType": "BlockBreakEvent", "player": "Tester1"}
- * ]
- * </pre>
- *
- * <p>Testing a menu GUI follows the same shape — cause it, wait for it, then assert on what is
- * in it. The wait is not optional: a plugin opens its menu on its own schedule, so a scenario
- * that reads immediately after the command sees the player's own inventory screen.
- *
- * <pre>
- * [
- *   {"action": "spawn",    "bot": "Tester1"},
- *   {"action": "command",  "bot": "Tester1", "command": "shop"},
- *   {"action": "wait_for", "condition": "inventory_open", "name": "Tester1", "title": "Shop"},
- *   {"action": "assert_inventory", "bot": "Tester1", "size": 27, "slots": [
- *       {"slot": 11, "material": "EMERALD", "name": "Buy"},
- *       {"slot": 15, "material": "BARRIER", "name": "Close"},
- *       {"slot": 13, "empty": true}
- *   ]},
- *   {"action": "click_slot", "bot": "Tester1", "slot": 11},
- *   {"action": "assert_event", "eventType": "InventoryClickEvent", "player": "Tester1"}
- * ]
- * </pre>
- *
- * <p><b>There is no sleep step, and there will not be one.</b> Offering it guarantees it gets
- * used — it is always the shortest path past a timing problem — and every use is a scenario
- * calibrated to the machine that wrote it. {@code wait_for} covers the same ground by naming
- * the thing being waited for, which is both more reliable and more readable
- * (docs/roadmap.md Stage 3).
- */
+/** Runs a declarative scenario against a server. */
 public final class ScenarioRunner {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -79,9 +38,6 @@ public final class ScenarioRunner {
                     0, "parse", "a scenario is an array of steps", "")));
         }
 
-        // Captured before the first step so assert_event can ask "did this happen during this
-        // scenario", which is what a reader means by it. A wait started at step N only sees
-        // events after step N, and the thing being asserted usually happened at step N-1.
         long scenarioStart = currentEventSequence();
 
         List<ScenarioResult.StepResult> results = new ArrayList<>();
@@ -99,15 +55,12 @@ public final class ScenarioRunner {
             try {
                 results.add(execute(index, action, step, scenarioStart));
             } catch (RuntimeException e) {
-                // Evidence is gathered here rather than at each call site so that every failure
-                // arrives with the same context, including the ones nobody anticipated.
+
                 results.add(ScenarioResult.StepResult.failed(
                         index, action, String.valueOf(e.getMessage()), snapshot()));
                 return new ScenarioResult(false, results);
             }
 
-            // Stop at the first failure. Continuing past one runs later steps against a state
-            // the scenario never described, and their failures say nothing.
             if (!results.get(results.size() - 1).passed()) {
                 return new ScenarioResult(false, results);
             }
@@ -121,15 +74,13 @@ public final class ScenarioRunner {
             case "spawn" -> {
                 String name = required(step, "bot");
                 try {
-                    // Optional: without it the bot reports the address it really connects from,
-                    // which is what a test should normally want.
+
                     BotRunner.BotHandle bot = bots.spawn(
                             name, step.hasNonNull("clientIp") ? step.get("clientIp").asText() : null);
                     yield ScenarioResult.StepResult.ok(index, action,
                             name + " joined at " + bot.x() + ", " + bot.y() + ", " + bot.z());
                 } catch (java.io.IOException e) {
-                    // The runner passes the server's own words through, so a protocol mismatch
-                    // reads as "Outdated client!" rather than as a timeout.
+
                     throw new IllegalStateException(
                             "could not spawn " + name + ": " + e.getMessage(), e);
                 }
@@ -200,9 +151,7 @@ public final class ScenarioRunner {
             }
 
             case "assert_player" -> {
-                // Waits rather than reads once. These fields change asynchronously — /op has to
-                // resolve a name to a UUID before it takes effect — so an immediate check races
-                // the command that preceded it and fails for reasons unrelated to the test.
+
                 ObjectNode arguments = waitArguments(step);
                 arguments.put("condition", "player_state");
                 arguments.put("name", required(step, "bot"));
@@ -212,7 +161,6 @@ public final class ScenarioRunner {
                     yield ScenarioResult.StepResult.ok(index, action, "as expected");
                 }
 
-                // Report what it actually is, not merely that it was not what was wanted.
                 ObjectNode query = AgentClient.arguments();
                 query.put("kind", "player");
                 query.put("target", required(step, "bot"));
@@ -229,9 +177,7 @@ public final class ScenarioRunner {
             }
 
             case "use_entity" -> {
-                // Reported rather than discarded: coordinates name an entity, but two standing
-                // close together are both plausible answers, and a scenario that clicked the
-                // wrong one otherwise has to go and ask the server what was there.
+
                 String[] hit = new String[1];
                 act(step, bot -> hit[0] = bot.useEntity(
                         step.path("x").asDouble(), step.path("y").asDouble(),
@@ -266,9 +212,7 @@ public final class ScenarioRunner {
             }
 
             case "assert_message" -> {
-                // What the server said to the player, which is where a refusal lives. It never
-                // reaches the console, so without this a declined command and one that quietly
-                // did nothing are the same observation.
+
                 String bot = required(step, "bot");
                 String wanted = required(step, "contains");
                 try {
@@ -307,22 +251,13 @@ public final class ScenarioRunner {
         };
     }
 
-    /**
-     * Checks a menu against what the step said should be in it.
-     *
-     * <p>Reports the first thing that is wrong together with what was actually there, because
-     * "slot 11 expected EMERALD but held BARRIER" is a finished diagnosis and "assertion failed"
-     * is the start of one. A slot that is simply empty is called out separately from one holding
-     * the wrong item — the causes are different (the plugin never filled it, versus it filled it
-     * wrongly) and the message should not make the reader guess which.
-     */
+    /** Checks a menu against what the step said should be in it. */
     private ScenarioResult.StepResult checkInventory(
             int index, String action, JsonNode step, JsonNode snapshot) {
 
         String view = snapshot.path("view").asText();
         if (step.hasNonNull("title") || "menu".equals(step.path("which").asText("menu"))) {
-            // Saying "no menu is open" beats reporting every expected slot as missing, which is
-            // the same symptom with a completely different cause.
+
             if (!moe.vitamin.minecraft.mcp.contract.InventorySnapshot.isMenu(view)) {
                 return ScenarioResult.StepResult.failed(index, action,
                         "no menu is open for " + step.path("bot").asText()
@@ -403,8 +338,6 @@ public final class ScenarioRunner {
                         snapshot.toString());
             }
 
-            // A pack keyed on strings is the modern idiom, and the integer view cannot see one
-            // at all — so it gets its own check rather than being folded into the number.
             String modelString = expected.path("modelDataString").asText(null);
             if (modelString != null) {
                 JsonNode strings = actual.path("modelData").path("strings");
@@ -425,9 +358,7 @@ public final class ScenarioRunner {
                 JsonNode found = actual.path("customModelData");
                 if (found.isNull() || found.isMissingNode()
                         || found.asInt() != expected.path("customModelData").asInt()) {
-                    // Called out separately when there is none at all: an item with no
-                    // custom_model_data renders as the plain vanilla icon, which is a different
-                    // bug from one rendering the wrong icon.
+
                     return ScenarioResult.StepResult.failed(index, action,
                             "slot " + slot + " expected customModelData "
                                     + expected.path("customModelData").asInt() + " but "
@@ -453,13 +384,7 @@ public final class ScenarioRunner {
         return null;
     }
 
-    /**
-     * Drops legacy colour codes.
-     *
-     * <p>So a scenario can say {@code "name": "Accept"} without knowing the plugin wrote it as
-     * {@code §aAccept}. Colour is still visible in the failure message and in the raw snapshot,
-     * so a test that does care can assert on the coded form instead.
-     */
+    /** Drops legacy colour codes. */
     private static String plain(String text) {
         return text == null ? "" : text.replaceAll("§[0-9a-fk-orA-FK-OR]", "");
     }
@@ -515,13 +440,12 @@ public final class ScenarioRunner {
                     ? Long.parseLong(cursor.substring(cursor.indexOf(':') + 1))
                     : 0;
         } catch (RuntimeException e) {
-            // Falling back to 0 widens assert_event to everything retained, which is looser
-            // than intended but never wrongly fails a scenario.
+
             return 0;
         }
     }
 
-    /** Server state at the moment of an unexpected failure. Best effort — never masks the cause. */
+    /** Server state at the moment of an unexpected failure. */
     private String snapshot() {
         try {
             return "events=" + agent.call("events_summary", AgentClient.arguments()).path("counts");

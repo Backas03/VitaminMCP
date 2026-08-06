@@ -4,16 +4,7 @@ import moe.vitamin.minecraft.mcp.bot.spi.Position;
 import org.geysermc.mcprotocollib.network.Session;
 import org.geysermc.mcprotocollib.network.packet.Packet;
 
-/**
- * Where the bot is, on protocol 768.
- *
- * <p>Overrides the shared copy for one reason only: {@code ServerboundPlayerLoadedPacket} does
- * not exist yet. It arrived in 1.21.4, and before it the server does not hold a joining player
- * in a loading state, so there is nothing to send.
- *
- * <p>The position packet and the movement packet are already the modern shape here — the rework
- * that changed them is what 1.21.2 <em>is</em> — so those methods match the shared copy exactly.
- */
+/** Where the bot is, on protocol 768. */
 final class PlayerSync {
 
     private PlayerSync() {}
@@ -35,15 +26,9 @@ final class PlayerSync {
         }
     }
 
-    /**
-     * Nothing to declare.
-     *
-     * <p>Deliberately empty rather than absent: the shared {@link BotSession} calls this once per
-     * join for every version, and a version where it is a no-op is a fact about that version, not
-     * a branch for the caller to carry.
-     */
+    /** Nothing to declare. */
     static void sendLoaded(Session session) {
-        // No loading handshake before 1.21.4.
+
     }
 
     static void sendStanding(Session session, Position at) {

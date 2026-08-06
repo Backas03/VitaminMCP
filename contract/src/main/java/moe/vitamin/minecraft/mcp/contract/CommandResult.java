@@ -3,20 +3,7 @@ package moe.vitamin.minecraft.mcp.contract;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * The outcome of running a command on the server.
- *
- * <p>{@code dispatched} is not the same as "the command did what you wanted". Bukkit reports
- * whether a handler was found and ran without throwing, and plenty of commands report their own
- * failure by sending the sender a message while still returning true. That is why {@link
- * #output} exists: it is usually the only place the real answer appears.
- *
- * @param command        the command that was run, without a leading slash
- * @param executedAs     {@code CONSOLE}, or the player name it ran as
- * @param dispatched     whether a handler accepted it
- * @param output         lines the server logged while it ran
- * @param durationMillis how long the server spent on it, main thread included
- */
+/** The outcome of running a command on the server. */
 public record CommandResult(
         String command,
         String executedAs,

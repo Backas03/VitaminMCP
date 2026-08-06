@@ -5,10 +5,6 @@ plugins {
 group = "moe.vitamin.minecraft.mcp"
 version = "1.3.0"
 
-// Declared for every module rather than per-module. A module's *transitive* dependencies have
-// to be resolvable by whatever consumes it — testkit needs MCProtocolLib's repository purely
-// because bot-core does — so scoping repositories to the module that names a dependency breaks
-// the moment anything depends on that module.
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/") { name = "papermc" }

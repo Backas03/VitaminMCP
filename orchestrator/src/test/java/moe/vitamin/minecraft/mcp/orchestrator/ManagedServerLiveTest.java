@@ -15,15 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
-/**
- * Downloads a Paper build and starts it, agent and all.
- *
- * <pre>
- *   ./gradlew :orchestrator:test -Dvitaminmcp.liveServer=true -Dvitaminmcp.agentJar=...
- * </pre>
- *
- * <p>Gated because it reaches the network and takes a minute; ordinary builds stay offline.
- */
+/** Downloads a Paper build and starts it, agent and all. */
 @EnabledIfSystemProperty(named = "vitaminmcp.liveServer", matches = "true")
 class ManagedServerLiveTest {
 
@@ -42,7 +34,6 @@ class ManagedServerLiveTest {
                 .fetch(entry.paperVersion(), entry.build());
         assertTrue(Files.size(jar) > 1_000_000, "the downloaded jar looks truncated");
 
-        // Ports well away from anything a developer is likely to have running by hand.
         int port = 25599;
         int agentPort = 25598;
 
@@ -53,8 +44,6 @@ class ManagedServerLiveTest {
 
             assertTrue(server.isRunning());
 
-            // The agent answering is the real check: it proves the whole directory — plugin,
-            // config, token — was laid out correctly, not merely that a jar executed.
             HttpResponse<String> response = HttpClient.newHttpClient().send(
                     HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + agentPort + "/mcp"))
                             .header("Authorization", "Bearer " + TOKEN)
@@ -68,7 +57,6 @@ class ManagedServerLiveTest {
             assertEquals(200, response.statusCode(), response.body());
             assertTrue(response.body().contains("events_summary"), response.body());
 
-            // read-only is off in a managed server, so scenarios can use the console.
             assertTrue(response.body().contains("command_exec"), response.body());
         }
     }
@@ -81,8 +69,6 @@ class ManagedServerLiveTest {
         new ManagedServer(directory, Path.of("unused.jar"), 25599, 25598)
                 .prepare(null, agentJar, TOKEN);
 
-        // Everything a server needs to start unattended, including the EULA acceptance and the
-        // forwarding trust that lets bots present identities.
         assertTrue(Files.readString(directory.resolve("eula.txt")).contains("eula=true"));
         assertTrue(Files.readString(directory.resolve("spigot.yml")).contains("bungeecord: true"));
         assertTrue(Files.readString(directory.resolve("server.properties")).contains("online-mode=false"));

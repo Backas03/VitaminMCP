@@ -19,51 +19,14 @@ import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 
-/**
- * Subscribes to every Bukkit event it can find and records them into the ring buffer.
- *
- * <p>Bukkit has no "listen to everything" API, so the event classes are discovered by scanning
- * and registered one by one (docs/design.md §8).
- *
- * <p>Two registration details carry most of the value:
- *
- * <ul>
- *   <li><b>{@link EventPriority#MONITOR}</b> — the agent observes after every other plugin has
- *       had its say, so what it records is what actually happened rather than what was
- *       proposed.
- *   <li><b>{@code ignoreCancelled = false}</b> — cancelled events are kept. When something is
- *       not working, "the event fired and something cancelled it" is usually the answer, and
- *       filtering those out hides precisely the case worth debugging.
- * </ul>
- *
- * <p>Only classes that <em>declare</em> their own {@code getHandlerList()} are registered.
- * Bukkit resolves an event's handler list by walking up the hierarchy, so registering both a
- * parent and a child that share one list would deliver every event twice. Registering the
- * declaring class alone still captures subclasses — they arrive through the inherited list, and
- * the record reports the concrete class the event actually was.
- */
+/** Subscribes to every Bukkit event it can find and records them into the ring buffer. */
 public final class EventCapture implements Listener {
 
     /** Packages scanned by default: Bukkit's own events plus Paper's additions. */
     public static final List<String> DEFAULT_SCAN_PACKAGES =
             List.of("org.bukkit.event", "io.papermc.paper.event", "com.destroystokyo.paper.event");
 
-    /**
-     * Events that change how the server behaves merely by having a listener registered.
-     *
-     * <p>Distinct from {@link HighFrequencyEvents}, and not configurable, because the reason is
-     * different: those are excluded to protect the buffer, these are excluded because capturing
-     * them breaks the server. An observer that alters what it observes is not an observer.
-     *
-     * <p>{@code PlayerHandshakeEvent} is the known case. Paper fires it only when something is
-     * listening, and takes that as a promise that the plugin will parse the handshake itself —
-     * it then reads the identity out of the event's fields. A MONITOR listener that only
-     * records and returns leaves those fields unset, so Paper rejects every proxy-forwarded
-     * login with "Unknown data in login hostname".
-     *
-     * <p>Found the hard way: bots could not connect at all until the agent was removed from the
-     * server, at which point they connected immediately.
-     */
+    /** Events that change how the server behaves merely by having a listener registered. */
     private static final Set<String> NEVER_REGISTER = Set.of("PlayerHandshakeEvent");
 
     private final Plugin plugin;
@@ -93,11 +56,7 @@ public final class EventCapture implements Listener {
         this.logger = plugin.getLogger();
     }
 
-    /**
-     * Scans for event classes and registers a listener for each.
-     *
-     * @return how many event types were registered
-     */
+    /** Scans for event classes and registers a listener for each. */
     public int start() {
         if (running) {
             throw new IllegalStateException("Capture is already running");
@@ -109,8 +68,7 @@ public final class EventCapture implements Listener {
         int registered = 0;
         for (Class<? extends Event> eventClass : eventClasses) {
             String simpleName = eventClass.getSimpleName();
-            // Checked before the high-frequency list and not gated on any setting: there is no
-            // configuration under which observing these is acceptable.
+
             if (NEVER_REGISTER.contains(simpleName)) {
                 continue;
             }
@@ -128,7 +86,7 @@ public final class EventCapture implements Listener {
                 registeredTypes.add(simpleName);
                 registered++;
             } catch (RuntimeException e) {
-                // One unregisterable event type must not abort the whole scan.
+
                 logger.log(Level.FINE, "Skipped event type " + eventClass.getName(), e);
             }
         }
@@ -146,17 +104,10 @@ public final class EventCapture implements Listener {
         running = false;
     }
 
-    /**
-     * Records one event.
-     *
-     * <p>On the main thread for most events, and on a Bukkit async thread for the rest. The
-     * work here is a handful of field reads plus one array store, and it must stay that way.
-     */
+    /** Records one event. */
     private void record(Event event) {
         String type = event.getClass().getSimpleName();
 
-        // A subclass of a registered type can still be high-frequency even when its declaring
-        // parent is not, so the check is repeated here rather than trusted to registration.
         if (!captureHighFrequency && highFrequency.contains(type)) {
             return;
         }
@@ -170,9 +121,7 @@ public final class EventCapture implements Listener {
             buffer.append(sequence ->
                     new EventRecord(sequence, timestamp, type, player, cancelled, payload));
         } catch (RuntimeException e) {
-            // Never let capture break the server. A listener that throws at MONITOR would be
-            // logged by Bukkit on every single occurrence, turning an agent bug into an
-            // outage.
+
             logger.log(Level.FINE, "Failed to record " + type, e);
         }
     }
@@ -186,13 +135,7 @@ public final class EventCapture implements Listener {
         return running;
     }
 
-    /**
-     * Finds concrete event classes that own a handler list.
-     *
-     * <p>The scan is limited to the configured packages rather than the whole classpath.
-     * Scanning everything would also pick up other plugins' custom events, but it costs seconds
-     * of startup on a server with many plugins; operators who want those can add the packages.
-     */
+    /** Finds concrete event classes that own a handler list. */
     private List<Class<? extends Event>> discoverEventClasses() {
         long startedAt = System.nanoTime();
         List<Class<? extends Event>> found = new ArrayList<>();
@@ -226,18 +169,14 @@ public final class EventCapture implements Listener {
 
     private Class<? extends Event> loadEventClass(ClassInfo info) {
         try {
-            return info.loadClass(Event.class, /* ignoreExceptions = */ true);
+            return info.loadClass(Event.class,  true);
         } catch (RuntimeException | LinkageError e) {
             logger.log(Level.FINE, "Could not load event class " + info.getName(), e);
             return null;
         }
     }
 
-    /**
-     * Whether the class owns its handler list rather than inheriting one.
-     *
-     * <p>This is the check that keeps events from being recorded twice.
-     */
+    /** Whether the class owns its handler list rather than inheriting one. */
     private static boolean declaresHandlerList(Class<? extends Event> eventClass) {
         try {
             var method = eventClass.getDeclaredMethod("getHandlerList");

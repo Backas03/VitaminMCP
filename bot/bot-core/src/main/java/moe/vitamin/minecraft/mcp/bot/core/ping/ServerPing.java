@@ -9,31 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Asks a server what protocol it speaks, without speaking it.
- *
- * <p>This is the server list ping: a handshake with next-state 1, then a status request. The
- * shape of those two packets has not changed since 1.7, and the reply carries the server's own
- * protocol number — so one implementation covers every version the project will ever support,
- * and it needs no protocol library at all. That is what lets a single runner jar choose which of
- * its backends to load (docs/multi-version.md §2.1).
- *
- * <p>Written against the wire rather than against a library on purpose. Bringing MCProtocolLib in
- * here would put a protocol library on the launcher's classpath, which is the one thing the
- * bundle exists to avoid.
- *
- * <p>No compression and no encryption are involved: the server enables both during login, and
- * status never gets there.
- */
+/** Asks a server what protocol it speaks, without speaking it. */
 public final class ServerPing {
 
-    /**
-     * Protocol claimed in the handshake.
-     *
-     * <p>-1 is the convention for "I am only asking". A server answers a status request with its
-     * own version whatever this says, and claiming a real number here would make a mismatched
-     * server look reachable in the one situation this call exists to detect.
-     */
+    /** Protocol claimed in the handshake. */
     private static final int ASKING = -1;
 
     /** Status replies are small; anything larger is not a Minecraft server answering. */
@@ -46,12 +25,7 @@ public final class ServerPing {
 
     private ServerPing() {}
 
-    /**
-     * The protocol number {@code host:port} speaks.
-     *
-     * @throws IOException if the server cannot be reached, does not answer a status request, or
-     *                     answers with something that carries no protocol number
-     */
+    /** The protocol number {@code host:port} speaks. */
     public static int protocol(String host, int port, int timeoutMillis) throws IOException {
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(host, port), timeoutMillis);
@@ -96,14 +70,7 @@ public final class ServerPing {
         return readString(in);
     }
 
-    /**
-     * Pulls the protocol number out of the status JSON.
-     *
-     * <p>By pattern, not by a JSON parser, because bot-core has no external dependencies and
-     * acquiring one for a single integer would be a poor trade. The {@code version} object is
-     * located first so that a plugin listing its own "protocol" somewhere else in the reply
-     * cannot be read instead.
-     */
+    /** Pulls the protocol number out of the status JSON. */
     static int protocolOf(String json) throws IOException {
         Matcher version = VERSION_BLOCK.matcher(json);
         Matcher protocol = version.find()

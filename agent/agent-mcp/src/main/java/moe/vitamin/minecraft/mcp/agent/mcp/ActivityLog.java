@@ -5,28 +5,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 import moe.vitamin.minecraft.mcp.agent.core.ActivityLogging;
 
-/**
- * Writes what the agent is asked to do, and what it answered, to the server console.
- *
- * <p>Without this the agent is the one thing on a server that acts without leaving a trace:
- * events and logs are captured into buffers only an MCP client can read, so an operator
- * watching their own console sees the plugin load and then nothing, however much is happening.
- * That is the wrong default for software that can run console commands.
- *
- * <p>Each call produces two lines, on arrival and on completion. The pair is what makes a call
- * that never finishes visible — {@code wait_for} can hold a request open for a minute, and a
- * single line written afterwards would show nothing at all while it was happening. The
- * {@code #n} identifier is there because four request threads interleave.
- *
- * <p>Both the arguments and the answer are truncated. The response budget allows 50KB, and a
- * console is not where anyone wants to read that; the first few hundred characters say which
- * call this was and roughly what came back, which is what the line is for. A client that needs
- * the whole payload already has it.
- *
- * <p>{@link ActivityLogging#OFF} silences ordinary calls but not refused tokens or
- * state-changing tools. Those are the records that matter after the fact, and an operator
- * turning down console noise is not asking to give them up.
- */
+/** Writes what the agent is asked to do, and what it answered, to the server console. */
 final class ActivityLog {
 
     /** Longest argument blob written to the console before it is cut. */
@@ -44,21 +23,10 @@ final class ActivityLog {
         this.verbosity = verbosity;
     }
 
-    // ------------------------------------------------------------------ auth
-
-    /**
-     * A request that failed authentication.
-     *
-     * <p>Always logged, and at WARNING: on a loopback endpoint this means something local is
-     * misconfigured, and on an exposed one it means someone is trying tokens. Neither is
-     * something to find out about only from a client's error message. The token itself is never
-     * written — a rejected guess is still a secret to whoever it belongs to.
-     */
+    /** A request that failed authentication. */
     void refused(String client, String reason) {
         logger.warning("MCP request from " + client + " rejected: " + reason);
     }
-
-    // -------------------------------------------------------------- requests
 
     /** A request that never reached dispatch: malformed, oversized, or the wrong HTTP verb. */
     void malformed(String client, String problem) {
@@ -77,16 +45,9 @@ final class ActivityLog {
                 + " (notification)");
     }
 
-    /**
-     * Records the arrival of a call and returns the handle that records its answer.
-     *
-     * @param toolName  the tool being called, or {@code null} for a protocol method
-     * @param arguments what the caller sent, or {@code null}
-     * @param audited   whether this call must be logged even with activity logging turned off
-     */
+    /** Records the arrival of a call and returns the handle that records its answer. */
     Call begin(String client, String method, String toolName, JsonNode arguments, boolean audited) {
-        // An audited call carries its detail whatever the verbosity: "command_exec" without the
-        // command is not a record of anything.
+
         boolean withDetail = verbosity.logsArguments() || audited;
 
         StringBuilder description = new StringBuilder(method);
@@ -121,22 +82,12 @@ final class ActivityLog {
             this.withDetail = withDetail;
         }
 
-        /**
-         * @param answer what the caller was sent back, dropped from the line under
-         *               {@link ActivityLogging#SUMMARY} for the same reason arguments are
-         */
         void succeeded(String answer) {
             boolean show = withDetail && answer != null && !answer.isEmpty();
             finish("ok", show ? answer : null);
         }
 
-        /**
-         * A call that came back with a failure the caller can read.
-         *
-         * <p>Logged even when the arrival was not, because a failure is the case an operator
-         * goes looking for. It repeats the description so a lone completion line still says
-         * which call it belonged to.
-         */
+        /** A call that came back with a failure the caller can read. */
         void failed(String reason) {
             finish("failed", reason);
         }
@@ -156,21 +107,13 @@ final class ActivityLog {
         }
     }
 
-    // --------------------------------------------------------------- helpers
-
     private static String truncate(String value, int limit) {
         return value.length() <= limit
                 ? value
                 : value.substring(0, limit) + "... (" + value.length() + " chars total)";
     }
 
-    /**
-     * Keeps one console line to one line.
-     *
-     * <p>Tool payloads are pretty-printed for the client that reads them, which on a console is
-     * a wall of indentation. Collapsing whitespace is what makes the answer legible next to the
-     * request it belongs to.
-     */
+    /** Keeps one console line to one line. */
     private static String oneLine(String value) {
         return value.replaceAll("\\s+", " ").trim();
     }

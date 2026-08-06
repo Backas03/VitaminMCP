@@ -16,12 +16,7 @@ import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/**
- * Plugin entry point: reads the configuration, starts capture, opens the MCP endpoint.
- *
- * <p>Deliberately thin. Everything that could be tested without a server lives in agent-core,
- * and everything protocol-shaped lives in {@link McpHttpServer}.
- */
+/** Plugin entry point: reads the configuration, starts capture, opens the MCP endpoint. */
 public final class VitaminMcpPlugin extends JavaPlugin {
 
     private CaptureService capture;
@@ -43,9 +38,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
         try {
             settings.validate();
         } catch (IllegalStateException e) {
-            // Refusing to start is the specified behaviour, not a warning-and-continue. An
-            // unauthenticated endpoint into server internals is worse than no endpoint, and a
-            // startup warning is read by nobody (docs/design.md §14).
+
             getLogger().severe(e.getMessage());
             if (!settings.hasAuthToken()) {
                 getLogger().severe("Suggested token (paste into config.yml): " + generateToken());
@@ -92,15 +85,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
         }
     }
 
-    /**
-     * Says on the console what is being captured and what is not.
-     *
-     * <p>Both halves are worth a line. Log capture attaching is not guaranteed — it degrades to
-     * events only rather than failing (see {@code LogCapture}) — and an operator who reads
-     * "logs_query returns nothing" has no way to tell that apart from a quiet server. The
-     * excluded high-frequency types are the other question that gets asked, for the same
-     * reason: an event that was never captured looks exactly like an event that never fired.
-     */
+    /** Says on the console what is being captured and what is not. */
     private void logCaptureState(AgentSettings settings) {
         Map<String, Object> status = capture.captureStatus();
         getLogger().info("Capturing " + status.get("eventTypesRegistered") + " event types into a "
@@ -138,13 +123,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 ActivityLogging.parse(config.getString("activity-log", "full")));
     }
 
-    /**
-     * Reads the OAuth block.
-     *
-     * <p>Absent means disabled, which is the right default for an endpoint bound to loopback on
-     * a machine the operator already controls. It becomes worth configuring when the endpoint
-     * is reachable by anything the operator does not personally run.
-     */
+    /** Reads the OAuth block. */
     private static OAuthSettings readOAuth(FileConfiguration config) {
         if (!config.getBoolean("oauth.enabled", false)) {
             return OAuthSettings.disabled();
@@ -159,13 +138,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 stringList(config, "oauth.required-scopes"));
     }
 
-    /**
-     * Reads the TLS block.
-     *
-     * <p>Off by default, which is correct on loopback where nothing leaves the machine. Once
-     * bind-address points anywhere else, {@link AgentSettings#validate()} refuses to start
-     * without one of these routes.
-     */
+    /** Reads the TLS block. */
     private static TlsSettings readTls(FileConfiguration config) {
         return new TlsSettings(
                 config.getBoolean("tls.enabled", false),

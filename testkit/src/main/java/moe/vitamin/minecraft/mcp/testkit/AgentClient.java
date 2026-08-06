@@ -11,15 +11,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Objects;
 
-/**
- * Talks to the agent over MCP.
- *
- * <p>testkit deliberately does not compile against the agent. The agent is a jar dropped into
- * whichever server is under test, and different Minecraft versions may need different builds of
- * it; the only thing joining the two sides is the tool contract (CONTRIBUTING.md invariant 1). Going
- * through HTTP keeps that true, and has the side benefit that everything testkit relies on is
- * something a person could also do by hand.
- */
+/** Talks to the agent over MCP. */
 public final class AgentClient {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -39,13 +31,6 @@ public final class AgentClient {
         this(host, port, token, tls, null);
     }
 
-    /**
-     * @param tls         whether the agent is serving HTTPS. A remotely reachable agent refuses
-     *                    to start without transport security, so this is on for anything but a
-     *                    local server
-     * @param fingerprint SHA-256 of the certificate the agent must present, or {@code null} to
-     *                    validate it the ordinary way against the system's trusted authorities
-     */
     public AgentClient(String host, int port, String token, boolean tls, String fingerprint) {
         this.endpoint = URI.create((tls ? "https://" : "http://") + host + ":" + port + "/mcp");
         this.token = Objects.requireNonNull(token, "token");
@@ -55,11 +40,7 @@ public final class AgentClient {
         HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5));
         if (pinned) {
             builder.sslContext(pinnedTo(fingerprint));
-            // Hostname verification is switched off *because* the certificate is pinned, not to
-            // weaken anything. A name match asks "was this issued for the host I typed"; a pin
-            // asks "is this the exact certificate I was given", which is the stronger question
-            // and the only one a self-signed certificate can answer. Leaving both on would mean
-            // the operator also had to get a SAN right, for no gain.
+
             javax.net.ssl.SSLParameters parameters = new javax.net.ssl.SSLParameters();
             parameters.setEndpointIdentificationAlgorithm(null);
             builder.sslParameters(parameters);
@@ -67,13 +48,7 @@ public final class AgentClient {
         this.http = builder.build();
     }
 
-    /**
-     * Trusts one certificate and nothing else.
-     *
-     * <p>This is what lets a self-signed agent be reached without installing anything on the
-     * client: instead of teaching the machine to trust a new authority — which would apply to
-     * every connection it ever makes — the fingerprint is checked against this one server.
-     */
+    /** Trusts one certificate and nothing else. */
     private static javax.net.ssl.SSLContext pinnedTo(String fingerprint) {
         String expected = normalise(fingerprint);
         javax.net.ssl.X509TrustManager pinning = new javax.net.ssl.X509TrustManager() {
@@ -115,14 +90,7 @@ public final class AgentClient {
         }
     }
 
-    /**
-     * Turns a TLS failure into the thing the reader has to do about it.
-     *
-     * <p>The two cases look identical from the outside and call for opposite actions: a pin that
-     * no longer matches means the certificate changed, while no pin at all against a self-signed
-     * certificate means one was never supplied. Java's own message — "unable to find valid
-     * certification path to requested target" — says neither.
-     */
+    /** Turns a TLS failure into the thing the reader has to do about it. */
     private String certificateProblem(javax.net.ssl.SSLException failure) {
         String detail = failure.getMessage() == null ? "" : failure.getMessage();
         for (Throwable cause = failure.getCause(); cause != null; cause = cause.getCause()) {
@@ -176,11 +144,7 @@ public final class AgentClient {
         return out.toString().toUpperCase(java.util.Locale.ROOT);
     }
 
-    /**
-     * Calls a tool and returns its parsed result.
-     *
-     * @throws AgentException if the transport failed, or the tool reported an error
-     */
+    /** Calls a tool and returns its parsed result. */
     public JsonNode call(String tool, ObjectNode arguments) {
         ObjectNode params = MAPPER.createObjectNode();
         params.put("name", tool);
@@ -188,31 +152,18 @@ public final class AgentClient {
 
         JsonNode result = rpc("tools/call", params, tool);
 
-        // Tool-level failures come back as content with isError rather than as a transport
-        // error, which is the MCP convention — so they have to be unpacked, not assumed absent.
         if (result.path("isError").asBoolean()) {
             throw new AgentException(tool + ": " + textContent(result));
         }
         return parse(textContent(result));
     }
 
-    /**
-     * The agent's own tool definitions, schemas and all.
-     *
-     * <p>Exists so that the parameters of a proxied tool can be published by whoever is proxying
-     * it without restating them. Restating them would mean two descriptions of one tool, and the
-     * copy is the one that goes stale — silently, because nothing compares them.
-     */
+    /** The agent's own tool definitions, schemas and all. */
     public JsonNode listTools() {
         return rpc("tools/list", MAPPER.createObjectNode(), "tools/list").path("tools");
     }
 
-    /**
-     * One JSON-RPC round trip.
-     *
-     * @param label what to name in an error message
-     * @return the {@code result} object
-     */
+    /** One JSON-RPC round trip. */
     private JsonNode rpc(String method, ObjectNode params, String label) {
         ObjectNode request = MAPPER.createObjectNode();
         request.put("jsonrpc", "2.0");
@@ -220,9 +171,6 @@ public final class AgentClient {
         request.put("method", method);
         request.set("params", params);
 
-        // Generous, because wait_for legitimately blocks for as long as the caller asked it to.
-        // A read timeout shorter than the agent's own cap would turn a working wait into a
-        // transport error.
         HttpRequest httpRequest = HttpRequest.newBuilder(endpoint)
                 .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
@@ -234,9 +182,7 @@ public final class AgentClient {
         try {
             response = http.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         } catch (javax.net.ssl.SSLException e) {
-            // Told apart from "could not connect" deliberately. The connection succeeded and the
-            // certificate was refused, so pointing at the plugin or the token — which are both
-            // fine — sends the reader looking in the wrong place entirely.
+
             throw new AgentException(certificateProblem(e), e);
         } catch (IOException e) {
             throw new AgentException("Could not reach the agent at " + endpoint
