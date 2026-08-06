@@ -22,18 +22,33 @@ final class SessionTools {
             "server_info", "events_summary", "events_query", "logs_query",
             "exceptions_recent", "state_query", "wait_for", "command_exec");
 
-    private Session session;
+    /** Every open session, by name, in the order they were started. */
+    private final java.util.Map<String, Session> sessions = new java.util.LinkedHashMap<>();
 
     ArrayNode listTools() {
         ArrayNode tools = MAPPER.createArrayNode();
 
         tools.add(tool("session_start",
                 "Connect to a Minecraft server and its VitaminMCP agent. Call this first — "
-                        + "every other tool needs it.",
+                        + "every other tool needs it. Several sessions can be open at once, which "
+                        + "is what a BungeeCord network needs: one per backend server, each with "
+                        + "its own agent. Starting one never disturbs the others, so bots stay "
+                        + "connected. Starting one that names the same server and agent as an open "
+                        + "session replaces it.",
                 properties -> {
+                    string(properties, "session",
+                            "Name for this session, used by every other tool to say which server "
+                                    + "it means — 'lobby', 'survival'. Defaults to "
+                                    + "host:port@mcpPort.");
                     string(properties, "host", "Server host. Defaults to 127.0.0.1.");
-                    number(properties, "port", "Minecraft port. Defaults to 25565.");
-                    number(properties, "mcpPort", "Agent's MCP port. Defaults to 25585.");
+                    number(properties, "port",
+                            "Minecraft port bots connect to. Defaults to 25565. On a proxied "
+                                    + "network this is the proxy's port, since that is where a "
+                                    + "real player connects.");
+                    number(properties, "mcpPort",
+                            "Agent's MCP port. Defaults to 25585. Each backend server runs its "
+                                    + "own agent on its own port, and that is what makes one "
+                                    + "session different from another.");
                     string(properties, "token", "The agent's auth-token from its config.yml.");
                     string(properties, "runnerJar",
                             "Path to the bot runner jar. Optional: defaults to the "
@@ -53,14 +68,22 @@ final class SessionTools {
 
         tools.add(tool("session_reset",
                 "Disconnect every bot, keeping the connection. Use between independent tests so "
-                        + "one does not inherit the other's players.",
-                properties -> {}));
+                        + "one does not inherit the other's players. Pass close:true to end the "
+                        + "session instead, which is the only way to release one you are done "
+                        + "with.",
+                properties -> {
+                    session(properties);
+                    string(properties, "close",
+                            "'true' to close the session rather than reset it. Its bots "
+                                    + "disconnect and the name becomes free again.");
+                }));
 
         tools.add(tool("bot_spawn",
                 "Connect a bot and wait until it is standing in the world. Its UUID is derived "
                         + "from its name, so the same name is the same player every run and "
                         + "permission-dependent behaviour is reproducible.",
                 properties -> {
+                    session(properties);
                     string(properties, "name", "Bot name, at most 16 characters.");
                     string(properties, "clientIp",
                             "Address the server should attribute the connection to. Omit unless "
@@ -84,7 +107,10 @@ final class SessionTools {
                         + "they persist, and a server's live view of a player — timers, money, "
                         + "region, quest progress — is usually drawn there and nowhere the agent "
                         + "can see.",
-                properties -> string(properties, "name", "Bot name.")));
+                properties -> {
+                    session(properties);
+                    string(properties, "name", "Bot name.");
+                }));
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
@@ -98,15 +124,19 @@ final class SessionTools {
                         + "is the server's own and never visible here. On failure the response "
                         + "says which step failed, why, and what the server was doing at that "
                         + "moment.",
-                properties -> string(properties, "scenario",
-                        "JSON array of steps, e.g. "
-                                + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]")));
+                properties -> {
+                    session(properties);
+                    string(properties, "scenario",
+                            "JSON array of steps, e.g. "
+                                    + "[{\"action\":\"spawn\",\"bot\":\"Tester1\"}]");
+                }));
 
         for (String name : PROXIED) {
             tools.add(passthroughTool(name,
                     "Forwarded to the agent on the connected server. Call session_start first — "
                             + "its response lists this tool's parameters, as the agent defines "
-                            + "them. Pass them as top-level properties, not wrapped."));
+                            + "them. Pass them as top-level properties, not wrapped. Add "
+                            + "'session' to say which server, when more than one is open."));
         }
         return tools;
     }
@@ -116,13 +146,19 @@ final class SessionTools {
 
         return switch (name) {
             case "session_start" -> sessionStart(args);
-            case "session_reset" -> sessionReset();
+            case "session_reset" -> sessionReset(args);
             case "bot_spawn" -> botSpawn(args);
             case "bot_inspect" -> botInspect(args);
             case "bot_run_scenario" -> runScenario(args);
             default -> {
                 if (PROXIED.contains(name)) {
-                    yield require().agent().call(name, (ObjectNode) args);
+                    Session target = require(args);
+
+                    ObjectNode forwarded = args instanceof ObjectNode object
+                            ? object.deepCopy()
+                            : MAPPER.createObjectNode();
+                    forwarded.remove("session");
+                    yield target.agent().call(name, forwarded);
                 }
                 throw new IllegalArgumentException("Unknown tool: " + name);
             }
@@ -130,9 +166,6 @@ final class SessionTools {
     }
 
     private JsonNode sessionStart(JsonNode args) {
-        if (session != null) {
-            session.close();
-        }
         String token = args.path("token").asText("");
         if (token.isBlank()) {
             throw new IllegalArgumentException(
@@ -145,41 +178,82 @@ final class SessionTools {
                 ? runnerBesideThisJar()
                 : java.nio.file.Path.of(runnerJar);
 
+        String host = args.path("host").asText("127.0.0.1");
+        int port = args.path("port").asInt(25565);
+        int mcpPort = args.path("mcpPort").asInt(25585);
+
+        String name = args.path("session").asText("");
+        if (name.isBlank()) {
+            name = host + ":" + port + "@" + mcpPort;
+        }
+
+        Session replaced = sessions.remove(name);
+        if (replaced != null) {
+            replaced.close();
+        }
+
+        Session started;
         try {
-            session = new Session(
-                    args.path("host").asText("127.0.0.1"),
-                    args.path("port").asInt(25565),
-                    args.path("mcpPort").asInt(25585),
-                    token,
+            started = new Session(host, port, mcpPort, token,
                     args.path("tls").asBoolean(false),
                     args.path("tlsFingerprint").asText(null),
                     runner);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
+        sessions.put(name, started);
 
-        JsonNode info = session.agent().call("server_info", AgentClient.arguments());
+        JsonNode info = started.agent().call("server_info", AgentClient.arguments());
 
         ObjectNode result = MAPPER.createObjectNode();
-        result.put("connected", session.describe());
+        result.put("session", name);
+        result.put("connected", started.describe());
         result.set("server", info);
 
-        result.set("agentTools", session.agent().listTools());
+        result.set("agentTools", started.agent().listTools());
+        result.set("sessions", roster());
         return result;
     }
 
-    private JsonNode sessionReset() {
-        try {
-            require().reset();
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException(
-                    "Bots were disconnected, but the replacement runner did not start: "
-                            + e.getMessage() + ". Call session_start again.", e);
-        }
+    private JsonNode sessionReset(JsonNode args) {
+        Session session = require(args);
+        String name = nameOf(session);
+
         ObjectNode result = MAPPER.createObjectNode();
-        result.put("reset", true);
-        result.put("session", session.describe());
+        if (args.path("close").asBoolean(false)) {
+            sessions.remove(name);
+            session.close();
+            result.put("closed", name);
+        } else {
+            try {
+                session.reset();
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException(
+                        "Bots were disconnected, but the replacement runner did not start: "
+                                + e.getMessage() + ". Call session_start again.", e);
+            }
+            result.put("reset", name);
+            result.put("session", session.describe());
+        }
+        result.set("sessions", roster());
         return result;
+    }
+
+    /** What is open, so a caller never has to remember what it named things. */
+    private ArrayNode roster() {
+        ArrayNode open = MAPPER.createArrayNode();
+        sessions.forEach((name, session) -> open.addObject()
+                .put("session", name)
+                .put("connected", session.describe()));
+        return open;
+    }
+
+    private String nameOf(Session session) {
+        return sessions.entrySet().stream()
+                .filter(entry -> entry.getValue() == session)
+                .map(java.util.Map.Entry::getKey)
+                .findFirst()
+                .orElseThrow();
     }
 
     private JsonNode botSpawn(JsonNode args) {
@@ -188,7 +262,7 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
         try {
-            BotRunner.BotHandle bot = require().bots().spawn(
+            BotRunner.BotHandle bot = require(args).bots().spawn(
                     name, args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null);
 
             ObjectNode result = MAPPER.createObjectNode();
@@ -211,7 +285,7 @@ final class SessionTools {
         }
         try {
             ClientView view = new BotRunner.BotHandle(
-                    require().bots(), name, 0, 0, 0).inspect();
+                    require(args).bots(), name, 0, 0, 0).inspect();
 
             ObjectNode result = MAPPER.createObjectNode();
             if (view.menu() == null) {
@@ -266,7 +340,7 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_run_scenario needs 'scenario'.");
         }
 
-        ScenarioResult result = require().runner().run(scenario);
+        ScenarioResult result = require(args).runner().run(scenario);
 
         ObjectNode response = MAPPER.createObjectNode();
         response.put("passed", result.passed());
@@ -326,18 +400,31 @@ final class SessionTools {
         return found.get(0);
     }
 
-    private Session require() {
-        if (session == null) {
+    /** The session a call is about. */
+    private Session require(JsonNode args) {
+        String name = args.path("session").asText("");
+        if (!name.isBlank()) {
+            Session named = sessions.get(name);
+            if (named == null) {
+                throw new IllegalArgumentException(
+                        "No session named '" + name + "'. Open: " + sessions.keySet());
+            }
+            return named;
+        }
+        if (sessions.isEmpty()) {
             throw new IllegalStateException("No session. Call session_start first.");
         }
-        return session;
+        if (sessions.size() > 1) {
+            throw new IllegalArgumentException(
+                    "Several sessions are open " + sessions.keySet()
+                            + " — pass 'session' to say which one this is for.");
+        }
+        return sessions.values().iterator().next();
     }
 
     void close() {
-        if (session != null) {
-            session.close();
-            session = null;
-        }
+        sessions.values().forEach(Session::close);
+        sessions.clear();
     }
 
     private static ObjectNode tool(
@@ -363,6 +450,13 @@ final class SessionTools {
         schema.putObject("properties");
         schema.put("additionalProperties", true);
         return tool;
+    }
+
+    /** Which server this call is for. */
+    private static void session(ObjectNode properties) {
+        string(properties, "session",
+                "Which session, by the name session_start gave it. Optional while only one is "
+                        + "open; required once there are several.");
     }
 
     private static void string(ObjectNode properties, String name, String description) {

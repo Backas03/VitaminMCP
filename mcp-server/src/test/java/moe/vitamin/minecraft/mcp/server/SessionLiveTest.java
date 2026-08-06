@@ -2,8 +2,12 @@ package moe.vitamin.minecraft.mcp.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Path;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
@@ -73,5 +77,68 @@ class SessionLiveTest {
         } finally {
             session.close();
         }
+    }
+
+    /** A second session leaves the first one's bots where they were. */
+    @Test
+    void aSecondSessionLeavesTheFirstOnesBotsConnected() throws Exception {
+        SessionTools tools = new SessionTools();
+        try {
+            tools.call("session_start", start("lobby"));
+            tools.call("bot_spawn", arguments("session", "lobby", "name", "SessionA"));
+
+            tools.call("session_start", start("game"));
+
+            JsonNode stillThere = tools.call("bot_inspect",
+                    arguments("session", "lobby", "name", "SessionA"));
+            assertNotNull(stillThere.get("messages"),
+                    "the lobby bot was gone after a second session started");
+
+            JsonNode open = tools.call("session_reset", arguments("session", "game", "close", "true"))
+                    .get("sessions");
+            assertEquals(1, open.size(), "closing 'game' should leave 'lobby': " + open);
+            assertEquals("lobby", open.get(0).get("session").asText());
+        } finally {
+            tools.close();
+        }
+    }
+
+    /**
+     * An unnamed call is ambiguous once there are two servers, and says so rather than guessing.
+     */
+    @Test
+    void anUnnamedCallIsRefusedWhileTwoSessionsAreOpen() throws Exception {
+        SessionTools tools = new SessionTools();
+        try {
+            tools.call("session_start", start("lobby"));
+            tools.call("session_start", start("game"));
+
+            IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                    () -> tools.call("bot_spawn", arguments("name", "SessionC")));
+            assertTrue(refused.getMessage().contains("lobby")
+                            && refused.getMessage().contains("game"),
+                    "the refusal should name the open sessions: " + refused.getMessage());
+        } finally {
+            tools.close();
+        }
+    }
+
+    private static ObjectNode start(String name) {
+        return arguments(
+                "session", name,
+                "host", HOST,
+                "port", String.valueOf(PORT),
+                "mcpPort", String.valueOf(MCP_PORT),
+                "token", TOKEN,
+                "runnerJar", RUNNER_JAR.toString());
+    }
+
+    /** Ports arrive as text and are read with asInt, which parses either. */
+    private static ObjectNode arguments(String... pairs) {
+        ObjectNode node = new ObjectMapper().createObjectNode();
+        for (int i = 0; i < pairs.length; i += 2) {
+            node.put(pairs[i], pairs[i + 1]);
+        }
+        return node;
     }
 }

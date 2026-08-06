@@ -130,8 +130,8 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 
 | | |
 |---|---|
-| `session_start` | Connect to a server and its agent. Every other tool needs it |
-| `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests. World state is **not** rolled back |
+| `session_start` | Connect to a server and its agent. Every other tool needs it. Several sessions can be open at once — one per backend of a proxied network |
+| `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests. World state is **not** rolled back. `close: true` ends the session instead |
 
 ### Players
 

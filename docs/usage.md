@@ -281,6 +281,38 @@ tests** or one inherits the previous test's players.
 > It does not roll back world state. A scenario that depends on the world has to create that state
 > itself.
 
+## Several servers at once — a proxied network
+
+A BungeeCord network is several servers, each with its own agent. Open one session per server and
+they coexist; starting one never disturbs another, which matters because **closing a session
+disconnects its bots.**
+
+```jsonc
+session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
+session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
+```
+
+`port` is the **proxy's** port in both — that is where a real player connects, and bots are real
+players. What distinguishes the sessions is `mcpPort`: the agent inside each backend server.
+
+Every other tool then takes `session`:
+
+```jsonc
+bot_spawn   {"session": "lobby", "name": "Tester1"}
+command_exec {"session": "lobby", "command": "send Tester1 survival"}
+state_query  {"session": "survival", "kind": "player", "target": "Tester1"}
+```
+
+Omit `session` and it resolves only while **one** session is open. With several it is an error
+naming them, rather than a guess — the sessions differ by which backend they observe, so picking
+one for you would send a command to the wrong server and report success.
+
+`session_reset {"session": "lobby", "close": "true"}` ends one session and frees the name. Sessions
+each hold a bot runner process, so close the ones you are done with.
+
+> Tool calls are served one at a time. Sessions **coexist**, but a 30-second spawn on one blocks a
+> call to another until it returns.
+
 ## Driving it step by step
 
 ```
@@ -296,7 +328,7 @@ things **keyed on the address** — IP bans, per-IP connection limits, geo logic
 real address is sent; a made-up address is a lie every later step has to carry.
 
 After that, use the proxied agent tools directly. `wait_for`, `state_query` and `events_query` all
-go to the server you called `session_start` on.
+go to the session's server — the only one open, or the one `session` names.
 
 ## All at once — `bot_run_scenario`
 
