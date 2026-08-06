@@ -8,7 +8,7 @@ rewritten: the reversal is the useful part.
 Each stage **must meet its definition of done before the next one starts.** Do not skip ahead and
 build a later stage first.
 
-Design rationale is in `design.md`, rules and invariants in `../CLAUDE.md`.
+Design rationale is in `design.md`, rules and invariants in `../CONTRIBUTING.md`.
 
 How the difficulty is distributed: **stages 1 through 3 are most of the work.** Stage 4 is a thin
 shell over them, and stage 5 is expansion.

@@ -19,7 +19,7 @@ dependencies {
     // scanning. Relocated into the plugin jar by vitaminmcp.shadow-conventions.
     implementation("io.github.classgraph:classgraph:4.8.186")
 
-    // Attaching the log4j2 appender is the one place CLAUDE.md allows a direct log4j2
+    // Attaching the log4j2 appender is the one place CONTRIBUTING.md allows a direct log4j2
     // reference. Compiled against 2.8.1 — older than anything a supported server ships — so
     // the appender only binds API present in every version it will run on.
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")

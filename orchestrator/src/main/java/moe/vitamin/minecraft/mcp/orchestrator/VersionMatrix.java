@@ -12,7 +12,7 @@ import java.util.Objects;
  * The versions to test against, read from {@code versions.yaml}.
  *
  * <p>Configuration rather than code, so that adding a version is one block and never a code
- * change (CLAUDE.md invariant 7). Every entry is launched natively; there is no Via path any
+ * change (CONTRIBUTING.md invariant 7). Every entry is launched natively; there is no Via path any
  * more, which is why an entry no longer has to declare whether it is translated
  * (docs/design.md §4).
  *

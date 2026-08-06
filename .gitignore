@@ -128,3 +128,16 @@ runs/
 
 # Machine-local Gradle overrides
 local.properties
+
+# Coding-assistant instruction files. The rules themselves are public and live in
+# CONTRIBUTING.md; these are per-tool pointers at them, so they are a local working preference
+# rather than part of the project.
+CLAUDE.md
+AGENTS.md
+.claude/
+.cursor/
+.aider*
+.github/copilot-instructions.md
+
+# Loose patches kept while deciding whether to keep a change
+*.patch

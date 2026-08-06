@@ -18,7 +18,7 @@ import org.apache.logging.log4j.core.appender.AbstractAppender;
  * throwable is no longer an object that can be hashed for grouping, and any plugin logging a
  * message that resembles a log line corrupts the parse (docs/design.md §9).
  *
- * <p>This class is the one place CLAUDE.md permits a direct log4j2 dependency, and it is
+ * <p>This class is the one place CONTRIBUTING.md permits a direct log4j2 dependency, and it is
  * confined to attaching and detaching. Nothing else in the agent references log4j2.
  *
  * <p>Failure to attach is not fatal. Log capture going missing degrades the agent to events

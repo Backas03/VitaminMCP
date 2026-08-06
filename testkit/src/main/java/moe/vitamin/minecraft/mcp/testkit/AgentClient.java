@@ -16,7 +16,7 @@ import java.util.Objects;
  *
  * <p>testkit deliberately does not compile against the agent. The agent is a jar dropped into
  * whichever server is under test, and different Minecraft versions may need different builds of
- * it; the only thing joining the two sides is the tool contract (CLAUDE.md invariant 1). Going
+ * it; the only thing joining the two sides is the tool contract (CONTRIBUTING.md invariant 1). Going
  * through HTTP keeps that true, and has the side benefit that everything testkit relies on is
  * something a person could also do by hand.
  */

@@ -12,7 +12,7 @@ import java.time.Duration;
  * Minimal MCP client, for asking the agent what it sees.
  *
  * <p>bot-core must not depend on the agent — nothing outside {@code agent-*} compiles against
- * it (CLAUDE.md invariant 1). So the cross-layer test talks to the agent the way any other
+ * it (CONTRIBUTING.md invariant 1). So the cross-layer test talks to the agent the way any other
  * client would: over HTTP, against the published tool contract.
  */
 final class AgentProbe {

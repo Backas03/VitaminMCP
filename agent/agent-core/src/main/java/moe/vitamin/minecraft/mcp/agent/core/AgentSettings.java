@@ -7,7 +7,7 @@ import java.util.Objects;
  * Everything the agent's behaviour is configured by, as plain data.
  *
  * <p>Deliberately free of Bukkit types so the agent's logic can be unit tested without a
- * server (CLAUDE.md). Reading {@code config.yml} into this record is agent-mcp's job.
+ * server (CONTRIBUTING.md). Reading {@code config.yml} into this record is agent-mcp's job.
  *
  * @param bindAddress          interface to listen on
  * @param port                 port to listen on

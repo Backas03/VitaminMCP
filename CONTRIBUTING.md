@@ -8,10 +8,36 @@ Much of what follows is strict, because a tool that can run console commands on 
 has to be. None of it is aimed at you. If a rule here blocks something reasonable, say so — that is
 worth knowing, and the rule can be wrong.
 
-Design rationale is in [docs/design.md](docs/design.md), implementation order and definition of
-done in [docs/roadmap.md](docs/roadmap.md), and the rules and invariants in [CLAUDE.md](CLAUDE.md).
-When a design intent is unclear, read design.md rather than guessing — most of what looks arbitrary
-here is written down there with its reason.
+**This file is the rules.** Design rationale is in [docs/design.md](docs/design.md) and
+implementation order in [docs/roadmap.md](docs/roadmap.md); when an intent here is unclear, read
+design.md rather than guessing — most of what looks arbitrary is written down there with its
+reason.
+
+## Stack
+
+- Java 21, Gradle (Kotlin DSL), multi-module monorepo
+- **Server plugin: Paper API 1.21+.** Changing the floor means updating design.md §5
+  - One agent jar covers the whole range. It compiles against the *floor*, so API added later is
+    not on the classpath and cannot be reached by accident. Where a newer field is worth reporting
+    anyway it goes through reflection — `getTPS` and custom model data are the two
+  - `agent-*` and `contract` compile with **`--release 21`** via `vitaminmcp.server-jvm-target`.
+    That matches the toolchain today and **means something different**: the toolchain is what we
+    compile with, this is *what a server can load*. It is the safety net when the floor moves or
+    the toolchain is raised (design.md §5.1). Every other module runs on our JVM and is unaffected
+- **Bots: MCProtocolLib. ViaProxy is not used** (design.md §4)
+  - **One `bot-runner.jar` with a backend per protocol inside it.** At startup it pings the server,
+    reads the protocol out of the status reply, and loads the matching backend in a parent-last
+    class loader. Several MCProtocolLib builds cannot share a *class path* — every build occupies
+    the same package names — but they can share a process (design.md §4.4)
+  - A backend is named for the **protocol number**, not the Minecraft version: `backend-772` covers
+    1.21.7 and 1.21.8
+  - Backends share their source and override it **by file**. A version that genuinely differs drops
+    its own copy at the same path; the seams that have earned their place are `PlayerSync`,
+    `SessionFactory`, `EntitySync`, `ItemText` and `BlockUse`
+- **MCP is implemented directly** — the agent over HTTP on the JDK's `HttpServer`, `mcp-server` over
+  stdio. Why not the MCP Java SDK is in the mcp-server commit
+- **Servers are started natively**: the jar is downloaded from the PaperMC API and run (design.md
+  §15.1)
 
 ## Modules
 
@@ -60,22 +86,29 @@ about what it may depend on.
 
 ## Invariants
 
-The full list is in [CLAUDE.md](CLAUDE.md). The ones easiest to break by accident:
+**Do not break these.** They are numbered, and the numbers are cited from comments throughout the
+source — `CONTRIBUTING.md invariant 5` in a Java file means the fifth entry here, so the numbering
+is part of the contract.
 
-- **No NMS in `agent-core`.** Bukkit and Paper API only. If NMS looks necessary, suspect the design
-  before reaching for it.
-- **`agent-*` shadow jars relocate every dependency** — Netty, Jackson and Guava especially. They
-  collide with the server itself.
-- **Event capture does not serialize on the main thread.** MONITOR listeners build a lightweight
-  record and push it into a ring buffer; serialization happens on another thread.
-- **Every query tool takes a cursor and has a cap.** Do not add a tool that can return an unbounded
-  response.
-- **The version matrix is [versions.yaml](versions.yaml), not code.** Adding a version must stay a
-  configuration change.
-- **`agent-*` and `contract` compile with `--release 21`** via `vitaminmcp.server-jvm-target`. This
-  currently matches the toolchain, but it means something different: the toolchain is what we
-  compile with, this is *what the server can load*. It is the safety net when the floor moves or the
-  toolchain is raised.
+1. **`mcp-server` does not compile against `agent-*`.** The agent is only injected as a jar at
+   runtime, and the sole thing joining the two is `contract`. Break this and separating agents per
+   version becomes impossible.
+2. **`contract` takes no external dependencies.** Pure Java types only. It is the shared vocabulary
+   of two artifacts that ship separately, so anything it drags in, both sides inherit.
+3. **No NMS in `agent-core`.** Bukkit and Paper API only. If NMS looks necessary, suspect the design
+   before reaching for it.
+4. **`agent-*` shadow jars relocate every dependency** — Netty, Jackson and Guava especially. They
+   collide with the server itself.
+5. **Event capture does not serialize on the main thread.** The MONITOR listener builds a
+   lightweight record and puts it in the ring buffer; serialization happens on another thread.
+6. **Every query tool takes a cursor and has a cap.** Do not add a tool that can return an unbounded
+   response.
+7. **The version matrix is [versions.yaml](versions.yaml), not code.** Adding a version must stay a
+   configuration change, and **the protocol number never appears in it** — the runner asks the
+   server.
+8. **`bot.spi` names no protocol library type.** It is the one package shared across the class
+   loader boundary, so a signature mentioning MCProtocolLib would put that library on the launcher's
+   own class path — the collision the whole bundle exists to prevent. A test asserts it.
 
 ### Adding an MCP tool
 
@@ -86,7 +119,9 @@ The full list is in [CLAUDE.md](CLAUDE.md). The ones easiest to break by acciden
 - **High-frequency events stay out by default** — `PlayerMoveEvent`, `BlockPhysicsEvent`,
   `ChunkLoadEvent`, entity movement — and appear only when a query names them.
 - **Resist growing the tool count.** Extend an existing tool with a parameter before adding a new
-  one, and never add a "last N lines" tool: searching for a pattern beats it every time.
+  one. Dozens of fine-grained tools make an agent worse, not better.
+- **Never add a "last N lines" tool** like `logs_tail`. Pattern search beats it every time and a
+  tail only consumes context.
 
 ## Security
 
@@ -146,8 +181,8 @@ written down gets rediscovered the expensive way.
 - `checkContractIsDependencyFree` — fails when `:contract` gains an external dependency, checked on
   the resolved classpath so transitive arrivals are caught too
 
-These two are CLAUDE.md invariants 1 and 2 nailed down in code. **Before editing a rule to make a
-build pass, suspect the change.**
+These two are invariants 1 and 2 nailed down in code. **Before editing a rule to make a build pass,
+suspect the change.**
 
 To assemble the three distributable artifacts into `build/dist/`:
 
@@ -176,7 +211,19 @@ Recognised properties: `vitaminmcp.liveServer`, `host`, `port`, `mcpPort`, `toke
 > summary — check that the test actually ran.
 
 Adding a version to `versions.yaml` means starting a server on that version and confirming it, not
-just editing the file. Every version is started natively.
+just editing the file. `CompatibilityLiveTest` is the gate — seventeen features against a server it
+starts itself — and it collects failures rather than stopping at the first, so one run tells you
+which parts of a new version work.
+
+### Bots and online mode
+
+Test servers run `online-mode=false` with `bungeecord: true` in `spigot.yml`. Bots reproduce
+arbitrary UUIDs and skins by injecting `host\0clientIP\0uuid\0properties-json` into the handshake's
+server address field (design.md §3.1) — which is also why **a server configured this way must never
+be reachable from the internet**.
+
+The authlib-injector and Drasl path exists only for when `online-mode=true` is itself what needs
+verifying, and real accounts are for a final smoke test only.
 
 ## Conventions
 
@@ -185,4 +232,7 @@ just editing the file. Every version is started natively.
 - Logging: `java.util.logging`, the Bukkit standard. The agent must not depend on Log4j2 directly —
   the appender-attaching code is the sole exception
 - **Write version-specific code when versions actually diverge, not before.** Do not abstract in
-  advance (design.md §4.2)
+  advance (design.md §4.2). Inside a backend that means: let the compiler tell you which file
+  differs, then override that file. Do not add a seam for a difference nobody has seen
+- A `backend-*` directory is **not** a new module in the "propose it first" sense — it is the
+  mechanism working as designed

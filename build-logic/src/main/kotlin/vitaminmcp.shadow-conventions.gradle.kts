@@ -5,7 +5,7 @@ plugins {
     id("com.gradleup.shadow")
 }
 
-// CLAUDE.md invariant 4. These jars are loaded into a running server JVM, so anything they
+// CONTRIBUTING.md invariant 4. These jars are loaded into a running server JVM, so anything they
 // bundle collides with the server itself and with every other plugin. Netty is the dangerous
 // one: the server is already using it, and a missed relocation surfaces as a crash with no
 // obvious link back to this plugin.

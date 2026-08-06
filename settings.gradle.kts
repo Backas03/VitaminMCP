@@ -5,7 +5,7 @@ pluginManagement {
 rootProject.name = "VitaminMCP"
 
 // Project paths are kept flat so that they match the module names used throughout
-// CLAUDE.md and docs/design.md one-to-one (`:contract`, `:agent-core`, ...), while the
+// CONTRIBUTING.md and docs/design.md one-to-one (`:contract`, `:agent-core`, ...), while the
 // `agent/` and `bot/` grouping is preserved on disk.
 include(
     "contract",

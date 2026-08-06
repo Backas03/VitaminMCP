@@ -2,7 +2,7 @@
 
 > **Status: §2 and §3's upward half are built and verified (2026-08-01).** One runner jar with a
 > backend per protocol, backends 767 through 772, the floor at 1.21, and the whole matrix green.
-> `CLAUDE.md`, `design.md` §4.4 and §5.6, and `roadmap.md` Stage 6 now hold the settled version;
+> `CONTRIBUTING.md`, `design.md` §4.4 and §5.6, and `roadmap.md` Stage 6 now hold the settled version;
 > this document keeps the reasoning that got there, including the parts that turned out wrong.
 >
 > **Still a proposal:** everything below 1.21 — the Java 17 floor, per-version JVMs in the matrix,
@@ -605,7 +605,7 @@ None of these are blocking for 6a–6b; all of them are blocking for 6f.
 
 | Document | What changes |
 |---|---|
-| `CLAUDE.md` | "One JVM cannot speak two protocols" → one *classloader* cannot. Module list gains `bot-runner` and `backends/`. Runner naming rule |
+| `CONTRIBUTING.md` | "One JVM cannot speak two protocols" → one *classloader* cannot. Module list gains `bot-runner` and `backends/`. Runner naming rule |
 | `docs/design.md` §4.2 | Per-protocol runner *modules* become per-protocol *backends inside one jar*; add a dated revision note in the style of §4.1 |
 | `docs/design.md` §5 | Floor 1.21.8 → 1.18.2, with the measured cost from §1.1 |
 | `docs/design.md` §15 | `javaHomes:` in `versions.yaml`, and why the protocol number is deliberately not in it |

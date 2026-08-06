@@ -29,7 +29,7 @@ import moe.vitamin.minecraft.mcp.contract.WaitCondition;
  *
  * <p>Six tools rather than thirty. A large surface of narrow tools reads well in a list and
  * then goes unused, because the caller has to guess which one applies; parameters on a few
- * broad tools are easier to get right (CLAUDE.md, docs/design.md §10). {@code exceptions_recent}
+ * broad tools are easier to get right (CONTRIBUTING.md, docs/design.md §10). {@code exceptions_recent}
  * taking an optional hash instead of gaining a sibling {@code exception_detail} tool is that
  * rule in practice.
  *

@@ -1,6 +1,6 @@
 # Versions the matrix runs against.
 #
-# Adding one is a block here and nothing else (CLAUDE.md invariant 7). Every version is started
+# Adding one is a block here and nothing else (CONTRIBUTING.md invariant 7). Every version is started
 # natively from a PaperMC build (docs/design.md §15).
 #
 # The protocol is deliberately absent. One `bot-runner.jar` carries a backend per protocol and

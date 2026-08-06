@@ -134,7 +134,7 @@ public record InventorySnapshot(
          *
          * <p>Deliberately not called {@code isEmpty}. A serializer treats an {@code isX()} on a
          * record as another field and puts {@code "empty": false} on every item — which it did,
-         * until this was renamed. contract takes no dependency on a JSON library (CLAUDE.md
+         * until this was renamed. contract takes no dependency on a JSON library (CONTRIBUTING.md
          * invariant 2), so there is no annotation to suppress it with; the name is the fix.
          */
         public boolean carriesNothing() {

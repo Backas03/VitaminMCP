@@ -20,7 +20,7 @@ import moe.vitamin.minecraft.mcp.contract.ServerInfo;
  * <p>This exists so the tool layer can be exercised without a running server. {@link
  * CaptureService} is the real implementation and needs a Bukkit {@code Plugin}; the paging,
  * budget and argument-handling logic that sits above it has no business requiring one
- * (CLAUDE.md).
+ * (CONTRIBUTING.md).
  */
 public interface AgentQueries {
 

@@ -24,7 +24,7 @@ import org.bukkit.plugin.Plugin;
  * <p>This runs on the server's main thread inside a MONITOR listener, so it has to stay cheap.
  * Two things keep it that way: the per-class reflection plan is computed once and cached, and
  * only flat, JSON-primitive values are read. Nothing here serializes — that is the query
- * thread's job (CLAUDE.md invariant 5).
+ * thread's job (CONTRIBUTING.md invariant 5).
  *
  * <p>Extraction cannot be deferred off-thread, which is worth stating because it looks like it
  * could be. A Bukkit event is a mutable object whose referenced entities keep changing after

@@ -7,7 +7,7 @@ plugins {
     `java-library`
 }
 
-// Dependency direction, from CLAUDE.md ("dependencies flow one way only") and docs/design.md §6:
+// Dependency direction, from CONTRIBUTING.md ("dependencies flow one way only") and docs/design.md §6:
 //
 //     mcp-server → testkit → {bot-core, orchestrator, contract}
 //     bot-runner   → bot-core → contract
@@ -83,7 +83,7 @@ afterEvaluate {
                             "  allowed: " +
                                 if (allowed.isEmpty()) "(nothing)" else allowed.sorted().joinToString(", ")
                         )
-                        append("See the dependency direction rules in CLAUDE.md.")
+                        append("See the dependency direction rules in CONTRIBUTING.md.")
                     }
                 )
             }
@@ -95,7 +95,7 @@ tasks.named("check") {
     dependsOn(checkModuleDependencies)
 }
 
-// CLAUDE.md invariant 2: contract holds pure Java types only. Checking the resolved
+// CONTRIBUTING.md invariant 2: contract holds pure Java types only. Checking the resolved
 // classpath rather than the declared dependencies also catches anything that arrives
 // transitively. Test configurations are excluded so contract can still use JUnit.
 if (modulePath == ":contract") {
@@ -128,7 +128,7 @@ if (modulePath == ":contract") {
                     buildString {
                         appendLine("$modulePath must have no external dependencies, but found:")
                         offenders.forEach { appendLine("    $it") }
-                        append("See invariant 2 in CLAUDE.md.")
+                        append("See invariant 2 in CONTRIBUTING.md.")
                     }
                 )
             }

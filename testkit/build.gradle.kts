@@ -15,7 +15,7 @@ dependencies {
 // Note what is absent, both enforced by vitaminmcp.module-rules:
 //
 //   agent-*        reached over MCP like any other client, which keeps the agent swappable per
-//                  server version without this module knowing (CLAUDE.md invariant 1)
+//                  server version without this module knowing (CONTRIBUTING.md invariant 1)
 //   MCProtocolLib  bots run in a child process, so nothing here links a protocol library — and
 //                  a matrix can therefore span versions whose protocols differ
 
