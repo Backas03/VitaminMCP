@@ -48,8 +48,31 @@ public final class McpHttpServer {
     private final BearerTokenVerifier tokens;
     private final ActivityLog activity;
 
+    /**
+     * Threads serving requests that answer immediately.
+     *
+     * <p>Small on purpose: every one of these returns in milliseconds, so more would buy nothing.
+     * What used to make four too few was {@code wait_for} sitting in this pool for up to a minute
+     * at a time — four of those and every other client, in every other session, queued behind
+     * them. Those now run somewhere else.
+     */
+    private static final int REQUEST_THREADS = 8;
+
+    /**
+     * How many {@code wait_for} calls may be in flight at once.
+     *
+     * <p>Bounded rather than unbounded because this endpoint can be exposed to a network, and an
+     * unbounded pool would let anyone holding the token turn a minute-long wait into as many
+     * threads as they cared to ask for. Past the limit a caller is refused outright — a wait that
+     * silently queued would report the timeout it never actually spent waiting for.
+     */
+    private static final int WAIT_THREADS = 32;
+
     private HttpServer server;
     private ExecutorService executor;
+
+    /** Where a wait blocks, so it never occupies a thread another session needs. */
+    private ExecutorService waits;
 
     public McpHttpServer(
             AgentSettings settings,
@@ -79,12 +102,26 @@ public final class McpHttpServer {
         server.createContext(PROTECTED_RESOURCE_METADATA, this::describeProtectedResource);
 
         AtomicInteger threadNumber = new AtomicInteger();
-        executor = Executors.newFixedThreadPool(4, runnable -> {
+        executor = Executors.newFixedThreadPool(REQUEST_THREADS, runnable -> {
             Thread thread = new Thread(runnable, "VitaminMCP-http-" + threadNumber.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         });
         server.setExecutor(executor);
+
+        // A SynchronousQueue rather than the unbounded one a fixed pool would get: with no queue
+        // to absorb it, submitting past the limit is rejected there and then, which is the whole
+        // point — the caller learns it was refused instead of waiting for a turn.
+        AtomicInteger waitNumber = new AtomicInteger();
+        waits = new java.util.concurrent.ThreadPoolExecutor(
+                0, WAIT_THREADS, 30L, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.SynchronousQueue<>(),
+                runnable -> {
+                    Thread thread = new Thread(
+                            runnable, "VitaminMCP-wait-" + waitNumber.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                });
         server.start();
 
         logger.info("MCP endpoint listening on " + scheme() + "://" + settings.bindAddress() + ":"
@@ -214,11 +251,23 @@ public final class McpHttpServer {
             executor.shutdownNow();
             executor = null;
         }
+        if (waits != null) {
+            waits.shutdownNow();
+            waits = null;
+        }
     }
 
+    /**
+     * Serves one request, unless it is a wait — those are finished by another thread.
+     *
+     * <p>Not try-with-resources any more. A handed-off wait answers long after this method
+     * returns, so closing the exchange here would cut the caller off mid-request; {@code
+     * handedOff} is what says who owns it.
+     */
     private void handle(HttpExchange exchange) throws IOException {
         String client = clientOf(exchange);
-        try (exchange) {
+        boolean handedOff = false;
+        try {
             String refusal = tokens.refuse(exchange.getRequestHeaders().getFirst("Authorization"));
             if (refusal != null) {
                 activity.refused(client, refusal);
@@ -234,7 +283,7 @@ public final class McpHttpServer {
 
             String method = exchange.getRequestMethod();
             switch (method) {
-                case "POST" -> handlePost(exchange, client);
+                case "POST" -> handedOff = handlePost(exchange, client);
 
                 case "GET" -> {
                     activity.malformed(client, "GET, but this endpoint accepts POST only");
@@ -250,15 +299,20 @@ public final class McpHttpServer {
         } catch (RuntimeException e) {
             logger.log(Level.WARNING, "Unhandled error serving an MCP request from " + client, e);
             safelyRespond(exchange, 500, "{\"error\":\"internal error\"}");
+        } finally {
+            if (!handedOff) {
+                exchange.close();
+            }
         }
     }
 
-    private void handlePost(HttpExchange exchange, String client) throws IOException {
+    /** @return {@code true} when a wait took the exchange and will close it itself */
+    private boolean handlePost(HttpExchange exchange, String client) throws IOException {
         byte[] body = readBody(exchange);
         if (body == null) {
             activity.malformed(client, "the request body exceeded " + MAX_REQUEST_BYTES + " bytes");
             respond(exchange, 413, "{\"error\":\"request too large\"}");
-            return;
+            return false;
         }
 
         JsonNode payload;
@@ -267,7 +321,7 @@ public final class McpHttpServer {
         } catch (IOException e) {
             activity.malformed(client, "malformed JSON");
             writeJson(exchange, 400, JsonRpc.error(null, JsonRpc.PARSE_ERROR, "Malformed JSON"));
-            return;
+            return false;
         }
 
         if (payload == null || !payload.isObject()) {
@@ -276,7 +330,7 @@ public final class McpHttpServer {
                     : "Expected a JSON-RPC object";
             activity.malformed(client, problem);
             writeJson(exchange, 400, JsonRpc.error(null, JsonRpc.INVALID_REQUEST, problem));
-            return;
+            return false;
         }
 
         JsonRpc.Request request = new JsonRpc.Request(
@@ -290,9 +344,65 @@ public final class McpHttpServer {
             dispatch(request);
 
             respond(exchange, 202, "");
-            return;
+            return false;
         }
 
+        if (blocks(request)) {
+            return handOffToWaitPool(exchange, client, request);
+        }
+
+        serve(exchange, client, request);
+        return false;
+    }
+
+    /**
+     * Whether this call will sit on its thread rather than answering.
+     *
+     * <p>{@code wait_for} is the only tool that blocks by design — it holds its thread for up to a
+     * minute while a condition comes true, which is exactly what makes it the one call that must
+     * not be served from the pool everything else shares.
+     */
+    private static boolean blocks(JsonRpc.Request request) {
+        return "tools/call".equals(request.method())
+                && "wait_for".equals(request.params().path("name").asText(""));
+    }
+
+    /**
+     * Hands a wait to its own pool, or refuses it.
+     *
+     * <p>The exchange goes with it and is answered from there, so the request thread is free again
+     * immediately — which is the whole point: before this, four concurrent waits held every thread
+     * the server had and each further request, from any session, queued behind them for as long as
+     * a wait had left to run.
+     *
+     * @return {@code true} if the wait pool took it, meaning it now owns the exchange
+     */
+    private boolean handOffToWaitPool(HttpExchange exchange, String client, JsonRpc.Request request)
+            throws IOException {
+        try {
+            waits.execute(() -> {
+                try {
+                    serve(exchange, client, request);
+                } catch (IOException | RuntimeException e) {
+                    logger.log(Level.WARNING, "Unhandled error serving a wait from " + client, e);
+                    safelyRespond(exchange, 500, "{\"error\":\"internal error\"}");
+                } finally {
+                    exchange.close();
+                }
+            });
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            String problem = WAIT_THREADS + " wait_for calls are already running, which is the "
+                    + "limit. Retry when one finishes, or shorten the timeouts you are asking for.";
+            activity.malformed(client, problem);
+            writeJson(exchange, 429, JsonRpc.error(request.id(), JsonRpc.INTERNAL_ERROR, problem));
+            return false;
+        }
+    }
+
+    /** Runs a request and writes what it produced. */
+    private void serve(HttpExchange exchange, String client, JsonRpc.Request request)
+            throws IOException {
         ActivityLog.Call call = begin(client, request);
         ObjectNode response = dispatch(request);
         record(call, response);
