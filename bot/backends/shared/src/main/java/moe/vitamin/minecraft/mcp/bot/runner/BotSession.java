@@ -193,12 +193,32 @@ public final class BotSession implements AutoCloseable {
         if (reason != null || position == null) {
             close();
             throw new IllegalStateException(reason != null
-                    ? "Bot " + identity.name() + " was rejected: " + reason
+                    ? "Bot " + identity.name() + " was rejected: " + reason + explain(reason)
                     : "Bot " + identity.name() + " did not reach the world within " + timeout
                             + (released ? " (connected, but no position ever arrived)" : ""));
         }
         startTicking();
         return this;
+    }
+
+    /**
+     * Turns a rejection the server states as a translation key into something actionable.
+     *
+     * <p>A disconnect reason arrives as a component, and the vanilla ones carry no words at all —
+     * only the key a client would look up, so {@code multiplayer.disconnect.duplicate_login}
+     * reaches the caller exactly like that. The one worth explaining is that key, because its
+     * cause here is not the one a reader assumes: a bot's UUID is derived from its name, so two
+     * callers using the same name are the same player, and a server admits a player once. Two MCP
+     * sessions driving one server hit it immediately, and nothing about the key says so.
+     */
+    private String explain(String reason) {
+        if (reason.contains("duplicate_login")) {
+            return " — a player with this name is already on the server. A bot's UUID is derived"
+                    + " from its name, so another session using '" + identity.name() + "' is the"
+                    + " same player, and the server admits it once. Give each session its own bot"
+                    + " names.";
+        }
+        return "";
     }
 
     /** Starts behaving like a client. */

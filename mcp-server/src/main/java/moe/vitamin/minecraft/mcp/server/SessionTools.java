@@ -261,8 +261,11 @@ final class SessionTools {
         if (name.isBlank()) {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
+        Session session = require(args);
+        refuseIfAlreadyOnline(session, name);
+
         try {
-            BotRunner.BotHandle bot = require(args).bots().spawn(
+            BotRunner.BotHandle bot = session.bots().spawn(
                     name, args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null);
 
             ObjectNode result = MAPPER.createObjectNode();
@@ -275,6 +278,45 @@ final class SessionTools {
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Refuses a name the server already has a player under.
+     *
+     * <p>Asked before connecting, because connecting is what does the damage. A bot's UUID is
+     * derived from its name, so a second caller using the same name is the same player — and the
+     * server resolves that by admitting the newcomer and kicking whoever held it. Two MCP sessions
+     * driving one server hit this immediately, and the session that loses its bot is never told:
+     * its {@code bot_spawn} had already returned success. Which side loses is a race, so the same
+     * pair of sessions can behave differently run to run.
+     *
+     * <p>Checked here rather than left to the rejection, since by then someone has been evicted.
+     * A server that cannot answer is not a reason to refuse — that failure belongs to the spawn,
+     * which reports it far better than a pre-flight check could.
+     */
+    private void refuseIfAlreadyOnline(Session session, String name) {
+        boolean online;
+        try {
+            ObjectNode query = MAPPER.createObjectNode();
+            query.put("kind", "player");
+            query.put("target", name);
+
+            // AgentClient.call already unwraps the MCP envelope, so this is the payload itself.
+            // Walking into content[0].text instead read nothing, defaulted to false, and let every
+            // spawn through — a check that cannot fail is worse than none, because it looks like
+            // one in the diff.
+            online = session.agent().call("state_query", query).path("online").asBoolean(false);
+        } catch (RuntimeException e) {
+            return;
+        }
+
+        if (online) {
+            throw new IllegalStateException("A player called " + name + " is already on the server,"
+                    + " so spawning one would disconnect them. A bot's UUID is derived from its"
+                    + " name, which makes two bots of the same name the same player — if another"
+                    + " session is driving this server, give each session its own bot names."
+                    + " Otherwise use session_reset, or wait for that player to leave.");
         }
     }
 
