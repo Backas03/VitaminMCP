@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "moe.vitamin.minecraft.mcp"
-version = "1.4.1"
+version = "1.4.2"
 
 repositories {
     mavenCentral()
