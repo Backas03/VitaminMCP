@@ -1,6 +1,17 @@
 # VitaminMCP
 
-**Minecraft automation testing MCP server for AI agents.**
+**Minecraft automation testing MCP server plugin for AI agents.**
+
+VitaminMCP is a **Paper/Purpur server plugin.** Drop `VitaminMCP.jar` into `plugins/`, start the
+server, and it opens an MCP endpoint from inside the running server — so an AI agent can drive that
+server and read back what happened, while real bot clients connect to it over the Minecraft
+protocol.
+
+**Nothing about the plugin you are testing changes.** No test framework to adopt, no source to
+instrument, no harness to compile against, no mock server standing in for a real one: the plugin
+under test runs on a real server through its real lifecycle, and VitaminMCP watches it from the next
+plugin slot over. Which also means it works on plugins you did not write — anything already
+installed is testable.
 
 Drive a real Minecraft server and real players through MCP tools, and run end-to-end plugin tests
 without opening the game.
@@ -21,6 +32,43 @@ without opening the game.
 
 Full usage is in [docs/usage.md](docs/usage.md), design rationale in
 [docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## How it fits together
+
+Three jars, in three different places. Only the first is a Minecraft plugin.
+
+```text
+  your MCP client (Claude Code, ...)
+        |
+        |  stdio
+        v
+  mcp-server.jar ---- HTTP(S) + token ---->  VitaminMCP.jar  <- the plugin, inside your server
+        |                                    sees events, logs, exceptions, live state
+        |  spawns
+        v
+  bot-runner.jar ---- Minecraft protocol ->  the same server, on :25565
+                                             sees what a player's client was actually sent
+```
+
+| | Runs | Role |
+|---|---|---|
+| `VitaminMCP.jar` | **in the server, as a plugin** | Listens to every event, taps the log, and serves an authenticated MCP endpoint. The only piece with a view of server internals |
+| `mcp-server.jar` | on your machine, as a child of your MCP client | Speaks stdio to the client and HTTP to the plugin, and owns the bots |
+| `bot-runner.jar` | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
+
+**Why the agent has to be a plugin.** Half of what a test needs to assert on has no protocol
+representation. Whether a `PlayerJoinEvent` fired, a stack trace on the console, whether `/op`
+actually resolved, what a permission node evaluates to — none of that reaches a connected client.
+Only code running inside the server can see it. Hence the split: the plugin reports what the
+*server* did, bots observe what a *player* was shown, and a single assertion can draw on both.
+
+**The plugin is worth installing on its own.** With nothing else set up, it turns "find out why the
+server died last night" into a question you can ask — events, logs, exceptions, plugin list, live
+state, all over MCP ([design.md §1](docs/design.md)). Bots are opt-in, and so is the server
+configuration they need ([Server setup](#2-server-setup-if-you-want-bots)); read-only is the
+default, so a plugin-only install cannot alter the server at all.
 
 ---
 
@@ -296,17 +344,18 @@ Either way you end up with the same three files, and **each goes somewhere diffe
 
 | File | Where | What |
 |---|---|---|
-| `VitaminMCP.jar` | the server's `plugins/` | the agent plugin |
+| `VitaminMCP.jar` | the server's `plugins/` | the agent — an ordinary Bukkit/Paper plugin |
 | `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
 | `bot-runner.jar` | anywhere (remember the path) | `mcp-server` launches it as a child process |
 
 **One runner, every supported version.** It carries a backend per protocol inside it and chooses
 one by pinging the server before any bot connects, so the same file works on 1.21 and on 1.21.8.
 
-### 1. Install the agent
+### 1. Install the plugin
 
-Drop `VitaminMCP.jar` into the server's `plugins/` and start it once. **The first startup fails** —
-that is intended.
+Drop `VitaminMCP.jar` into the server's `plugins/` — loaded like any other plugin, no server flags
+and no java agent to attach — and start the server once. **The first startup fails**, and that is
+intended.
 
 ```
 [VitaminMCP] No auth token is configured. The MCP endpoint grants access to server
