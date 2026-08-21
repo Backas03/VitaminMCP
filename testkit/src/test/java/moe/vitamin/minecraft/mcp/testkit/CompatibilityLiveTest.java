@@ -95,6 +95,11 @@ class CompatibilityLiveTest {
                     "gameMode was " + state.path("gameMode").asText());
         });
 
+        // Paper silently drops block interactions while it loads a joining player's data. The
+        // window is about three seconds on 1.21.8, so this is the one honest fixed tick barrier in
+        // the compatibility harness; a wait_for log or online check does not release it.
+        check("join interaction lockout", () -> awaitInteractionUnlock(agent));
+
         check("op and deop", () -> {
             console(agent, "op Tester1");
             require(await(() -> playerState(agent, "Tester1").path("op").asBoolean()),
@@ -125,7 +130,10 @@ class CompatibilityLiveTest {
             require(await(() -> Math.abs(playerState(agent, "Tester1").path("x").asDouble()
                     - (bx + 3)) < 2.0), "the server never moved the player");
 
-            bot.moveTo(bx + 4.5, by, bz + 0.5);
+            // This is the legacy move contract being compared here. Stage 4's walking contract is
+            // exercised separately with an explicit mode; leaving this implicit would make the
+            // old Java oracle and the Node runner test different behaviours.
+            bot.moveTo(bx + 4.5, by, bz + 0.5, "teleport", 30_000);
             require(await(() -> Math.abs(playerState(agent, "Tester1").path("x").asDouble()
                     - (bx + 4.5)) < 1.5),
                     "the server did not accept the bot's own movement; it has the player at "
@@ -295,6 +303,16 @@ class CompatibilityLiveTest {
             }
         }
         return false;
+    }
+
+    /** Waits out Paper's post-join interaction lock, which is independent of player_online. */
+    private static void awaitInteractionUnlock(AgentClient agent) {
+        ObjectNode wait = AgentClient.arguments();
+        wait.put("condition", "ticks");
+        wait.put("count", 80);
+        wait.put("timeoutMillis", 10_000);
+        require(agent.call("wait_for", wait).path("matched").asBoolean(),
+                "the server did not advance through the post-join interaction lockout");
     }
 
     private static boolean menuOpen(BotRunner.BotHandle bot) {
