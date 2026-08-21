@@ -52,6 +52,16 @@ const KNOWN_DIFFERENCES = [
   },
 ];
 
+/**
+ * Semantic differences do not change the `ok\tmove` wire reply, so the byte diff cannot observe
+ * them. Naming them here keeps the parity gate's decision list complete and points at the
+ * corresponding explanations in DIFFERENCES.md.
+ */
+const KNOWN_SEMANTIC_DIFFERENCES = [
+  'move without an explicit mode',
+  'movement failure categories',
+];
+
 function isKnown(javaLine, nodeLine) {
   return KNOWN_DIFFERENCES.find(
     (known) => known.java.test(javaLine) && known.node.test(nodeLine),
@@ -166,6 +176,9 @@ for (let i = 0; i < steps.length; i += 1) {
 }
 
 console.log('');
+for (const difference of KNOWN_SEMANTIC_DIFFERENCES) {
+  console.log(`known semantic ${difference} — see DIFFERENCES.md`);
+}
 if (mismatches > 0) {
   console.error(`${mismatches} line(s) differ`);
   process.exit(1);

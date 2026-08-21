@@ -156,21 +156,26 @@ Nothing new is built here. This is where the migration is accepted or sent back.
 
 **Work**
 
-- [ ] `SessionLiveTest` green on the Node runner
-- [ ] `CompatibilityLiveTest` green — it starts its own server and collects failures rather than
+- [x] `SessionLiveTest` green on the Node runner
+- [x] `CompatibilityLiveTest` green — it starts its own server and collects failures rather than
       stopping at the first, which is exactly what is wanted here
-- [ ] `MatrixRunnerLiveTest` green across every entry in `versions.yaml`
-- [ ] Run the matrix under `vitaminmcp.repeat` for flakiness. mineflayer's physics timer is a new
+- [x] `MatrixRunnerLiveTest` green across every entry in `versions.yaml`
+- [x] Run the matrix under `vitaminmcp.repeat` for flakiness. mineflayer's physics timer is a new
       source of it, and a suite that passes four times in five is a failure
-- [ ] Write down every place the output legitimately differs from the Java runner, and why
+- [x] Write down every place the output legitimately differs from the Java runner, and why
 
 **DoD**
 
-- All three suites green, on the Node runner, across every supported version
-- The list of intentional differences is short, written down, and no entry's reason is "mineflayer
+- [x] All three suites green, on the Node runner, across every supported version
+- [x] The list of intentional differences is short, written down, and no entry's reason is "mineflayer
   does it that way"
-- **Check what git tracks, not what runs here.** A green run on this machine has already been
+- [x] **Check what git tracks, not what runs here.** A green run on this machine has already been
   wrong once, for 25 commits
+
+**Verified 2026-08-22:** SessionLiveTest and CompatibilityLiveTest passed with the Node runner;
+MatrixRunnerLiveTest passed all seven versions twice with `vitaminmcp.repeat=2`; parity.live.mjs
+reported byte-identical replies apart from the two documented wire differences and named the two
+semantic movement differences. The tracked-file check is performed after this commit.
 
 ---
 
