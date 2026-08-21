@@ -83,6 +83,16 @@ async function startWorldViewer(bot, port, mode) {
     return originalListen.apply(this, args);
   };
   try {
+    // mineflayer can expose the negotiated registry version before it fills bot.version. The
+    // viewer sends bot.version to the browser, where an empty value becomes "null is not
+    // supported" instead of a useful viewer. Keep the runner's negotiated version as the source
+    // of truth and populate the convenience field before prismarine-viewer connects.
+    const version = bot.version
+      ?? bot.registry?.version?.minecraftVersion
+      ?? bot._client?.version;
+    if (version != null && bot.version == null) {
+      bot.version = version;
+    }
     api.mineflayer(bot, {
       port,
       firstPerson: mode === 'first_person',
