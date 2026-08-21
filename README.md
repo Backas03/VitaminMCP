@@ -190,6 +190,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 |---|---|
 | `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
 | `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle), boss bars, sidebar scoreboard, health, food, experience and active effects |
+| `bot_view` | Open a localhost-only live world or inventory view for a bot; the optional viewer asset is fetched only when requested |
 | `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
 
 ### Server

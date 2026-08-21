@@ -298,6 +298,18 @@ public final class BotRunner implements AutoCloseable {
             return runner.assertReachable(name, x, y, z, timeoutMillis);
         }
 
+        /** Starts or reuses a localhost world/inventory viewer for this bot. */
+        public String view(String what, String mode) throws IOException {
+            String[] reply = runner.send(RunnerProtocol.VIEW, name,
+                    what == null ? "world" : what,
+                    mode == null ? "third_person" : mode, "false");
+            return reply.length > 2 ? reply[2] : "";
+        }
+
+        public void stopView() throws IOException {
+            runner.send(RunnerProtocol.VIEW, name, "world", "third_person", "true");
+        }
+
         public void breakBlock(int x, int y, int z) throws IOException {
             runner.send(RunnerProtocol.BREAK, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));

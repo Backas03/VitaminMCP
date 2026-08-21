@@ -51,6 +51,7 @@ public final class RunnerProtocol {
     public static final String SPRINT = "sprint";
     public static final String LOOK_AT = "look_at";
     public static final String ASSERT_REACHABLE = "assert_reachable";
+    public static final String VIEW = "view";
 
     public static final String OK = "ok";
     public static final String ERROR = "err";

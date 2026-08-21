@@ -177,6 +177,21 @@ the real player →  a full menu      ← only the client received it
 lookup table. Use `state_query` when you need material names — but only when the server really
 holds that inventory. Name, lore and CustomModelData arrive as components, so both sides show them.
 
+## A live view — `bot_view`
+
+`bot_view` starts an optional localhost-only viewer for a connected bot. It does not start a second
+Minecraft client or expose a port beyond `127.0.0.1`:
+
+```json
+{"name":"Tester1","what":"world","mode":"first_person"}
+{"name":"Tester1","what":"inventory"}
+{"name":"Tester1","stop":"true"}
+```
+
+The same bot reuses its URL. The world view uses the optional prismarine asset; the inventory view
+is a lightweight live page showing the open menu. A session reset or bot despawn closes the port.
+An installation that never calls `bot_view` does not install or download the viewer asset.
+
 ### The rest of the screen
 
 Everything a server draws on a player that never reaches the server's own view is here.

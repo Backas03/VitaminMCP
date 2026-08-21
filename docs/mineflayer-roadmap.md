@@ -225,13 +225,13 @@ binaries, and it must not be a hard dependency of the runner.
 
 **Work**
 
-- [ ] `bot_view` — a new MCP tool, not a scenario step. Starts a viewer for one bot and returns
+- [x] `bot_view` — a new MCP tool, not a scenario step. Starts a viewer for one bot and returns
       its URL. `what`: `"world"` (default) or `"inventory"`; `mode`: `"first_person"` or
       `"third_person"`; `stop: true` to close one
-- [ ] **Bind `127.0.0.1` and nothing else.** This is an unauthenticated HTTP server showing a live
+- [x] **Bind `127.0.0.1` and nothing else.** This is an unauthenticated HTTP server showing a live
       game view; it follows the agent's own default rather than inventing a laxer one
-- [ ] Allocate a free port and report it. Never fail because a hardcoded port was taken
-- [ ] Lifecycle: a viewer dies with its bot, and `session_reset` closes every one. A leaked
+- [x] Allocate a free port and report it. Never fail because a hardcoded port was taken
+- [x] Lifecycle: a viewer dies with its bot, and `session_reset` closes every one. A leaked
       viewer holding a port across runs is the obvious failure here
 - [ ] Fetch on demand as an optional asset, reusing Stage 8's fetcher — pinned checksum, cached
       per version. Nobody pays 269MB for a feature they never ask for
@@ -240,12 +240,17 @@ binaries, and it must not be a hard dependency of the runner.
 
 **DoD**
 
-- `bot_view` returns a URL that renders the bot's surroundings, and the bot moves in it when a
+- [x] `bot_view` returns a URL that renders the bot's surroundings, and the bot moves in it when a
   `move_to` runs
-- `what: "inventory"` shows a plugin GUI the bot has open
-- A second call for the same bot returns the same URL rather than starting a second server
-- Closing a session leaves no listening port behind
-- An install that never calls `bot_view` downloads nothing extra
+- [x] `what: "inventory"` shows a plugin GUI the bot has open
+- [x] A second call for the same bot returns the same URL rather than starting a second server
+- [x] Closing a session leaves no listening port behind
+- [x] An install that never calls `bot_view` downloads nothing extra
+
+**Verified 2026-08-22:** the optional sidecar served a Prismarine world page with HTTP 200 on a
+127.0.0.1-only listener; the same bot reused its URL. The inventory view rendered `container.chest`
+and a diamond stack in the in-app browser. Stopping/despawning the bot removed the listening ports.
+The pinned/checksummed on-demand fetch path remains Stage 8 work.
 
 ---
 

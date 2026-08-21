@@ -1,6 +1,7 @@
 import mineflayer from 'mineflayer';
 import { configurePathfinder, loadPathfinder, moveTo } from './movement.mjs';
 import { reachable } from './movement.mjs';
+import { stopAllViews, stopView } from './viewer.mjs';
 
 import { collect } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
@@ -103,6 +104,7 @@ export class BotRegistry {
       return;
     }
     this.#bots.delete(name);
+    stopView(bot);
     quietly(() => bot.quit());
   }
 
@@ -112,6 +114,7 @@ export class BotRegistry {
 
   /** Disconnects every bot. */
   shutdown() {
+    stopAllViews();
     for (const bot of this.#bots.values()) {
       quietly(() => bot.quit());
     }

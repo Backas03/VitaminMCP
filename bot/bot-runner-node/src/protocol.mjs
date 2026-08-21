@@ -37,6 +37,7 @@ export const SNEAK = 'sneak';
 export const SPRINT = 'sprint';
 export const LOOK_AT = 'look_at';
 export const ASSERT_REACHABLE = 'assert_reachable';
+export const VIEW = 'view';
 
 export const OK = 'ok';
 export const ERROR = 'err';

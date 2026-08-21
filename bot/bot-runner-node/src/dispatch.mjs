@@ -1,6 +1,7 @@
 import * as actions from './actions.mjs';
 import * as clientview from './clientview.mjs';
 import * as protocol from './protocol.mjs';
+import * as viewer from './viewer.mjs';
 
 /**
  * The line protocol, in the one place it is spoken.
@@ -158,6 +159,19 @@ export class Dispatch {
           Number(command[offset + 1]), Number(command[offset + 2]),
           command.length > offset + 3 ? Number(command[offset + 3]) : undefined);
         return protocol.encode(protocol.OK, verb, String(result.reachable), result.status);
+      }
+
+      case protocol.VIEW: {
+        const bot = this.#bots.require(command[1]);
+        const stop = command.length > 4 && command[4] === 'true';
+        if (stop) {
+          viewer.stopView(bot);
+          return protocol.encode(protocol.OK, verb, 'stopped');
+        }
+        const url = await viewer.view(
+          bot, command[1], command.length > 2 ? command[2] : 'world',
+          command.length > 3 ? command[3] : 'third_person');
+        return protocol.encode(protocol.OK, verb, url);
       }
 
       case protocol.CLICK: {

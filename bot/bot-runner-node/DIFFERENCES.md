@@ -20,6 +20,13 @@ These are capabilities the Java runner never exposed, rather than replacements f
 contract. The Java runner remains selectable as the Stage 5 oracle, while new scenarios opt into
 the Node implementation and the deletion of the old runner remains deferred to Stage 9.
 
+### `bot_view` is Node-only and optional
+
+The Java runner has no equivalent world viewer. Node starts the MIT-licensed prismarine-viewer
+asset only when `bot_view` is called, binds it to `127.0.0.1`, and uses a small local inventory
+page for `what: inventory`. This keeps the 269MB texture asset out of normal runner installs; the
+optional asset path is supplied by the Stage 8 fetcher.
+
 ### `move` without an explicit mode
 
 | | |

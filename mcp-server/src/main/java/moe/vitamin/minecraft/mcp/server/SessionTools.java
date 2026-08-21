@@ -123,6 +123,20 @@ final class SessionTools {
                     string(properties, "name", "Bot name.");
                 }));
 
+        tools.add(tool("bot_view",
+                "Start or reuse a localhost-only live view for one bot. what='world' uses the "
+                        + "optional prismarine viewer in first_person or third_person mode; "
+                        + "what='inventory' shows the open client menu as a live page. The same "
+                        + "bot always reuses its URL. Pass stop:true to close it. The viewer is "
+                        + "optional and is not downloaded until this tool is first used.",
+                properties -> {
+                    session(properties);
+                    string(properties, "name", "Bot name.");
+                    string(properties, "what", "world (default) or inventory.");
+                    string(properties, "mode", "first_person or third_person (world only).");
+                    string(properties, "stop", "true to close the viewer for this bot.");
+                }));
+
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
                         + "attack_entity, use_block, use_entity, hold_item, drop_item, "
@@ -164,6 +178,7 @@ final class SessionTools {
             case "session_reset" -> sessionReset(args);
             case "bot_spawn" -> botSpawn(args);
             case "bot_inspect" -> botInspect(args);
+            case "bot_view" -> botView(args);
             case "bot_run_scenario" -> runScenario(args);
             default -> {
                 if (PROXIED.contains(name)) {
@@ -410,6 +425,32 @@ final class SessionTools {
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);
+        }
+    }
+
+    private JsonNode botView(JsonNode args) {
+        String name = args.path("name").asText("");
+        if (name.isBlank()) {
+            throw new IllegalArgumentException("bot_view needs 'name'.");
+        }
+        try {
+            BotRunner.BotHandle bot = new BotRunner.BotHandle(
+                    require(args).bots(), name, 0, 0, 0);
+            ObjectNode result = MAPPER.createObjectNode();
+            if (args.path("stop").asBoolean(false)) {
+                bot.stopView();
+                result.put("stopped", true);
+                return result;
+            }
+            String what = args.path("what").asText("world");
+            String mode = args.path("mode").asText("third_person");
+            result.put("url", bot.view(what, mode));
+            result.put("what", what);
+            result.put("mode", mode);
+            return result;
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not start view for " + name + ": "
+                    + e.getMessage(), e);
         }
     }
 
