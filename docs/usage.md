@@ -231,20 +231,37 @@ description. When output is cut, the response says so:
 
 ## `session_start` — always first
 
+**For a server on this machine, it takes no arguments at all.**
+
+```jsonc
+{}
+```
+
+The agent writes its host, both ports and its token to `~/.vitaminmcp/agents/<port>.properties`
+while it is running, and this reads them. The response says which under `resolvedFrom`, so a
+session that connected to something unexpected says so rather than looking like a working one.
+
+Anything passed wins over the file, so a detail that differs is the only one worth writing:
+
 ```jsonc
 {
-  "host": "127.0.0.1",
-  "port": 25565,          // Minecraft port
-  "mcpPort": 25585,       // agent port
-  "token": "auth-token from config.yml"
+  "port": 25577,          // a proxy in front of the Minecraft port the agent knows about
+  "mcpPort": 25585        // which agent, when several run here
 }
 ```
 
-Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`. There is one, whatever
-versions are supported: it carries a backend per protocol and picks the right one by asking the
-server what it speaks, so there is nothing here to get wrong.
+With more than one agent on this machine and no `mcpPort`, this is an error that lists them.
+A proxied network is several servers and there is no right guess between them.
 
-**For a server on another machine** the agent prints a block to paste, in its startup log:
+Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`, or wherever
+`VITAMINMCP_RUNNER_JAR` says. There is one, whatever versions are supported: it carries a backend
+per protocol and picks the right one by asking the server what it speaks, so there is nothing here
+to get wrong. Installed through npm, it may still be downloading — the call waits for it rather
+than failing, and only a call that needs bots waits at all.
+
+**For a server on another machine** none of that applies: a token minted here says nothing about a
+server elsewhere and is not sent there, so `host` and `token` are required. The agent prints a
+block to paste, in its startup log:
 
 ```jsonc
 {

@@ -9,6 +9,7 @@ import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
+import moe.vitamin.minecraft.mcp.contract.LocalHandshake;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
 
@@ -40,20 +41,28 @@ final class SessionTools {
                             "Name for this session, used by every other tool to say which server "
                                     + "it means — 'lobby', 'survival'. Defaults to "
                                     + "host:port@mcpPort.");
-                    string(properties, "host", "Server host. Defaults to 127.0.0.1.");
+                    string(properties, "host",
+                            "Server host. Omit for a server on this machine — the agent leaves "
+                                    + "its host, ports and token where this tool reads them.");
                     number(properties, "port",
-                            "Minecraft port bots connect to. Defaults to 25565. On a proxied "
-                                    + "network this is the proxy's port, since that is where a "
-                                    + "real player connects.");
+                            "Minecraft port bots connect to. On a proxied network this is the "
+                                    + "proxy's port, since that is where a real player connects. "
+                                    + "Omit for a server on this machine; 25565 otherwise.");
                     number(properties, "mcpPort",
-                            "Agent's MCP port. Defaults to 25585. Each backend server runs its "
-                                    + "own agent on its own port, and that is what makes one "
-                                    + "session different from another.");
-                    string(properties, "token", "The agent's auth-token from its config.yml.");
+                            "Agent's MCP port. Each backend server runs its own agent on its own "
+                                    + "port, and that is what makes one session different from "
+                                    + "another. Omit when only one agent runs on this machine; "
+                                    + "name it to pick between several.");
+                    string(properties, "token",
+                            "The agent's auth-token from its config.yml. Omit for a server on "
+                                    + "this machine — it is read from the agent's handshake, or "
+                                    + "from VITAMINMCP_TOKEN. Required for a server anywhere "
+                                    + "else, since nothing local can vouch for it.");
                     string(properties, "runnerJar",
-                            "Path to the bot runner jar. Optional: defaults to the "
-                                    + "bot-runner-*.jar sitting beside this server's own jar, "
-                                    + "which is where 'gradlew dist' puts it.");
+                            "Path to the bot runner jar. Optional: defaults to "
+                                    + "VITAMINMCP_RUNNER_JAR, or to the bot-runner jar sitting "
+                                    + "beside this server's own jar, which is where both "
+                                    + "'gradlew dist' and the npm package put it.");
                     string(properties, "tls",
                             "'true' if the agent serves HTTPS. Required for any server that is "
                                     + "not on this machine — a remotely reachable agent refuses "
@@ -166,21 +175,17 @@ final class SessionTools {
     }
 
     private JsonNode sessionStart(JsonNode args) {
-        String token = args.path("token").asText("");
-        if (token.isBlank()) {
-            throw new IllegalArgumentException(
-                    "session_start needs 'token' — the agent refuses unauthenticated requests. "
-                            + "It is the auth-token in the agent's config.yml.");
-        }
+        Connection connection = resolveConnection(args);
+        String token = connection.token();
 
         String runnerJar = args.path("runnerJar").asText("");
         java.nio.file.Path runner = runnerJar.isBlank()
                 ? runnerBesideThisJar()
                 : java.nio.file.Path.of(runnerJar);
 
-        String host = args.path("host").asText("127.0.0.1");
-        int port = args.path("port").asInt(25565);
-        int mcpPort = args.path("mcpPort").asInt(25585);
+        String host = connection.host();
+        int port = connection.port();
+        int mcpPort = connection.mcpPort();
 
         String name = args.path("session").asText("");
         if (name.isBlank()) {
@@ -208,6 +213,7 @@ final class SessionTools {
         ObjectNode result = MAPPER.createObjectNode();
         result.put("session", name);
         result.put("connected", started.describe());
+        result.put("resolvedFrom", connection.source());
         result.set("server", info);
 
         result.set("agentTools", started.agent().listTools());
@@ -403,8 +409,99 @@ final class SessionTools {
         return response;
     }
 
-    /** Finds the bot runner next to this server's own jar. */
+    /** Where a session is connecting, and how that was worked out. */
+    private record Connection(String host, int port, int mcpPort, String token, String source) {}
+
+    /**
+     * Works out what to connect to from what the caller said, and what the machine already knows.
+     *
+     * <p>An agent on this machine writes its host, ports and token to a handshake file as it
+     * starts, so for the common case — one server, running right here — none of it has to be
+     * repeated to this tool. Anything the caller does pass wins over the file.
+     *
+     * <p>The file is only consulted for a local host. A token minted by the agent on this machine
+     * says nothing about a server somewhere else, and quietly sending it there would turn a
+     * missing argument into a leaked secret.
+     */
+    private static Connection resolveConnection(JsonNode args) {
+        String host = args.path("host").asText("");
+        boolean local = host.isBlank() || "127.0.0.1".equals(host) || "localhost".equals(host);
+
+        String token = args.path("token").asText("");
+        String source = "arguments";
+
+        if (token.isBlank()) {
+            String fromEnvironment = System.getenv("VITAMINMCP_TOKEN");
+            if (fromEnvironment != null && !fromEnvironment.isBlank()) {
+                token = fromEnvironment;
+                source = "VITAMINMCP_TOKEN";
+            }
+        }
+
+        LocalHandshake handshake = local ? handshakeFor(args, token.isBlank()) : null;
+        if (handshake != null && token.isBlank()) {
+            token = handshake.token();
+            source = "the agent's handshake in " + LocalHandshake.directory();
+        }
+
+        if (token.isBlank()) {
+            throw new IllegalArgumentException(local
+                    ? "session_start found no agent on this machine. Either the server is not "
+                            + "running, or its VitaminMCP plugin did not start — its console says "
+                            + "which. For a server elsewhere, pass 'host' and 'token' (the "
+                            + "auth-token in the agent's config.yml)."
+                    : "session_start needs 'token' for a server on another machine — the agent "
+                            + "refuses unauthenticated requests. It is the auth-token in the "
+                            + "agent's config.yml.");
+        }
+
+        return new Connection(
+                host.isBlank() ? (handshake == null ? "127.0.0.1" : handshake.host()) : host,
+                args.has("port") ? args.path("port").asInt()
+                        : (handshake == null ? 25565 : handshake.minecraftPort()),
+                args.has("mcpPort") ? args.path("mcpPort").asInt()
+                        : (handshake == null ? 25585 : handshake.mcpPort()),
+                token,
+                source);
+    }
+
+    /**
+     * The handshake this call is about, or null when there is nothing to read.
+     *
+     * <p>With several agents running — a proxied network is several servers, one agent each —
+     * there is no right guess, so an unnamed port is an error that lists them rather than a pick.
+     * That only applies when the file is actually needed: a caller who supplied a token is asking
+     * for defaults, not for a decision.
+     */
+    private static LocalHandshake handshakeFor(JsonNode args, boolean tokenNeeded) {
+        if (args.has("mcpPort")) {
+            return LocalHandshake.read(args.path("mcpPort").asInt()).orElse(null);
+        }
+
+        List<LocalHandshake> all = LocalHandshake.readAll();
+        if (all.size() == 1) {
+            return all.get(0);
+        }
+        if (all.size() > 1 && tokenNeeded) {
+            throw new IllegalArgumentException(
+                    "Several VitaminMCP agents are running on this machine, so 'mcpPort' says "
+                            + "which one you mean: "
+                            + all.stream().map(LocalHandshake::toString).toList()
+                            + ". On a proxied network, open one session per backend.");
+        }
+        return null;
+    }
+
+    /** How long a runner still downloading is waited for before the caller is told. */
+    private static final java.time.Duration RUNNER_DOWNLOAD_WAIT = java.time.Duration.ofMinutes(10);
+
+    /** Finds the bot runner: named by the launcher, or sitting next to this server's own jar. */
     private static java.nio.file.Path runnerBesideThisJar() {
+        String announced = System.getenv("VITAMINMCP_RUNNER_JAR");
+        if (announced != null && !announced.isBlank()) {
+            return awaitRunner(java.nio.file.Path.of(announced));
+        }
+
         java.nio.file.Path here;
         try {
             here = java.nio.file.Path.of(SessionTools.class.getProtectionDomain()
@@ -417,10 +514,7 @@ final class SessionTools {
 
         List<java.nio.file.Path> found = new java.util.ArrayList<>();
         try (var entries = java.nio.file.Files.list(here)) {
-            entries.filter(path -> {
-                String name = path.getFileName().toString();
-                return name.startsWith("bot-runner-") && name.endsWith(".jar");
-            }).forEach(found::add);
+            entries.filter(path -> isRunnerJar(path.getFileName().toString())).forEach(found::add);
         } catch (java.io.IOException e) {
             throw new IllegalArgumentException(
                     "session_start needs 'runnerJar': could not look in " + here + " (" + e + ")");
@@ -430,7 +524,7 @@ final class SessionTools {
             throw new IllegalArgumentException(
                     "session_start needs 'runnerJar' — the bot runner built for this server's "
                             + "protocol version. One JVM cannot speak two Minecraft protocols, so "
-                            + "bots run in a child process. No bot-runner-*.jar was found in "
+                            + "bots run in a child process. No bot-runner jar was found in "
                             + here + ", so pass its path.");
         }
         if (found.size() > 1) {
@@ -440,6 +534,57 @@ final class SessionTools {
                             + ". Name the one that speaks this server's protocol.");
         }
         return found.get(0);
+    }
+
+    /**
+     * Whether a filename is a bot runner.
+     *
+     * <p>Both spellings, because 'gradlew dist' stamps the version into the name and the release
+     * artifact the npm package downloads does not.
+     */
+    private static boolean isRunnerJar(String name) {
+        return name.endsWith(".jar")
+                && (name.equals("bot-runner.jar") || name.startsWith("bot-runner-"));
+    }
+
+    /**
+     * Waits for a runner that is still arriving.
+     *
+     * <p>The runner is ninety megabytes, so the npm launcher fetches it in the background rather
+     * than holding up a client that may never spawn a bot: this server starts answering while the
+     * download runs, and only a call that actually needs bots waits for it. A partial file is
+     * named {@code .part} and renamed when complete, so the wait is for a rename and never sees a
+     * half-written jar.
+     */
+    private static java.nio.file.Path awaitRunner(java.nio.file.Path runner) {
+        if (java.nio.file.Files.isRegularFile(runner)) {
+            return runner;
+        }
+
+        java.nio.file.Path partial = runner.resolveSibling(runner.getFileName() + ".part");
+        if (!java.nio.file.Files.exists(partial)) {
+            throw new IllegalArgumentException(
+                    "session_start needs 'runnerJar': VITAMINMCP_RUNNER_JAR names " + runner
+                            + ", but nothing is there and no download is in progress.");
+        }
+
+        System.err.println("Waiting for the bot runner to finish downloading: " + runner);
+        long deadline = System.nanoTime() + RUNNER_DOWNLOAD_WAIT.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (java.nio.file.Files.isRegularFile(runner)) {
+                return runner;
+            }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted waiting for the bot runner download");
+            }
+        }
+        throw new IllegalStateException(
+                "The bot runner was still downloading after " + RUNNER_DOWNLOAD_WAIT.toMinutes()
+                        + " minutes (" + partial + "). Delete that file and start again, or pass "
+                        + "'runnerJar' pointing at a copy you already have.");
     }
 
     /** The session a call is about. */
