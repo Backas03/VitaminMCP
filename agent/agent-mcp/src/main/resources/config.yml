@@ -12,11 +12,21 @@ enabled: true
 bind-address: "127.0.0.1"
 port: 25585
 
-# REQUIRED. The plugin refuses to start without it — an unauthenticated endpoint is worse than
-# no endpoint. Generate one with, for example:
+# REQUIRED — but left empty it fills itself in. On a start with no token the plugin generates
+# one, writes it here, and carries on; an unauthenticated endpoint is never opened either way.
+# Replace it with your own at any time, for example:
 #   openssl rand -base64 32
-# If you start without setting this, the startup error prints a generated token you can paste.
 auth-token: ""
+
+# Where a client on this same machine looks the connection details up, so nothing has to be
+# copied out of this file by hand: host, both ports and the token above are written to
+# ~/.vitaminmcp/agents/<port>.properties while the agent is running, and removed when it stops.
+#
+# It is readable only by the user the server runs as, and only from this machine. That user can
+# already read this file, so it exposes nothing new — set it to false anyway if you would rather
+# the agent wrote nothing outside the server directory. A client elsewhere is unaffected: it is
+# told the token, as it always was.
+local-handshake: true
 
 # Read-only exposes only the query tools. State-changing tools stay unexposed entirely, so a
 # default install cannot alter the server even with a valid token. Leave this on unless you

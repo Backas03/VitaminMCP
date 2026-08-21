@@ -12,6 +12,7 @@ import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.CaptureService;
 import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
 import moe.vitamin.minecraft.mcp.agent.core.TlsSettings;
+import moe.vitamin.minecraft.mcp.contract.LocalHandshake;
 import moe.vitamin.minecraft.mcp.contract.ResponseBudget;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -21,6 +22,9 @@ public final class VitaminMcpPlugin extends JavaPlugin {
 
     private CaptureService capture;
     private McpHttpServer mcpServer;
+
+    /** The port whose handshake this instance owns, or 0 when it published none. */
+    private int handshakePort;
 
     @Override
     public void onEnable() {
@@ -32,6 +36,8 @@ public final class VitaminMcpPlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
+
+        mintTokenIfMissing(config);
 
         AgentSettings settings = readSettings(config);
 
@@ -59,6 +65,7 @@ public final class VitaminMcpPlugin extends JavaPlugin {
 
         try {
             mcpServer.start();
+            publishHandshake(config, settings);
         } catch (IOException | RuntimeException e) {
             getLogger().log(Level.SEVERE, "Could not open the MCP endpoint on "
                     + settings.bindAddress() + ":" + settings.port(), e);
@@ -71,6 +78,10 @@ public final class VitaminMcpPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (handshakePort > 0) {
+            LocalHandshake.remove(handshakePort);
+            handshakePort = 0;
+        }
         if (mcpServer != null) {
             mcpServer.stop();
             mcpServer = null;
@@ -149,6 +160,79 @@ public final class VitaminMcpPlugin extends JavaPlugin {
 
     private static List<String> stringList(FileConfiguration config, String path) {
         return config.isList(path) ? List.copyOf(config.getStringList(path)) : List.of();
+    }
+
+    /**
+     * Puts a token in config.yml when there is none, so a first start succeeds.
+     *
+     * <p>Refusing to start unauthenticated is the invariant (design.md §14); making an operator
+     * hand-copy the token out of a crash log was never part of it. What is required is that the
+     * endpoint never opens without a secret, and minting one satisfies that at least as well as
+     * refusing does — the endpoint that comes up is authenticated either way.
+     *
+     * <p>The refusal is kept for the case that matters: if the token cannot be written, this
+     * returns having changed nothing and {@code validate()} still stops the start. A token held
+     * only in memory would be a token nobody can use and that changes every restart.
+     */
+    private void mintTokenIfMissing(FileConfiguration config) {
+        if (!config.getString("auth-token", "").isBlank()) {
+            return;
+        }
+
+        String token = generateToken();
+        try {
+            config.set("auth-token", token);
+            saveConfig();
+        } catch (RuntimeException e) {
+            getLogger().log(Level.WARNING, "Could not write a generated token to config.yml", e);
+            return;
+        }
+
+        getLogger().info("No auth token was configured, so one was generated and written to "
+                + "config.yml: " + token);
+        // Plain ASCII on purpose: a Windows console renders an em dash in this line as '?', and
+        // this is a line an operator has to read to get their bearings.
+        getLogger().info("A client on this machine does not need it: session_start finds it "
+                + "itself. Copy it only for a client somewhere else.");
+    }
+
+    /**
+     * Leaves the connection details where a client on this machine can find them.
+     *
+     * <p>Turns the four things session_start had to be told into none of them. Off by
+     * {@code local-handshake: false} for anyone who would rather nothing were written outside the
+     * server directory.
+     */
+    private void publishHandshake(FileConfiguration config, AgentSettings settings) {
+        if (!config.getBoolean("local-handshake", true)) {
+            return;
+        }
+
+        try {
+            new LocalHandshake(
+                    advertisedHost(settings),
+                    settings.port(),
+                    getServer().getPort(),
+                    settings.authToken(),
+                    getPluginMeta().getVersion(),
+                    getServer().getVersion()).write();
+            handshakePort = settings.port();
+        } catch (IOException | RuntimeException e) {
+
+            // Nothing about the endpoint depends on this file; a client can always be told the
+            // details instead. So it is worth a line on the console and no more.
+            getLogger().log(Level.WARNING,
+                    "Could not write the local handshake to " + LocalHandshake.directory()
+                            + "; session_start on this machine will need the token passing in", e);
+        }
+    }
+
+    /** The address a client on this machine should dial to reach this endpoint. */
+    private static String advertisedHost(AgentSettings settings) {
+        String bind = settings.bindAddress();
+        return bind.isBlank() || "0.0.0.0".equals(bind) || "::".equals(bind)
+                ? LocalHandshake.LOCAL_HOST
+                : bind;
     }
 
     /** A token an operator can paste, so refusing to start still leaves an obvious next step. */
