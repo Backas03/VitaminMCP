@@ -31,7 +31,8 @@ without opening the game.
   server speaks and adapts
 
 Full usage is in [docs/usage.md](docs/usage.md), design rationale in
-[docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md).
+[docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md),
+release steps in [docs/publishing.md](docs/publishing.md).
 
 ---
 
@@ -295,7 +296,8 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 | | |
 |---|---|
 | Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
-| Java | 21. Needed to run it; only needed to build it if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) |
+| Java | 21, on the server and on the machine running your MCP client. Needed to build it too, if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) |
+| Node | 18.17 or later, for `npx`. Only to install the client side the easy way — [the jars need none](#installing-from-the-jars-instead) |
 
 ### Version support
 
@@ -329,55 +331,80 @@ it — inspection, logs and events all still work without them.
 
 ## Install
 
-### Three artifacts
+Two halves, and neither is useful alone: an **MCP server on your machine**, which your client
+launches, and the **agent plugin on the Minecraft server**, which is where everything worth asking
+about happens.
 
-**Download them from [Releases](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest)** — all
-three are attached to every release, so nothing has to be built to try this.
-
-To build them yourself instead:
+### 1. Connect your MCP client
 
 ```bash
-./gradlew dist
+claude mcp add vitaminmcp -- npx -y vitaminmcp
 ```
 
-Either way you end up with the same three files, and **each goes somewhere different.**
+Or directly in `.mcp.json`:
 
-| File | Where | What |
-|---|---|---|
-| `VitaminMCP.jar` | the server's `plugins/` | the agent — an ordinary Bukkit/Paper plugin |
-| `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
-| `bot-runner.jar` | anywhere (remember the path) | `mcp-server` launches it as a child process |
-
-**One runner, every supported version.** It carries a backend per protocol inside it and chooses
-one by pinging the server before any bot connects, so the same file works on 1.21 and on 1.21.8.
-
-### 1. Install the plugin
-
-Drop `VitaminMCP.jar` into the server's `plugins/` — loaded like any other plugin, no server flags
-and no java agent to attach — and start the server once. **The first startup fails**, and that is
-intended.
-
-```
-[VitaminMCP] No auth token is configured. The MCP endpoint grants access to server
-             internals, so it will not start unauthenticated. ...
-[VitaminMCP] Suggested token (paste into config.yml): kQ8s...
+```json
+{
+  "mcpServers": {
+    "vitaminmcp": {
+      "command": "npx",
+      "args": ["-y", "vitaminmcp"]
+    }
+  }
+}
 ```
 
-An endpoint that comes up without a token hands the server console to anyone who can reach it, so
-this is a **refusal to start**, not a warning ([design.md §14](docs/design.md)). Paste the token
-from the log into `auth-token` in `plugins/VitaminMCP/config.yml` and start again.
+That is the whole client side. Nothing to download by hand and no path to get right: the
+[`vitaminmcp`](https://www.npmjs.com/package/vitaminmcp) package fetches the jars it needs on first
+run, into `~/.vitaminmcp/jars/<version>/`, each checked against a SHA-256 pinned into the package
+when it was published.
+
+`mcp-server.jar` is two megabytes and is waited for. `bot-runner.jar` is ninety, so it arrives in
+the background — a session that never spawns a bot never waits for it, and one that does waits
+inside the call rather than inside your client's startup timeout.
+
+`mcp-server` speaks stdio. It has no port and no token: it is a child process of the client, so the
+trust relationship already exists. Only the agent side crosses a network, which is why only the
+agent side authenticates.
+
+> Needs **Node 18.17+** for `npx`, and **Java 21** to run the jars. No npm, or nothing to download
+> with? [Install from the jars](#installing-from-the-jars-instead).
+
+### 2. Install the plugin on the server
+
+Ask, and the agent does it — this is a command your client offers once step 1 is done:
+
+```text
+/mcp__vitaminmcp__setup
+```
+
+It checks the server is Paper 1.21+, puts the jar in `plugins/`, restarts, and connects. By hand
+instead:
+
+**Download `VitaminMCP.jar`** from
+[Releases](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) into the server's
+`plugins/` — an ordinary Bukkit/Paper plugin, no server flags and no java agent to attach — and
+start the server.
 
 ```
+[VitaminMCP] No auth token was configured, so one was generated and written to config.yml: kQ8s...
 [VitaminMCP] MCP endpoint listening on http://127.0.0.1:25585/mcp
 ```
 
+**You do not need to copy that token.** A client on the same machine reads it from the agent's own
+handshake. Copy it only for a client somewhere else.
+
 That is the minimum install. Every other setting is documented in
 [config.yml](agent/agent-mcp/src/main/resources/config.yml), alongside why each default is what it
-is. Two defaults to know before you change anything:
+is. Three defaults to know before you change anything:
 
 - **`read-only: true` is the default.** State-changing tools like `command_exec` are not exposed at
   all — a default install cannot alter the server even with a valid token. Turn it off only when
   you need to.
+- **The endpoint never opens unauthenticated.** An empty `auth-token` is filled in with a generated
+  one rather than waved through, and if it cannot be written the plugin still refuses to start
+  ([design.md §14](docs/design.md)). What was never negotiable is that a token exists; making you
+  fetch one out of a crash log was not part of it.
 - **Moving `bind-address` off loopback makes TLS mandatory.** The token grants console access, and
   over plain HTTP it crosses the network in the clear where anything on the path can read it. So
   that combination is a refusal to start, not a warning. Satisfy it with either `tls.enabled` (the
@@ -385,7 +412,7 @@ is. Two defaults to know before you change anything:
   agent will not generate a self-signed certificate for you — convenient, but it would teach every
   client to skip verification.
 
-### 2. Server setup, if you want bots
+### 3. Server setup, if you want bots
 
 Skip this section if you only need the agent.
 
@@ -424,57 +451,38 @@ With `allow-flight=true` the check is off and `move_to` behaves like a teleport.
 a test server. Leave it alone on a real one — and note this is another reason not to point bots at
 production.
 
-### 3. Connect an MCP client
-
-For Claude Code:
-
-```bash
-claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar
-```
-
-Or directly in `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "vitaminmcp": {
-      "command": "java",
-      "args": ["-jar", "/absolute/path/mcp-server.jar"]
-    }
-  }
-}
-```
-
-`mcp-server` speaks stdio. It has no port and no token — it is a child process of the client, so
-the trust relationship already exists. Only the agent side crosses a network, which is why only the
-agent side authenticates.
-
 ### 4. Connect
 
-Call `session_start` first. Every other tool depends on it.
+```text
+session_start
+```
+
+No arguments. The agent writes its host, both ports and its token to
+`~/.vitaminmcp/agents/<port>.properties` while it runs, and `session_start` reads them — so for a
+server on this machine there is nothing to pass and nothing to look up. A successful connection
+returns the server version, TPS and plugin list.
+
+Pass what differs, and only that. A server somewhere else needs `host` and `token`, because a token
+minted on this machine says nothing about a server on another one and is not sent there:
 
 ```json
 {
-  "host": "127.0.0.1",
-  "port": 25565,
-  "mcpPort": 25585,
+  "host": "203.0.113.10",
   "token": "auth-token from config.yml",
-  "runnerJar": "/absolute/path/bot-runner.jar"
+  "tls": "true",
+  "tlsFingerprint": "sha256:ffb61d8f...f163"
 }
 ```
-
-`runnerJar` can be omitted — it looks for the runner next to `mcp-server.jar`. Since `dist` puts
-all three in one folder, you rarely need to write it.
-
-A successful connection returns the server version, TPS and plugin list.
 
 **A proxied network is several servers.** Open one session per backend — they coexist, and starting
 one never disturbs another, which matters because closing a session disconnects its bots. `port` is
 the proxy's in every session; what tells them apart is `mcpPort`, the agent inside each backend.
+With more than one agent running locally that is also what picks between them, and omitting it is
+an error naming them rather than a guess.
 
 ```jsonc
-session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
-session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
+session_start {"session": "lobby",    "mcpPort": 25585, "port": 25577}
+session_start {"session": "survival", "mcpPort": 25586, "port": 25577}
 bot_spawn     {"session": "lobby", "name": "Tester1"}
 ```
 
@@ -484,14 +492,12 @@ walkthrough is in [docs/usage.md](docs/usage.md).
 
 #### Or just ask
 
-You do not have to write that JSON. Type the same facts to your agent instead — these are prompts,
-copy one and fill in your own values.
+These are prompts — copy one and fill in your own values.
 
 **A server on this machine**
 
-> **Prompt:** Connect to the Minecraft server on this machine. Minecraft is on port 25565, the
-> VitaminMCP agent on 25585, and the token is `kQ8s…` from `plugins/VitaminMCP/config.yml`. Once you
-> are in, tell me the server version and which plugins are loaded.
+> **Prompt:** Connect to the Minecraft server on this machine, then tell me the server version and
+> which plugins are loaded.
 
 **Behind an SSH tunnel** — say which local ports the tunnel forwards
 
@@ -503,9 +509,39 @@ copy one and fill in your own values.
 > **Prompt:** Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`,
 > fingerprint `sha256:ffb61d8f…f163`. Minecraft is on 25565.
 
-**Include the port numbers and the token.** Without them the agent has to guess at defaults, and a
-wrong guess surfaces as a rejected token rather than a wrong address — the same failure whichever
-detail was missing.
+**For anything not on this machine, include the port numbers and the token.** Without them the
+agent has to guess at defaults, and a wrong guess surfaces as a rejected token rather than a wrong
+address — the same failure whichever detail was missing.
+
+### Installing from the jars instead
+
+`npx` is a convenience, not a requirement. **Three artifacts**, all attached to every
+[release](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest), and **each goes
+somewhere different:**
+
+| File | Where | What |
+|---|---|---|
+| `VitaminMCP.jar` | the server's `plugins/` | the agent — an ordinary Bukkit/Paper plugin |
+| `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
+| `bot-runner.jar` | beside `mcp-server.jar` | `mcp-server` launches it as a child process |
+
+To build them yourself instead:
+
+```bash
+./gradlew dist
+```
+
+Either way, point the client at the jar rather than at the package:
+
+```bash
+claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar
+```
+
+`bot-runner.jar` is found beside `mcp-server.jar`, which is where `dist` puts it.
+`VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names it anywhere else.
+
+**One runner, every supported version.** It carries a backend per protocol inside it and chooses
+one by pinging the server before any bot connects, so the same file works on 1.21 and on 1.21.8.
 
 ---
 

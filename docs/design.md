@@ -561,6 +561,44 @@ At startup the agent prints the block to paste into `session_start`
 
 ---
 
+### 14.3 The token mints itself, and says where it is (2026-08-21)
+
+**The rule is that the endpoint never opens unauthenticated. It was implemented as a refusal to
+start, and those are not the same thing.**
+
+What the refusal actually bought: a first start that fails, a token printed into a crash log, a
+hand-copy into `config.yml`, a second start. Four steps to arrive at *a random secret nobody chose*
+— which is what generating one produces directly. The secret is no weaker for having been written
+by the plugin instead of pasted by a person; nobody was ever going to review it.
+
+So an empty `auth-token` is now filled in and saved, and the start proceeds. The invariant is
+unchanged and still enforced in `AgentSettings.validate()`: **no token, no endpoint.** Minting
+happens before validation, and if the write fails it is skipped, so the refusal is still what
+happens when a token cannot be had. An operator who sets their own token is unaffected.
+
+**Why not hold the token in memory only.** It would change every restart, which makes it useless to
+anything that has to be told it once, and it would never appear in the file an operator goes to
+read. A token that cannot be looked up is worse than a token in a file that already had a place for
+it.
+
+**The handshake.** With the token generated rather than chosen, nothing on the client side knows it
+— so the agent leaves it where a client on the same machine can look: host, both ports and token in
+`~/.vitaminmcp/agents/<mcpPort>.properties`, written at startup and removed at shutdown
+(`LocalHandshake`, in `contract` because it is by definition a thing two artifacts agree on).
+`session_start` reads it, and takes no arguments at all for a local server.
+
+This exposes nothing new. Anyone who can read that file is the user the server runs as, and that
+user can already read `config.yml`, where the same token sits in the clear. Where the filesystem
+can say so it is narrowed to `rw-------` anyway. `local-handshake: false` turns it off.
+
+**Two limits, both deliberate.** The file is only consulted for a loopback host — a token minted
+here says nothing about a server elsewhere, and quietly sending it there would turn a missing
+argument into a leaked secret. And with several agents running, an unnamed `mcpPort` is an error
+listing them rather than a pick: a proxied network is several servers, and guessing which one was
+meant is how a test passes against the wrong backend.
+
+---
+
 ## 15. Configuration and server startup (revised 2026-07-30)
 
 The version matrix is `versions.yaml`, not code. Adding a version must be one configuration block
@@ -601,6 +639,75 @@ harder, because it is a directory copy. No Docker volume lifecycle to manage.
 **This is genuinely needed.** During Stage 3 verification, a bot that an earlier diagnostic had
 `op`ed persisted in `ops.json` and broke the scenario on its second run — exactly the "failures that
 accumulate untraceably" that §13 warned about.
+
+---
+
+## 16. Distribution — how a stranger installs this (2026-08-21)
+
+**The client half and the server half have opposite constraints, and one delivery mechanism was
+being asked to cover both.**
+
+The server half cannot be automated from here at all. It is a jar that goes in someone's `plugins/`
+directory, on a machine this code may never see, and it stays a manual step. What it can stop being
+is a *puzzle* — hence §14.3, and hence a `setup` MCP prompt: the client's own agent already has
+shell access to wherever the server is, so the install is written down as instructions for it
+rather than as a README section for a person. In Claude Code that surfaces as
+`/mcp__vitaminmcp__setup`.
+
+The client half was three jars, an absolute path and a `claude mcp add` line, none of which anyone
+should be typing. It is now `npx -y vitaminmcp`.
+
+### 16.1 Why npm, for a project with no JavaScript in it
+
+The official MCP registry indexes npm, PyPI, NuGet, OCI and MCPB. **A jar on a GitHub release is
+not one of them**, so "publish the jars and register them" was never available. Of what is:
+
+| | Why not |
+|---|---|
+| MCPB bundle | No Java runtime type in the manifest spec; a `binary` bundle would have to carry a JVM per platform, and the artifact goes from 95MB to several hundred |
+| OCI image | Requires Docker on the client machine to run an MCP server that already needs a JVM there. Two runtimes to have instead of one |
+| PyPI / NuGet | The same wrapper, in a language even less related to this project |
+
+npm wins on one thing the others do not have: `npx` is already how MCP clients launch local
+servers, so the install line looks like every other install line. The package is a launcher and
+nothing else — it finds a JDK, fetches the jars, and execs `java -jar`.
+
+### 16.2 The jars are downloaded, not packaged
+
+`bot-runner.jar` is ninety megabytes, because it carries a backend per protocol (§4.4). Putting
+that in an npm tarball would be antisocial and would also mean republishing the whole thing for a
+change to the two-megabyte half.
+
+So the package holds no jars; it downloads them from the release matching its own version, into
+`~/.vitaminmcp/jars/<version>/`, and checks each against a SHA-256 **stamped into the package at
+publish time**. That direction matters: a release asset can be replaced after the fact, a published
+npm version cannot, so the immutable side is the one that gets to say what the bytes should be. The
+checksum file names the version it was stamped for and the launcher refuses a mismatch, because the
+one mistake this design invites — bumping the version without re-stamping — would otherwise
+surface as a hash failure indistinguishable from a compromised download.
+
+**The two jars are fetched differently, and that is the whole reason this works.** `mcp-server.jar`
+is small and nothing runs without it, so the launcher waits for it. `bot-runner.jar` is fetched in
+the background while the server is already answering: a client's startup timeout is around thirty
+seconds and ninety megabytes is not reliably inside it, but bots are opt-in and most sessions never
+need one. A session that does need one waits inside `session_start`, which is a tool call with a
+generous limit, not a startup.
+
+The handoff is a file rename. A partial download is `bot-runner.jar.part`; `mcp-server` waits for
+the rename rather than polling for a size, so it can never open a half-written jar, and it can tell
+"still arriving" from "not coming" by whether the `.part` file exists at all.
+
+### 16.3 Release order
+
+Three publishes, none of them reversible, and each depends on the last:
+
+1. **GitHub release** — the jars must be downloadable before anything can pin them
+2. **npm** — pins those exact bytes; the registry checks the package exists and that its
+   `mcpName` claims this server name
+3. **MCP registry** — `server.json`, published with `mcp-publisher` under `io.github.backas03/*`,
+   which GitHub OIDC proves ownership of from CI
+
+Every check that can fail runs before step 1. Nothing here can be unpublished.
 
 ---
 

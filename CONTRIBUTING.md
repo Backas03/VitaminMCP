@@ -57,6 +57,8 @@ one-to-one, while the `agent/` and `bot/` grouping is kept on disk.
 | `testkit` | Scenario runner, `wait_for`, assertions |
 | `mcp-server` | Tool exposure and assembly. The entry point |
 
+`npm/` is not a Gradle module. It is the published launcher — the thing `npx -y vitaminmcp` runs — and it contains no product logic: it finds a JDK, downloads the jars for its own version from the matching release, checks them against stamped hashes, and execs `java -jar` (design.md §16). Its version is stamped from `build-logic` at release; do not edit it by hand.
+
 ### Dependency direction
 
 Dependencies flow **one way only**:
@@ -128,7 +130,7 @@ numbering is part of the contract.
 `command_exec` alone hands over op. Assume every change lands on a production server.
 
 - Default bind is `127.0.0.1`; exposure is opt-in and explicit
-- A token is required — no token means **refuse to start**, not warn and continue
+- A token is required — **the endpoint never opens without one.** An empty `auth-token` is generated and written to config.yml at startup; if it cannot be written, the plugin refuses to start. What is never allowed is serving unauthenticated (design.md §14.3)
 - **read-only is the default mode.** State-changing tools are unexposed until config says otherwise
 - **Never relax any of the above for the convenience of a test.** If a test needs a weaker default,
   the test is wrong.
@@ -150,7 +152,7 @@ numbering is part of the contract.
 | `chore` | everything else |
 
 `scope` is the module name: `contract`, `agent-core`, `agent-mcp`, `bot-core`, `bot-runner`,
-`orchestrator`, `testkit`, `mcp-server`, `build-logic`. Use a comma for a change that genuinely
+`orchestrator`, `testkit`, `mcp-server`, `build-logic`, `npm`. Use a comma for a change that genuinely
 spans two.
 
 ```
