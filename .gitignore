@@ -144,3 +144,6 @@ AGENTS.md
 
 # Stamped into the npm package at release, from the release that exists by then.
 npm/checksums.json
+
+# Node dependencies, for the mineflayer bot runner
+node_modules/

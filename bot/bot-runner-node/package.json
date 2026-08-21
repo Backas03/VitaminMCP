@@ -1,0 +1,13 @@
+{
+  "name": "@vitaminmcp/bot-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The bot runner, on mineflayer. Speaks the same stdio line protocol as bot-runner.jar.",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "mineflayer": "^4.37.1"
+  }
+}
