@@ -59,7 +59,7 @@ final class SessionTools {
                                     + "from VITAMINMCP_TOKEN. Required for a server anywhere "
                                     + "else, since nothing local can vouch for it.");
                     string(properties, "runnerJar",
-                            "Path to the bot runner jar. Optional: defaults to "
+                            "Path to a bot runner (Node script or platform executable). Optional: defaults to "
                                     + "VITAMINMCP_RUNNER_JAR, or to the bot-runner jar sitting "
                                     + "beside this server's own jar, which is where both "
                                     + "'gradlew dist' and the npm package put it.");

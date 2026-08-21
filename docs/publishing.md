@@ -2,7 +2,7 @@
 
 Three things are published per release, in this order, and **none of them can be unpublished**:
 
-1. the **GitHub release** — the three jars
+1. the **GitHub release** — the agent jar, MCP server jar, Java reference runner and platform Node runner assets
 2. the **npm package** `vitaminmcp` — the launcher, pinning the sha256 of those jars
 3. the **MCP registry** entry — `server.json`, pointing at that npm version
 
@@ -117,7 +117,7 @@ git tag 1.5.0
 git push origin 1.5.0
 ```
 
-The workflow builds `dist`, creates the release with the three jars, stamps the checksums from the
+The workflow builds `dist`, creates the release with the agent/server jars and five platform runner assets, stamps the checksums from the
 jars it just built, publishes to npm, and publishes `server.json`. Watch it — the first two steps
 are irreversible before the third runs.
 
@@ -140,7 +140,10 @@ From a clean checkout at the commit you want released:
 
 ```bash
 gh release create 1.5.0 --title 1.5.0 --generate-notes \
-  build/dist/VitaminMCP.jar build/dist/mcp-server.jar build/dist/bot-runner.jar
+  build/dist/VitaminMCP.jar build/dist/mcp-server.jar build/dist/bot-runner.jar \
+  build/dist/runners/bot-runner-win-x64.exe build/dist/runners/bot-runner-linux-x64 \
+  build/dist/runners/bot-runner-linux-arm64 build/dist/runners/bot-runner-darwin-x64 \
+  build/dist/runners/bot-runner-darwin-arm64
 ```
 
 ```bash

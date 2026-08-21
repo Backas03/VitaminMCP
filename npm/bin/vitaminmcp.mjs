@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BOT_RUNNER_JAR, MCP_SERVER_JAR, ensureJar, jarPath } from '../lib/jars.mjs';
+import {
+  MCP_SERVER_JAR, assetPath, ensureAsset, ensureJar,
+} from '../lib/jars.mjs';
 import { checkJava, findJava } from '../lib/java.mjs';
+import { checkNode, findNode, runnerAssetName } from '../lib/node.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,7 +51,9 @@ Environment
   VITAMINMCP_HOME         where jars and agent handshakes are kept (default ~/.vitaminmcp)
   VITAMINMCP_TOKEN        an agent token, for a server that leaves no local handshake
   VITAMINMCP_SERVER_JAR   run this mcp-server jar instead of a downloaded one
-  VITAMINMCP_RUNNER_JAR   use this bot runner instead of a downloaded one
+  VITAMINMCP_RUNNER_JAR   use this runner path instead of selecting one automatically
+  VITAMINMCP_NODE         Node executable for the source runner fallback
+  VITAMINMCP_NODE_RUNNER  path to a bundled runner.mjs when Node is available
 `;
 
 async function main() {
@@ -82,13 +88,24 @@ async function main() {
     }
   }
 
-  const runner = process.env.VITAMINMCP_RUNNER_JAR ?? jarPath(release, BOT_RUNNER_JAR);
-  const runnerReady = process.env.VITAMINMCP_RUNNER_JAR
-    ? Promise.resolve(runner)
-    : ensureJar(release, BOT_RUNNER_JAR, { log: say }).catch((error) => {
-        say(`the bot runner could not be downloaded: ${error.message ?? error}`);
-        say('Everything except bots still works. Retry by restarting this server.');
-      });
+  const configuredRunner = process.env.VITAMINMCP_RUNNER_JAR;
+  const node = findNode();
+  const nodeCheck = checkNode(node);
+  const sourceRunner = process.env.VITAMINMCP_NODE_RUNNER
+    ?? path.join(HERE, '..', 'runner', 'runner.mjs');
+  let runner;
+  let runnerReady;
+  if (configuredRunner) {
+    runner = configuredRunner;
+    runnerReady = Promise.resolve(runner);
+  } else if (nodeCheck.ok && existsSync(sourceRunner)) {
+    runner = sourceRunner;
+    runnerReady = Promise.resolve(runner);
+  } else {
+    const asset = runnerAssetName();
+    runner = assetPath(release, asset);
+    runnerReady = ensureAsset(release, asset, { log: say });
+  }
 
   if (argv.includes('--jars')) {
     await runnerReady;
@@ -96,6 +113,7 @@ async function main() {
     return 0;
   }
 
+  await runnerReady;
   return await run(java, server, runner);
 }
 

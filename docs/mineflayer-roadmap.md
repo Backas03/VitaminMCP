@@ -261,17 +261,17 @@ alone (`README.md` §Requirements); without this stage it would quietly start ne
 
 **Work**
 
-- [ ] Hybrid launch, mirroring `findJava()` in `npm/lib/java.mjs`: use a Node on `PATH` or in
+- [x] Hybrid launch, mirroring `findJava()` in `npm/lib/java.mjs`: use a Node on `PATH` or in
       `VITAMINMCP_NODE` when there is one, and fall back to a downloaded runner binary
-- [ ] Generalise `npm/lib/jars.mjs` from jars to assets. It already does the hard part — pinned
+- [x] Generalise `npm/lib/jars.mjs` from jars to assets. It already does the hard part — pinned
       SHA-256, per-version cache, and a `checksums.json` whose stamped version is verified — and
       **none of that is deleted.** It gets pointed at a different file
 - [ ] Per-platform runner binaries via Node SEA: win-x64, linux-x64, linux-arm64, darwin-x64,
       darwin-arm64. Blob injection cross-builds them from one Linux runner
 - [ ] **macOS needs an ad-hoc code signature** or the binary will not run. The one real trap here
-- [ ] `checksums.json` grows a platform key, and `stamp-checksums.mjs` follows
-- [ ] `session_start`'s `runnerJar` is renamed and redescribed — it names a runner, not a jar
-- [ ] `docs/publishing.md` gains the new assets and whatever errors this path turns out to produce
+- [x] `checksums.json` grows a platform key, and `stamp-checksums.mjs` follows
+- [x] `session_start`'s `runnerJar` is renamed and redescribed — it names a runner, not a jar
+- [x] `docs/publishing.md` gains the new assets and whatever errors this path turns out to produce
 
 **DoD**
 
@@ -310,6 +310,12 @@ Last, and only once Stage 8 is done. Everything here is irreversible in practice
 - No reference to MCProtocolLib outside a historical note
 - A fresh clone builds and runs — verified from `git archive`, not from this working tree
 - The README's requirements table is honest about Node
+
+**Progress 2026-08-22:** hybrid Node/source selection, generic asset cache/checksum code, platform
+checksum stamping, and the SEA build script are implemented. The Windows SEA asset and both
+darwin assets were built locally; Linux ELF injection aborts under the Windows postject host. The
+five-asset release checksum cannot be stamped honestly until Linux assets and macOS signing are
+available, so Stage 8 remains in progress.
 
 ---
 

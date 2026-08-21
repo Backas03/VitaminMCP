@@ -23,6 +23,10 @@
   "license": "MIT",
   "author": "Backas03",
   "type": "module",
+  "dependencies": {
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "2.4.5"
+  },
   "bin": {
     "vitaminmcp": "bin/vitaminmcp.mjs"
   },
@@ -32,11 +36,13 @@
   "files": [
     "bin",
     "lib",
+    "runner",
     "checksums.json",
     "README.md"
   ],
   "scripts": {
     "stamp": "node scripts/stamp-checksums.mjs",
-    "prepublishOnly": "node scripts/stamp-checksums.mjs --verify"
+    "stage-runner": "node scripts/stage-node-runner.mjs",
+    "prepublishOnly": "node scripts/stage-node-runner.mjs && node scripts/stamp-checksums.mjs --verify"
   }
 }

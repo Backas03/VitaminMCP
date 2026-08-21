@@ -22,6 +22,13 @@ const PACKAGE = path.join(HERE, '..');
 const REPOSITORY = path.join(PACKAGE, '..');
 
 const WANTED = ['mcp-server.jar', 'bot-runner.jar'];
+const ASSETS = [
+  'bot-runner-win-x64.exe',
+  'bot-runner-linux-x64',
+  'bot-runner-linux-arm64',
+  'bot-runner-darwin-x64',
+  'bot-runner-darwin-arm64',
+];
 const API = 'https://api.github.com/repos/Backas03/VitaminMCP-minecraft/releases/tags';
 
 /** The version this project is on, read from the single place that declares it. */
@@ -54,6 +61,19 @@ async function fromDist(directory) {
   return checksums;
 }
 
+async function fromDistAssets(directory) {
+  const source = path.join(directory, 'runners');
+  const entries = await fs.readdir(source).catch(() => []);
+  const assets = {};
+  for (const name of ASSETS) {
+    if (!entries.includes(name)) {
+      throw new Error(`${source} holds no ${name}. Build all SEA targets first.`);
+    }
+    assets[name] = createHash('sha256').update(await fs.readFile(path.join(source, name))).digest('hex');
+  }
+  return assets;
+}
+
 /** Reads the digests GitHub reports for what a release actually serves. */
 async function fromTag(tag) {
   const response = await fetch(`${API}/${tag}`, {
@@ -72,6 +92,23 @@ async function fromTag(tag) {
     }
     if (!asset.digest?.startsWith('sha256:')) {
       throw new Error(`Release ${tag} reports no sha256 for ${name}.`);
+    }
+    checksums[name] = asset.digest.slice('sha256:'.length);
+  }
+  return checksums;
+}
+
+async function fromTagAssets(tag) {
+  const response = await fetch(`${API}/${tag}`, {
+    headers: { accept: 'application/vnd.github+json' },
+  });
+  if (!response.ok) throw new Error(`No release ${tag}: ${response.status} ${response.statusText}`);
+  const assets = (await response.json()).assets ?? [];
+  const checksums = {};
+  for (const name of ASSETS) {
+    const asset = assets.find((candidate) => candidate.name === name);
+    if (!asset?.digest?.startsWith('sha256:')) {
+      throw new Error(`Release ${tag} has no sha256 asset named ${name}.`);
     }
     checksums[name] = asset.digest.slice('sha256:'.length);
   }
@@ -106,6 +143,9 @@ async function verify() {
     if (!stamped.jars?.[name]) {
       throw new Error(`checksums.json has no hash for ${name}.`);
     }
+  }
+  for (const name of ASSETS) {
+    if (!stamped.assets?.[name]) throw new Error(`checksums.json has no asset hash for ${name}.`);
   }
   process.stdout.write(`checksums.json matches vitaminmcp ${version}
 `);
@@ -170,17 +210,21 @@ async function main() {
   const version = await projectVersion();
 
   let checksums;
+  let assets;
   if (distAt >= 0) {
     checksums = await fromDist(path.resolve(argv[distAt + 1] ?? path.join(REPOSITORY, 'build/dist')));
+    assets = await fromDistAssets(path.resolve(argv[distAt + 1] ?? path.join(REPOSITORY, 'build/dist')));
   } else if (tagAt >= 0) {
     checksums = await fromTag(argv[tagAt + 1] ?? version);
+    assets = await fromTagAssets(argv[tagAt + 1] ?? version);
   } else {
     checksums = await fromTag(version);
+    assets = await fromTagAssets(version);
   }
 
   await fs.writeFile(
     path.join(PACKAGE, 'checksums.json'),
-    `${JSON.stringify({ version, jars: checksums }, null, 2)}\n`,
+    `${JSON.stringify({ version, jars: checksums, assets }, null, 2)}\n`,
   );
 
   await sync();

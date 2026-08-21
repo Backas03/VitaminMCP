@@ -45,6 +45,8 @@ agent leaves its host, ports and token where this server reads them.
 
 - **Java 21 or later** on this machine — the jars run on the JVM. Point `JAVA_HOME` at it, or have
   `java` on `PATH`
+- **Node 18.17 or later** when using the source runner fallback. If Node is absent, the launcher
+  selects a pinned platform runner asset instead.
 - **Paper 1.21 or later** on the Minecraft server, with `VitaminMCP.jar` in its `plugins/`
 
 ## Environment
@@ -55,7 +57,9 @@ agent leaves its host, ports and token where this server reads them.
 | `VITAMINMCP_HOME` | where jars and agent handshakes are kept. Default `~/.vitaminmcp` |
 | `VITAMINMCP_TOKEN` | an agent token, for a server that leaves no local handshake |
 | `VITAMINMCP_SERVER_JAR` | run this `mcp-server.jar` instead of a downloaded one |
-| `VITAMINMCP_RUNNER_JAR` | use this bot runner instead of a downloaded one |
+| `VITAMINMCP_RUNNER_JAR` | use this runner path instead of automatic selection |
+| `VITAMINMCP_NODE` | Node executable for the source runner fallback |
+| `VITAMINMCP_NODE_RUNNER` | bundled `runner.mjs` path when Node is available |
 
 ## What it downloads
 
@@ -63,8 +67,9 @@ On first run, from [the GitHub release](https://github.com/Backas03/VitaminMCP-m
 matching this package's version, into `~/.vitaminmcp/jars/<version>/`:
 
 - `mcp-server.jar` (~2 MB) — waited for, since nothing works without it
-- `bot-runner.jar` (~93 MB) — fetched in the background, because only bots need it. A client that
-  never spawns one never waits for it
+- a source Node runner when Node and the bundled runner are available — no runner asset download
+- otherwise one platform runner asset (`win-x64`, `linux-x64`, `linux-arm64`, `darwin-x64` or
+  `darwin-arm64`), checked against a SHA-256 pinned into this package
 
 Both are checked against a SHA-256 pinned into this package at publish time. A file that does not
 match is deleted rather than run.
