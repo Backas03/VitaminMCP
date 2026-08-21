@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.backas03/vitaminmcp",
+  "name": "io.github.Backas03/vitaminmcp",
   "title": "VitaminMCP",
   "description": "Test Minecraft plugins end to end: drive a real Paper server and real protocol bots.",
   "version": "1.5.0",

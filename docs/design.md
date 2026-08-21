@@ -704,7 +704,7 @@ Three publishes, none of them reversible, and each depends on the last:
 1. **GitHub release** — the jars must be downloadable before anything can pin them
 2. **npm** — pins those exact bytes; the registry checks the package exists and that its
    `mcpName` claims this server name
-3. **MCP registry** — `server.json`, published with `mcp-publisher` under `io.github.backas03/*`,
+3. **MCP registry** — `server.json`, published with `mcp-publisher` under `io.github.Backas03/*`,
    which GitHub OIDC proves ownership of from CI
 
 Every check that can fail runs before step 1. Nothing here can be unpublished.

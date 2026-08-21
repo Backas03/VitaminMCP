@@ -67,19 +67,25 @@ it. That needs `id-token: write`, which the workflow already declares.
 
 ### MCP registry
 
-Nothing to register in advance. The namespace `io.github.backas03/*` is proved by GitHub
+Nothing to register in advance. The namespace `io.github.Backas03/*` is proved by GitHub
 authentication — interactively with `mcp-publisher login github`, and from CI with
 `mcp-publisher login github-oidc`, which is why the workflow needs `id-token: write` for that too.
 
-The name in [`server.json`](../server.json) is **lowercase**: `io.github.backas03/vitaminmcp`. It
-has to match the GitHub account the login proves, and lowercase is the form the registry stores.
+**The GitHub account's own capitalisation is part of the name.** The registry does not fold it, and
+grants exactly `io.github.Backas03/*`, so a lowercase `server.json` is refused:
+
+```
+403 Forbidden — You do not have permission to publish this server.
+You have permission to publish: io.github.Backas03/*
+Attempting to publish: io.github.backas03/vitaminmcp
+```
 
 ### npm ownership of the name
 
 The registry checks that `npm/package.json` carries
 
 ```json
-"mcpName": "io.github.backas03/vitaminmcp"
+"mcpName": "io.github.Backas03/vitaminmcp"
 ```
 
 which is what stops someone else's package from claiming this server name. Do not remove it.
