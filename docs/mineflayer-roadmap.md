@@ -16,8 +16,8 @@ Three rules hold across every stage.
 - **The wire protocol does not change.** `RunnerProtocol`'s verbs, field order and separators stay
   as they are. Watch the separators: `RECORD_SEPARATOR` and `UNIT_SEPARATOR` are 0x1E and 0x1F and
   are **invisible in a diff**.
-- **Node stops being optional the moment this ships.** Stage 7 exists to make that untrue again,
-  and no release goes out between Stage 5 and Stage 7.
+- **Node stops being optional the moment this ships.** Stage 8 exists to make that untrue again,
+  and no release goes out between Stage 5 and Stage 8.
 
 ---
 
@@ -191,7 +191,45 @@ The payoff beyond physics, and cheap once the runner exists.
 
 ---
 
-## Stage 7 — distribution, so Node stops being a prerequisite
+## Stage 7 — a live view of what the bot sees
+
+Ask for it and a web page opens showing the bot's world. `prismarine-viewer` (MIT, 1.33.0) renders
+the bot's loaded chunks in a browser; `mineflayer-web-inventory` (MIT) does the same for its
+inventory. Neither is possible on the Java runner at any price, and both close the gap the roadmap
+has always called dogfooding: **every tool here has been driven by tests, never by someone
+watching.**
+
+**The size is the design constraint.** `prismarine-viewer` unpacks to **269MB** — it carries
+textures for every Minecraft version ever released. It cannot go inside the Stage 8 runner
+binaries, and it must not be a hard dependency of the runner.
+
+**Work**
+
+- [ ] `bot_view` — a new MCP tool, not a scenario step. Starts a viewer for one bot and returns
+      its URL. `what`: `"world"` (default) or `"inventory"`; `mode`: `"first_person"` or
+      `"third_person"`; `stop: true` to close one
+- [ ] **Bind `127.0.0.1` and nothing else.** This is an unauthenticated HTTP server showing a live
+      game view; it follows the agent's own default rather than inventing a laxer one
+- [ ] Allocate a free port and report it. Never fail because a hardcoded port was taken
+- [ ] Lifecycle: a viewer dies with its bot, and `session_reset` closes every one. A leaked
+      viewer holding a port across runs is the obvious failure here
+- [ ] Fetch on demand as an optional asset, reusing Stage 8's fetcher — pinned checksum, cached
+      per version. Nobody pays 269MB for a feature they never ask for
+- [ ] Consider trimming the shipped textures to the versions in `versions.yaml`. Real saving,
+      real maintenance cost; decide with a number rather than a guess
+
+**DoD**
+
+- `bot_view` returns a URL that renders the bot's surroundings, and the bot moves in it when a
+  `move_to` runs
+- `what: "inventory"` shows a plugin GUI the bot has open
+- A second call for the same bot returns the same URL rather than starting a second server
+- Closing a session leaves no listening port behind
+- An install that never calls `bot_view` downloads nothing extra
+
+---
+
+## Stage 8 — distribution, so Node stops being a prerequisite
 
 **No release ships between Stage 5 and this stage.** Today the jar-only install path needs Java
 alone (`README.md` §Requirements); without this stage it would quietly start needing Node.
@@ -220,9 +258,9 @@ alone (`README.md` §Requirements); without this stage it would quietly start ne
 
 ---
 
-## Stage 8 — deletion, and the documentation debt
+## Stage 9 — deletion, and the documentation debt
 
-Last, and only once Stage 7 is done. Everything here is irreversible in practice.
+Last, and only once Stage 8 is done. Everything here is irreversible in practice.
 
 **Work**
 
@@ -257,7 +295,7 @@ Last, and only once Stage 7 is done. Everything here is irreversible in practice
    the most likely cause of a flaky matrix.
 2. **`ClientView` fidelity.** Stage 3 changes `MenuItem` on purpose; the risk is changing anything
    *else* by accident, because the MCP tools' output is the product.
-3. **Packaging.** Stage 7 is five platforms, a signing requirement and a checksum format change,
+3. **Packaging.** Stage 8 is five platforms, a signing requirement and a checksum format change,
    all inside a release path whose failures are already documented as confusing.
 4. **Upstream cadence.** mineflayer 4.37.1, last published 2026-05-03 — active, not fast. A
    protocol this project needs could land later than the server it belongs to.
