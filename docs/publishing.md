@@ -57,6 +57,7 @@ way.
 | `403 ... Two-factor authentication or granular access token with bypass 2fa enabled is required` | The honest version of the same thing, which you only get locally |
 | `400 ... "otp" with value "[object Object]"` | An npm CLI bug on Windows: the one-time-password prompt passes an object through. Pass `--otp=<code>` on the command line instead, or upgrade npm |
 | `404 ... Adding a new TOTP 2FA is no longer supported` | Register a passkey or security key instead |
+| `400 ... NPM package ownership validation failed. Expected mcpName 'X', got 'x'` | From the MCP registry, not npm. `mcpName` is compared exactly, capitalisation included. A published npm version cannot be edited, so getting this wrong costs a patch release |
 
 A granular token, if you use one at all, has to be scoped to **all packages** for a first publish.
 Scoped to selected packages it cannot create one that is not in its list yet — which a new package
