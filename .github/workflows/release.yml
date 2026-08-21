@@ -45,10 +45,19 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Node 22.14+ and npm 11.5.1+ are what trusted publishing needs. The npm CLI picks OIDC up
+      # by itself in an environment that offers it and only falls back to NODE_AUTH_TOKEN when it
+      # does not, so this costs nothing while the token is still what works.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: https://registry.npmjs.org
+
+      - name: Use an npm that can authenticate without a token
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          npm --version
 
       - name: Agree on one version
         run: |
