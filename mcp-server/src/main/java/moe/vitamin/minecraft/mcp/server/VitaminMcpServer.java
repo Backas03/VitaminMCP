@@ -24,6 +24,7 @@ public final class VitaminMcpServer {
     }
 
     private final SessionTools tools = new SessionTools();
+    private final SetupPrompts prompts = new SetupPrompts(VERSION);
 
     public static void main(String[] args) throws IOException {
         new VitaminMcpServer().run();
@@ -77,6 +78,12 @@ public final class VitaminMcpServer {
                     yield success(id, result);
                 }
                 case "tools/call" -> success(id, callTool(params));
+                case "prompts/list" -> {
+                    ObjectNode result = MAPPER.createObjectNode();
+                    result.set("prompts", prompts.list());
+                    yield success(id, result);
+                }
+                case "prompts/get" -> success(id, prompts.get(params));
                 default -> error(id, -32601, "Unknown method: " + method);
             };
         } catch (RuntimeException e) {
@@ -89,7 +96,9 @@ public final class VitaminMcpServer {
     private ObjectNode initialize(JsonNode params) {
         ObjectNode result = MAPPER.createObjectNode();
         result.put("protocolVersion", params.path("protocolVersion").asText(PROTOCOL_VERSION));
-        result.putObject("capabilities").putObject("tools");
+        ObjectNode capabilities = result.putObject("capabilities");
+        capabilities.putObject("tools");
+        capabilities.putObject("prompts");
 
         ObjectNode info = result.putObject("serverInfo");
         info.put("name", "VitaminMCP");
@@ -101,7 +110,11 @@ public final class VitaminMcpServer {
                         + "Call session_start first with the agent's token. Then either spawn "
                         + "bots and act step by step, or hand bot_run_scenario a whole scenario "
                         + "— it reports which step failed and what the server was doing at that "
-                        + "moment. Prefer wait_for over waiting yourself; there is no sleep.");
+                        + "moment. Prefer wait_for over waiting yourself; there is no sleep. "
+                        + "On this machine session_start needs no arguments — the agent leaves "
+                        + "its host, ports and token where it reads them. If no agent answers, "
+                        + "the server has not got the plugin yet: the 'setup' prompt installs "
+                        + "it.");
         return result;
     }
 
