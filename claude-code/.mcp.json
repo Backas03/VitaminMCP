@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vitaminmcp": {
+      "command": "npx",
+      "args": ["-y", "vitaminmcp"]
+    }
+  }
+}

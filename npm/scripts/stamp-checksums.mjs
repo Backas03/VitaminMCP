@@ -134,6 +134,22 @@ async function sync() {
   }
   await fs.writeFile(serverFile, `${JSON.stringify(server, null, 2)}\n`);
 
+  // The Claude Code plugin repeats the version twice more, and `claude plugin validate` fails if
+  // the two disagree with each other — but nothing checks either against the project.
+  const pluginFile = path.join(REPOSITORY, 'claude-code/.claude-plugin/plugin.json');
+  const plugin = JSON.parse(await fs.readFile(pluginFile, 'utf8'));
+  plugin.version = version;
+  await fs.writeFile(pluginFile, `${JSON.stringify(plugin, null, 2)}\n`);
+
+  const marketFile = path.join(REPOSITORY, '.claude-plugin/marketplace.json');
+  const market = JSON.parse(await fs.readFile(marketFile, 'utf8'));
+  for (const entry of market.plugins ?? []) {
+    if (entry.name === 'vitaminmcp') {
+      entry.version = version;
+    }
+  }
+  await fs.writeFile(marketFile, `${JSON.stringify(market, null, 2)}\n`);
+
   return version;
 }
 

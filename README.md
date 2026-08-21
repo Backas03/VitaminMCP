@@ -337,6 +337,19 @@ about happens.
 
 ### 1. Connect your MCP client
 
+**In Claude Code**, install the plugin — it brings the MCP server and the working knowledge of how
+to drive it, as a skill that loads itself when a question calls for it:
+
+```bash
+/plugin marketplace add Backas03/VitaminMCP-minecraft
+```
+
+```bash
+/plugin install vitaminmcp@vitaminmcp
+```
+
+**Any other MCP client**, or Claude Code without the skill:
+
 ```bash
 claude mcp add vitaminmcp -- npx -y vitaminmcp
 ```
