@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import moe.vitamin.minecraft.mcp.orchestrator.VersionMatrix;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
@@ -71,15 +73,25 @@ class MatrixRunnerLiveTest {
     @Test
     void oneScenarioRunsOnEveryVersion() throws Exception {
         VersionMatrix matrix = VersionMatrix.load(Path.of("..", "versions.yaml"));
+        int repeat = Integer.getInteger("vitaminmcp.repeat", 1);
+        assertTrue(repeat > 0, "vitaminmcp.repeat must be positive");
+        List<String> failures = new ArrayList<>();
 
-        MatrixResult result =
-                runner(work).run(matrix, SCENARIO, Duration.ofMinutes(5));
+        for (int run = 1; run <= repeat; run++) {
+            Path runWork = work.resolve("repeat-" + run);
+            Files.createDirectories(runWork);
+            MatrixResult result =
+                    runner(runWork).run(matrix, SCENARIO, Duration.ofMinutes(5));
 
-        System.out.println(result.describe());
+            System.out.println("[matrix] repeat " + run + ": " + result.describe());
+            assertEquals(matrix.versions().size(), result.results().size(),
+                    "every version must be reported on, including ones that could not start");
+            if (!result.allPassed()) {
+                failures.add("repeat " + run + ": " + result.describe());
+            }
+        }
 
-        assertEquals(matrix.versions().size(), result.results().size(),
-                "every version must be reported on, including ones that could not start");
-        assertTrue(result.allPassed(), result.describe());
+        assertTrue(failures.isEmpty(), String.join("\n", failures));
     }
 
     @Test
