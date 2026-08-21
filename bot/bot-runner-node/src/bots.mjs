@@ -1,7 +1,7 @@
 import mineflayer from 'mineflayer';
 import { configurePathfinder, loadPathfinder, moveTo } from './movement.mjs';
 import { reachable } from './movement.mjs';
-import { stopAllViews, stopView } from './viewer.mjs';
+import { stopAllViews, stopView as stopBotView, view as startView } from './viewer.mjs';
 
 import { collect } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
@@ -98,13 +98,21 @@ export class BotRegistry {
     return reachable(bot, x, y, z, timeoutMillis);
   }
 
+  async view(name, what, mode) {
+    return startView(this.require(name), name, what, mode, this.#version);
+  }
+
+  stopView(name) {
+    stopBotView(this.require(name));
+  }
+
   despawn(name) {
     const bot = this.#bots.get(name);
     if (!bot) {
       return;
     }
     this.#bots.delete(name);
-    stopView(bot);
+    stopBotView(bot);
     quietly(() => bot.quit());
   }
 

@@ -6,7 +6,7 @@ import { inspect } from './clientview.mjs';
 const viewers = new Map();
 
 /** Starts or reuses one localhost viewer for a bot. */
-export async function view(bot, name, what = 'world', mode = 'third_person') {
+export async function view(bot, name, what = 'world', mode = 'third_person', version) {
   const existing = viewers.get(bot);
   if (existing) {
     return existing.url;
@@ -18,7 +18,7 @@ export async function view(bot, name, what = 'world', mode = 'third_person') {
   let close;
 
   if (selectedWhat === 'world') {
-    close = await startWorldViewer(bot, port, selectedMode);
+    close = await startWorldViewer(bot, port, selectedMode, version);
   } else if (selectedWhat === 'inventory') {
     close = await startInventoryViewer(bot, name, port);
   } else {
@@ -51,11 +51,8 @@ export function stopAllViews() {
   }
 }
 
-async function startWorldViewer(bot, port, mode) {
-  const configuredPath = process.env.VITAMINMCP_VIEWER_PATH || 'prismarine-viewer';
-  const packagePath = /^[A-Za-z]:[\\/]/.test(configuredPath)
-    ? pathToFileURL(configuredPath).href
-    : configuredPath;
+async function startWorldViewer(bot, port, mode, version) {
+  const packagePath = viewerPackageSpecifier(process.env.VITAMINMCP_VIEWER_PATH);
   let viewerPackage;
   try {
     viewerPackage = await import(packagePath);
@@ -76,28 +73,47 @@ async function startWorldViewer(bot, port, mode) {
   // viewer from becoming an unauthenticated LAN service.
   const net = await import('node:net');
   const originalListen = net.Server.prototype.listen;
+  let resolveListening;
+  let rejectListening;
+  const listening = new Promise((resolve, reject) => {
+    resolveListening = resolve;
+    rejectListening = reject;
+  });
   net.Server.prototype.listen = function listen(...args) {
     if (typeof args[0] === 'number') {
       args.splice(1, 0, '127.0.0.1');
     }
+    const callbackIndex = args.findLastIndex((argument) => typeof argument === 'function');
+    const callback = callbackIndex >= 0 ? args[callbackIndex] : null;
+    const onListening = function onListening(...callbackArgs) {
+      // prismarine-viewer logs its port with console.log from this callback. stdout belongs to the
+      // runner protocol, so even one such line makes the next Java-side read consume a log instead
+      // of a reply. Preserve the diagnostic on stderr and do not return until the port is ready.
+      const originalLog = console.log;
+      console.log = (...messages) => process.stderr.write(`${messages.map(String).join(' ')}\n`);
+      try {
+        callback?.apply(this, callbackArgs);
+      } finally {
+        console.log = originalLog;
+        resolveListening();
+      }
+    };
+    if (callbackIndex >= 0) {
+      args[callbackIndex] = onListening;
+    } else {
+      args.push(onListening);
+    }
+    this.once('error', rejectListening);
     return originalListen.apply(this, args);
   };
   try {
-    // mineflayer can expose the negotiated registry version before it fills bot.version. The
-    // viewer sends bot.version to the browser, where an empty value becomes "null is not
-    // supported" instead of a useful viewer. Keep the runner's negotiated version as the source
-    // of truth and populate the convenience field before prismarine-viewer connects.
-    const version = bot.version
-      ?? bot.registry?.version?.minecraftVersion
-      ?? bot._client?.version;
-    if (version != null && bot.version == null) {
-      bot.version = version;
-    }
-    api.mineflayer(bot, {
+    const selectedVersion = resolveViewerVersion(version, api.supportedVersions);
+    api.mineflayer(viewerBot(bot, selectedVersion), {
       port,
       firstPerson: mode === 'first_person',
       viewDistance: 6,
     });
+    await listening;
   } finally {
     net.Server.prototype.listen = originalListen;
   }
@@ -105,6 +121,58 @@ async function startWorldViewer(bot, port, mode) {
     throw new Error('The optional prismarine-viewer did not expose a close hook.');
   }
   return () => bot.viewer.close();
+}
+
+/** Resolves only the declared viewer sidecar, never an unrelated ancestor node_modules. */
+export function viewerPackageSpecifier(configuredPath) {
+  if (configuredPath && configuredPath.trim()) {
+    return /^[A-Za-z]:[\\/]/.test(configuredPath)
+      ? pathToFileURL(configuredPath).href
+      : configuredPath;
+  }
+  return new URL(
+    '../../bot-runner-viewer/node_modules/prismarine-viewer/index.js',
+    import.meta.url,
+  ).href;
+}
+
+/** Maps a server patch version to the newest viewer data from the same major release. */
+export function resolveViewerVersion(negotiatedVersion, supportedVersions) {
+  if (negotiatedVersion == null) {
+    throw new Error('The bot runner did not provide a Minecraft version for the world viewer.');
+  }
+  const requested = String(negotiatedVersion);
+  const supported = Array.isArray(supportedVersions) ? supportedVersions : [];
+  if (supported.includes(requested)) {
+    return requested;
+  }
+  const major = requested.split('.').slice(0, 2).join('.');
+  const compatible = supported.filter(
+    (candidate) => String(candidate).split('.').slice(0, 2).join('.') === major,
+  );
+  if (compatible.length === 0) {
+    throw new Error(
+      `World viewer does not support Minecraft ${requested}; supported versions: `
+        + supported.join(', '),
+    );
+  }
+  return compatible.at(-1);
+}
+
+/** Overrides only the version prismarine-viewer sees, preserving the live mineflayer bot. */
+function viewerBot(bot, version) {
+  return new Proxy(bot, {
+    get(target, property) {
+      if (property === 'version') {
+        return version;
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set(target, property, value) {
+      return Reflect.set(target, property, value, target);
+    },
+  });
 }
 
 async function startInventoryViewer(bot, name, port) {

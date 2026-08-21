@@ -1,7 +1,6 @@
 import * as actions from './actions.mjs';
 import * as clientview from './clientview.mjs';
 import * as protocol from './protocol.mjs';
-import * as viewer from './viewer.mjs';
 
 /**
  * The line protocol, in the one place it is spoken.
@@ -162,14 +161,13 @@ export class Dispatch {
       }
 
       case protocol.VIEW: {
-        const bot = this.#bots.require(command[1]);
         const stop = command.length > 4 && command[4] === 'true';
         if (stop) {
-          viewer.stopView(bot);
+          this.#bots.stopView(command[1]);
           return protocol.encode(protocol.OK, verb, 'stopped');
         }
-        const url = await viewer.view(
-          bot, command[1], command.length > 2 ? command[2] : 'world',
+        const url = await this.#bots.view(
+          command[1], command.length > 2 ? command[2] : 'world',
           command.length > 3 ? command[3] : 'third_person');
         return protocol.encode(protocol.OK, verb, url);
       }
