@@ -54,17 +54,31 @@ jobs:
       - name: Build the jars
         run: ./gradlew dist --no-daemon
 
+      # Each publish step checks whether it has already happened. Creating a release with the gh
+      # CLI pushes the tag, which triggers this workflow — so a release cut by hand arrives here
+      # anyway, and "already done" has to mean carry on rather than fail. It also makes a rerun
+      # after a failure halfway down do the right thing, which matters when nothing above can be
+      # undone.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            build/dist/VitaminMCP.jar \
-            build/dist/mcp-server.jar \
-            build/dist/bot-runner.jar
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; uploading any missing jars."
+            gh release upload "${GITHUB_REF_NAME}" \
+              build/dist/VitaminMCP.jar \
+              build/dist/mcp-server.jar \
+              build/dist/bot-runner.jar \
+              --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              build/dist/VitaminMCP.jar \
+              build/dist/mcp-server.jar \
+              build/dist/bot-runner.jar
+          fi
 
       # Pins the bytes just uploaded, so the package can only ever install this release.
       - name: Stamp the launcher
@@ -73,7 +87,13 @@ jobs:
 
       - name: Publish the launcher
         working-directory: npm
-        run: npm publish --access public --provenance
+        run: |
+          set -euo pipefail
+          if npm view "vitaminmcp@${GITHUB_REF_NAME}" version >/dev/null 2>&1; then
+            echo "vitaminmcp@${GITHUB_REF_NAME} is already on npm; nothing to publish."
+            exit 0
+          fi
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -87,5 +107,22 @@ jobs:
       - name: Publish to the MCP registry
         run: |
           set -euo pipefail
+          name=$(node -p "require('./server.json').name")
+          published=$(curl -fsSL \
+            "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
+            | node -e "
+              let body = '';
+              process.stdin.on('data', (chunk) => (body += chunk));
+              process.stdin.on('end', () => {
+                const servers = (JSON.parse(body).servers ?? []).map((entry) => entry.server ?? entry);
+                const mine = servers.find((entry) => entry.name === process.argv[1]);
+                process.stdout.write(mine?.version ?? '');
+              });
+            " "$name" || true)
+
+          if [ "$published" = "${GITHUB_REF_NAME}" ]; then
+            echo "${name} ${GITHUB_REF_NAME} is already in the registry; nothing to publish."
+            exit 0
+          fi
           mcp-publisher login github-oidc
           mcp-publisher publish

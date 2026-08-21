@@ -84,8 +84,14 @@ are irreversible before the third runs.
 
 ## The first release, by hand
 
-Worth doing once rather than debugging the workflow against an unpublished name. From a clean
-checkout at the tagged commit:
+Worth doing once rather than debugging the workflow against an unpublished name.
+
+**Creating a release with `gh` pushes the tag, so the workflow runs too.** That is fine: each of
+its three publish steps checks whether it has already happened and carries on rather than failing,
+so whichever of you gets there second does nothing. The same guard makes a rerun safe after a
+failure halfway down, which matters because nothing above the failure can be undone.
+
+From a clean checkout at the commit you want released:
 
 ```bash
 ./gradlew dist
