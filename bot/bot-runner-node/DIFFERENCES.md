@@ -9,6 +9,17 @@ byte. Each entry below is allowed there by name, so a difference nobody decided 
 
 ## Deliberate
 
+### Stage 6 verbs exist only in the Node runner
+
+| | |
+|---|---|
+| Java | Returns `unknown command` for `attack_entity`, inventory/movement controls, placement and `assert_reachable` |
+| Node | Implements the new verbs through mineflayer and pathfinder |
+
+These are capabilities the Java runner never exposed, rather than replacements for an existing
+contract. The Java runner remains selectable as the Stage 5 oracle, while new scenarios opt into
+the Node implementation and the deletion of the old runner remains deferred to Stage 9.
+
 ### `move` without an explicit mode
 
 | | |

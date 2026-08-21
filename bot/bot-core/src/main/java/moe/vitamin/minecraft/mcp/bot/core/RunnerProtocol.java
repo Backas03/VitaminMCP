@@ -41,6 +41,17 @@ public final class RunnerProtocol {
      */
     public static final String INSPECT = "inspect";
 
+    /** Stage 6 verbs, implemented by the Node runner; the Java oracle remains unchanged. */
+    public static final String ATTACK_ENTITY = "attack_entity";
+    public static final String HOLD_ITEM = "hold_item";
+    public static final String DROP_ITEM = "drop_item";
+    public static final String PLACE_BLOCK = "place_block";
+    public static final String JUMP = "jump";
+    public static final String SNEAK = "sneak";
+    public static final String SPRINT = "sprint";
+    public static final String LOOK_AT = "look_at";
+    public static final String ASSERT_REACHABLE = "assert_reachable";
+
     public static final String OK = "ok";
     public static final String ERROR = "err";
 

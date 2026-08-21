@@ -96,6 +96,15 @@ export function inspect(bot, name) {
     messages: [...own.messages],
     bossBars: [...own.bossBars.values()],
     scoreboard: sidebarOf(own),
+    health: Number.isFinite(bot.health) ? bot.health : null,
+    food: Number.isInteger(bot.food) ? bot.food : null,
+    experienceLevel: Number.isInteger(bot.experience?.level) ? bot.experience.level : null,
+    totalExperience: Number.isInteger(bot.experience?.points) ? bot.experience.points : null,
+    experienceProgress: Number.isFinite(bot.experience?.progress) ? bot.experience.progress : null,
+    effects: Object.values(bot.entity?.effects ?? {}).map((effect) => {
+      const nameOf = bot.registry.effectsById?.[effect.id]?.name ?? String(effect.id);
+      return `${nameOf}:${effect.amplifier}:${effect.duration}`;
+    }),
   };
 }
 

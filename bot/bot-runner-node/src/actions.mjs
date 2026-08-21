@@ -1,5 +1,6 @@
 import { javaDouble } from './protocol.mjs';
 import { plainText } from './text.mjs';
+import { Vec3 } from 'vec3';
 
 /**
  * What a bot can do once it is in the world.
@@ -148,6 +149,85 @@ export function useEntity(bot, name, x, y, z, radius, type) {
   return entityId;
 }
 
+/** Left-clicks the nearest tracked entity. */
+export function attackEntity(bot, name, x, y, z, radius, type) {
+  requireInWorld(bot, name);
+  const entityId = entityNear(bot, x, y, z, radius, type);
+  if (entityId === NO_ENTITY) {
+    throw new Error(`no ${!type || !type.trim() ? 'entity' : type} within ${javaDouble(radius)} blocks of `
+      + `${javaDouble(x)} ${javaDouble(y)} ${javaDouble(z)}`);
+  }
+  const entity = bot.entities[entityId];
+  bot.attack(entity);
+  return entityId;
+}
+
+/** Selects a hotbar slot. */
+export function holdItem(bot, name, slot) {
+  requireInWorld(bot, name);
+  if (!Number.isInteger(slot) || slot < 0 || slot > 8) {
+    throw new Error(`Hotbar slot must be between 0 and 8, got '${slot}'.`);
+  }
+  bot.setQuickBarSlot(slot);
+}
+
+/** Drops the held item, either one item or the whole held stack. */
+export async function dropItem(bot, name, count) {
+  requireInWorld(bot, name);
+  if (!bot.heldItem) {
+    throw new Error(`Bot ${name} is holding no item to drop.`);
+  }
+  const amount = count == null || String(count).trim() === '' ? bot.heldItem.count : Number(count);
+  if (!Number.isInteger(amount) || amount <= 0 || amount > bot.heldItem.count) {
+    throw new Error(`Drop count must be between 1 and ${bot.heldItem.count}, got '${count}'.`);
+  }
+  if (amount === bot.heldItem.count) {
+    await bot.tossStack(bot.heldItem);
+  } else {
+    await bot.toss(bot.heldItem.type, bot.heldItem.metadata, amount);
+  }
+}
+
+/** Places the held item against a block face. */
+export async function placeBlock(bot, name, x, y, z, face) {
+  requireInWorld(bot, name);
+  if (!bot.heldItem) {
+    throw new Error(`Bot ${name} is holding no item to place.`);
+  }
+  const reference = bot.blockAt(new Vec3(x, y, z));
+  if (!reference) {
+    throw new Error(`Bot ${name} has not loaded block ${x}, ${y}, ${z}.`);
+  }
+  const direction = faceVector(face);
+  await bot.placeBlock(reference, direction);
+}
+
+/** Performs one client jump, using a physics tick as the release barrier. */
+export async function jump(bot, name) {
+  requireInWorld(bot, name);
+  bot.setControlState('jump', true);
+  await new Promise((resolve) => bot.once('physicsTick', resolve));
+  bot.setControlState('jump', false);
+}
+
+/** Sets sneaking on or off. */
+export function sneak(bot, name, state) {
+  requireInWorld(bot, name);
+  bot.setControlState('sneak', booleanState(state));
+}
+
+/** Sets sprinting on or off. */
+export function sprint(bot, name, state) {
+  requireInWorld(bot, name);
+  bot.setControlState('sprint', booleanState(state));
+}
+
+/** Turns the client toward a world point. */
+export async function lookAt(bot, name, x, y, z) {
+  requireInWorld(bot, name);
+  await bot.lookAt(new Vec3(x, y, z), true);
+}
+
 /** Clicks a slot in the menu the server has open for this bot. */
 export async function clickSlot(bot, name, slot, click) {
   requireInWorld(bot, name);
@@ -252,6 +332,25 @@ function matchesType(entity, type) {
   const wanted = type.toLowerCase();
   return [entity.name, entity.displayName, entity.entityType]
     .some((candidate) => typeof candidate === 'string' && candidate.toLowerCase() === wanted);
+}
+
+function faceVector(face) {
+  switch ((face ?? 'up').trim().toLowerCase()) {
+    case 'down': return new Vec3(0, -1, 0);
+    case 'up': return new Vec3(0, 1, 0);
+    case 'north': return new Vec3(0, 0, -1);
+    case 'south': return new Vec3(0, 0, 1);
+    case 'west': return new Vec3(-1, 0, 0);
+    case 'east': return new Vec3(1, 0, 0);
+    default: throw new Error(`Unknown face '${face}'. Use down, up, north, south, west or east.`);
+  }
+}
+
+function booleanState(state) {
+  const value = String(state ?? '').trim().toLowerCase();
+  if (value === 'on' || value === 'true' || value === 'start' || value === '1') return true;
+  if (value === 'off' || value === 'false' || value === 'stop' || value === '0') return false;
+  throw new Error(`State must be on or off, got '${state}'.`);
 }
 
 /** Java formats these with %.1f, which rounds half away from zero rather than to even. */

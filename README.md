@@ -189,7 +189,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 | | |
 |---|---|
 | `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
-| `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle), boss bars and the sidebar scoreboard |
+| `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle), boss bars, sidebar scoreboard, health, food, experience and active effects |
 | `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
 
 ### Server
@@ -246,6 +246,12 @@ Available inside `bot_run_scenario`.
 | `move_to` | walk to coordinates by default; use `mode: "teleport"` for fast setup placement. Optional `timeoutMillis` distinguishes a sealed route from a walk that did not arrive in time |
 | `break_block` / `use_block` | break, or right-click a block — `use_block` is how you open a chest |
 | `use_entity` | right-click an NPC, villager or armour stand, named by the coordinates it stands at |
+| `attack_entity` | left-click the nearest NPC, mob or armour stand at coordinates |
+| `hold_item` / `drop_item` | select a hotbar slot, or drop the held item/one held item |
+| `place_block` | place the held item against a block face |
+| `jump` / `sneak` / `sprint` | perform one jump, or set the movement state on/off |
+| `look_at` | look at world coordinates directly |
+| `assert_reachable` | ask whether a loaded path exists without moving; set `reachable: false` for sealed-region assertions |
 | `click_slot` | click a slot: `left`, `right`, `shift_left`, `shift_right` |
 | `close_menu` | close the open menu |
 | `chat` / `command` | say something, or run a command as the bot |

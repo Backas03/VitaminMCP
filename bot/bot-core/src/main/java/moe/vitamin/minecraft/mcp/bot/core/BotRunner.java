@@ -141,6 +141,15 @@ public final class BotRunner implements AutoCloseable {
         return List.copyOf(live);
     }
 
+    /** Asks the Node runner whether a loaded route exists without moving a bot. */
+    public boolean assertReachable(String name, double x, double y, double z, long timeoutMillis)
+            throws IOException {
+        String[] reply = send(RunnerProtocol.ASSERT_REACHABLE, name == null ? "" : name,
+                String.valueOf(x), String.valueOf(y), String.valueOf(z),
+                String.valueOf(timeoutMillis));
+        return reply.length > 2 && Boolean.parseBoolean(reply[2]);
+    }
+
     /** Sends one command and returns its reply fields. */
     synchronized String[] send(String... command) throws IOException {
         if (!process.isAlive()) {
@@ -246,6 +255,49 @@ public final class BotRunner implements AutoCloseable {
             return reply.length > 2 ? reply[2] : "";
         }
 
+        public String attackEntity(double x, double y, double z, double radius, String type)
+                throws IOException {
+            String[] reply = runner.send(RunnerProtocol.ATTACK_ENTITY, name,
+                    String.valueOf(x), String.valueOf(y), String.valueOf(z),
+                    String.valueOf(radius), type == null ? "" : type);
+            return reply.length > 2 ? reply[2] : "";
+        }
+
+        public void holdItem(int slot) throws IOException {
+            runner.send(RunnerProtocol.HOLD_ITEM, name, String.valueOf(slot));
+        }
+
+        public void dropItem(Integer count) throws IOException {
+            runner.send(RunnerProtocol.DROP_ITEM, name, count == null ? "" : String.valueOf(count));
+        }
+
+        public void placeBlock(int x, int y, int z, String face) throws IOException {
+            runner.send(RunnerProtocol.PLACE_BLOCK, name, String.valueOf(x), String.valueOf(y),
+                    String.valueOf(z), face == null ? "up" : face);
+        }
+
+        public void jump() throws IOException {
+            runner.send(RunnerProtocol.JUMP, name);
+        }
+
+        public void sneak(boolean state) throws IOException {
+            runner.send(RunnerProtocol.SNEAK, name, state ? "on" : "off");
+        }
+
+        public void sprint(boolean state) throws IOException {
+            runner.send(RunnerProtocol.SPRINT, name, state ? "on" : "off");
+        }
+
+        public void lookAt(double x, double y, double z) throws IOException {
+            runner.send(RunnerProtocol.LOOK_AT, name, String.valueOf(x), String.valueOf(y),
+                    String.valueOf(z));
+        }
+
+        public boolean assertReachable(double x, double y, double z, long timeoutMillis)
+                throws IOException {
+            return runner.assertReachable(name, x, y, z, timeoutMillis);
+        }
+
         public void breakBlock(int x, int y, int z) throws IOException {
             runner.send(RunnerProtocol.BREAK, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));
@@ -307,7 +359,13 @@ public final class BotRunner implements AutoCloseable {
                     List.of(RunnerProtocol.records(reply[5])),
                     List.copyOf(bossBars),
                     reply[7].isEmpty() ? null : new Scoreboard(
-                            reply[7], List.of(RunnerProtocol.records(reply[8]))));
+                            reply[7], List.of(RunnerProtocol.records(reply[8]))),
+                    reply.length > 9 && !reply[9].isEmpty() ? Float.parseFloat(reply[9]) : null,
+                    reply.length > 10 && !reply[10].isEmpty() ? Integer.parseInt(reply[10]) : null,
+                    reply.length > 11 && !reply[11].isEmpty() ? Integer.parseInt(reply[11]) : null,
+                    reply.length > 12 && !reply[12].isEmpty() ? Integer.parseInt(reply[12]) : null,
+                    reply.length > 13 && !reply[13].isEmpty() ? Float.parseFloat(reply[13]) : null,
+                    reply.length > 14 ? List.of(RunnerProtocol.records(reply[14])) : List.of());
         }
 
         /** The bot's position now, which may differ from where it spawned. */

@@ -28,6 +28,15 @@ export const CLICK = 'click';
 export const CLOSE_MENU = 'close_menu';
 export const MENU = 'menu';
 export const INSPECT = 'inspect';
+export const ATTACK_ENTITY = 'attack_entity';
+export const HOLD_ITEM = 'hold_item';
+export const DROP_ITEM = 'drop_item';
+export const PLACE_BLOCK = 'place_block';
+export const JUMP = 'jump';
+export const SNEAK = 'sneak';
+export const SPRINT = 'sprint';
+export const LOOK_AT = 'look_at';
+export const ASSERT_REACHABLE = 'assert_reachable';
 
 export const OK = 'ok';
 export const ERROR = 'err';

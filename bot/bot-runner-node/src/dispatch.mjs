@@ -111,6 +111,55 @@ export class Dispatch {
         return protocol.encode(protocol.OK, verb, String(entityId));
       }
 
+      case protocol.ATTACK_ENTITY: {
+        const radius = command.length > 5 && command[5].trim() !== '' ? Number(command[5]) : 2.0;
+        const type = command.length > 6 ? command[6] : null;
+        const entityId = actions.attackEntity(
+          this.#bots.require(command[1]), command[1], Number(command[2]), Number(command[3]),
+          Number(command[4]), radius, type);
+        return protocol.encode(protocol.OK, verb, String(entityId));
+      }
+
+      case protocol.HOLD_ITEM:
+        actions.holdItem(this.#bots.require(command[1]), command[1], Number(command[2]));
+        return ok(verb);
+
+      case protocol.DROP_ITEM:
+        await actions.dropItem(this.#bots.require(command[1]), command[1],
+          command.length > 2 ? command[2] : undefined);
+        return ok(verb);
+
+      case protocol.PLACE_BLOCK:
+        await actions.placeBlock(this.#bots.require(command[1]), command[1], Number(command[2]),
+          Number(command[3]), Number(command[4]), command.length > 5 ? command[5] : 'up');
+        return ok(verb);
+
+      case protocol.JUMP:
+        await actions.jump(this.#bots.require(command[1]), command[1]);
+        return ok(verb);
+
+      case protocol.SNEAK:
+        actions.sneak(this.#bots.require(command[1]), command[1], command[2]);
+        return ok(verb);
+
+      case protocol.SPRINT:
+        actions.sprint(this.#bots.require(command[1]), command[1], command[2]);
+        return ok(verb);
+
+      case protocol.LOOK_AT:
+        await actions.lookAt(this.#bots.require(command[1]), command[1], Number(command[2]),
+          Number(command[3]), Number(command[4]));
+        return ok(verb);
+
+      case protocol.ASSERT_REACHABLE: {
+        const name = command.length > 1 ? command[1] : '';
+        const offset = 2;
+        const result = await this.#bots.assertReachable(name, Number(command[offset]),
+          Number(command[offset + 1]), Number(command[offset + 2]),
+          command.length > offset + 3 ? Number(command[offset + 3]) : undefined);
+        return protocol.encode(protocol.OK, verb, String(result.reachable), result.status);
+      }
+
       case protocol.CLICK: {
         await actions.clickSlot(
           this.#bots.require(command[1]),
@@ -150,6 +199,12 @@ export class Dispatch {
           bossBarList(view.bossBars),
           board === null ? '' : protocol.sanitize(board.title),
           board === null ? '' : recordList(board.lines),
+          view.health == null ? '' : protocol.javaFloat(view.health),
+          view.food == null ? '' : String(view.food),
+          view.experienceLevel == null ? '' : String(view.experienceLevel),
+          view.totalExperience == null ? '' : String(view.totalExperience),
+          view.experienceProgress == null ? '' : protocol.javaFloat(view.experienceProgress),
+          recordList(view.effects),
         );
       }
 

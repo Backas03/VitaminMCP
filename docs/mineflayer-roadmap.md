@@ -185,22 +185,29 @@ The payoff beyond physics, and cheap once the runner exists.
 
 **Work**
 
-- [ ] `attack_entity` — left-click. `use_entity` only ever right-clicked, so combat plugins were
+- [x] `attack_entity` — left-click. `use_entity` only ever right-clicked, so combat plugins were
       untestable
-- [ ] `hold_item`, `drop_item` — the hotbar was not reachable at all
-- [ ] `place_block` — placing from the hand, as distinct from `use` right-clicking a block
-- [ ] `jump`, `sneak`, `sprint`
-- [ ] `look_at` — yaw and pitch directly, instead of implying them through `use`'s face argument
-- [ ] `assert_reachable` — can a player get from A to B? Region seals, barriers and maze-shaped
+- [x] `hold_item`, `drop_item` — the hotbar was not reachable at all
+- [x] `place_block` — placing from the hand, as distinct from `use` right-clicking a block
+- [x] `jump`, `sneak`, `sprint`
+- [x] `look_at` — yaw and pitch directly, instead of implying them through `use`'s face argument
+- [x] `assert_reachable` — can a player get from A to B? Region seals, barriers and maze-shaped
       builds become one assertion. **It needs no bot**: ask for the path and throw it away
-- [ ] `bot_inspect` gains health, food, experience and active potion effects
-- [ ] Every new verb lands in `bot_run_scenario`'s step list *and* its tool description
+- [x] `bot_inspect` gains health, food, experience and active potion effects
+- [x] Every new verb lands in `bot_run_scenario`'s step list *and* its tool description
 
 **DoD**
 
-- A scenario kills a mob with `attack_entity` and asserts the death event
-- A scenario equips an item, places it, and asserts the block with `assert_block`
-- `assert_reachable` reports false for a sealed region and true once the barrier is removed
+- [x] A scenario kills a mob with `attack_entity` and asserts the death event
+- [x] A scenario equips an item, places it, and asserts the block with `assert_block`
+- [x] `assert_reachable` reports false for a sealed region and true once the barrier is removed
+
+**Verified 2026-08-22 on Paper 1.21.8:** a Node bot's attack produced a new
+`EntityDeathEvent(entityType=ZOMBIE)`; `hold_item` plus `place_block` returned `ok` and
+`state_query` reported the placed STONE; `inspect` returned health, food, experience and effects;
+and `assert_reachable` returned `false/partial` for a sealed room and `true/success` after the
+room was opened. The control verbs (`drop_item`, `jump`, `sneak`, `sprint`, `look_at`) also
+returned successful protocol replies.
 
 ---
 

@@ -166,7 +166,10 @@ the real player →  a full menu      ← only the client received it
   ],
   "messages": ["multiplayer.player.joined", "[action bar] You lack permission"],
   "bossBars": [{"title": "Event ends in 4:12", "progress": 0.7, "color": "PURPLE"}],
-  "scoreboard": {"title": "Server", "lines": ["Money: 1,200", "Region: spawn"]}
+  "scoreboard": {"title": "Server", "lines": ["Money: 1,200", "Region: spawn"]},
+  "health": 20.0, "food": 20,
+  "experienceLevel": 3, "totalExperience": 27, "experienceProgress": 0.4,
+  "effects": ["speed:1:120"]
 }
 ```
 
@@ -183,6 +186,9 @@ Everything a server draws on a player that never reaches the server's own view i
 | `messages` | chat, plus action bar, title and subtitle — each prefixed with where it appeared |
 | `bossBars` | boss bars on screen now, with `progress` (0..1) and `color` |
 | `scoreboard` | the sidebar: `title` and `lines`, highest score first — the order the client draws |
+| `health` / `food` | current client-side health and hunger values |
+| `experienceLevel` / `totalExperience` / `experienceProgress` | the level, total points and progress bar the client received |
+| `effects` | active effects as `name:amplifier:duration` strings |
 
 The split is deliberate. **Messages are things that were said; boss bars and scoreboards are things
 that are showing.** A refusal is a message and is gone a moment later; a scoreboard holds a
@@ -374,6 +380,14 @@ state the scenario never described makes those failures meaningless.
 | `break_block` | `bot`, `x`, `y`, `z` | |
 | `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Right-click — opens chests and menus |
 | `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Right-click the nearest entity — an NPC, a villager |
+| `attack_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType` |
+| `hold_item` | `bot`, `slot` | hotbar slot 0..8 |
+| `drop_item` | `bot` | `count` (default: whole held stack) |
+| `place_block` | `bot`, `x`, `y`, `z` | `face` (default `up`); places the held item against the reference block |
+| `jump` | `bot` | |
+| `sneak` / `sprint` | `bot` | `state`: `on` or `off` |
+| `look_at` | `bot`, `x`, `y`, `z` | |
+| `assert_reachable` | `x`, `y`, `z` | `bot` (optional existing bot), `reachable` (default `true`), `timeoutMillis` |
 | `command` | `bot`, `command` | a command typed by the bot |
 | `chat` | `bot`, `message` | |
 | `console` | `command` | a command typed by the console (via `command_exec`) |

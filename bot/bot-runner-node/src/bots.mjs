@@ -1,5 +1,6 @@
 import mineflayer from 'mineflayer';
 import { configurePathfinder, loadPathfinder, moveTo } from './movement.mjs';
+import { reachable } from './movement.mjs';
 
 import { collect } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
@@ -84,6 +85,16 @@ export class BotRegistry {
 
   async move(name, x, y, z, mode, timeoutMillis) {
     await moveTo(this.require(name), name, x, y, z, mode, timeoutMillis);
+  }
+
+  async assertReachable(name, x, y, z, timeoutMillis) {
+    const bot = name && name.trim()
+      ? this.require(name)
+      : this.#bots.values().next().value;
+    if (!bot) {
+      throw new Error('no bot is available to inspect the loaded world for reachability');
+    }
+    return reachable(bot, x, y, z, timeoutMillis);
   }
 
   despawn(name) {

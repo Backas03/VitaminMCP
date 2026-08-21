@@ -113,6 +113,7 @@ final class SessionTools {
                         + "same as state_query's. 'messages' also covers action "
                         + "bar, title and subtitle text, each prefixed with where it appeared, "
                         + "since a plugin is as likely to refuse above the hotbar as in chat. "
+                        + "Also reports health, food, experience and active effects. "
                         + "'bossBars' and 'scoreboard' are on-screen state rather than messages: "
                         + "they persist, and a server's live view of a player — timers, money, "
                         + "region, quest progress — is usually drawn there and nowhere the agent "
@@ -124,7 +125,9 @@ final class SessionTools {
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
-                        + "use_block, use_entity, command, chat, console, click_slot, "
+                        + "attack_entity, use_block, use_entity, hold_item, drop_item, "
+                        + "place_block, jump, sneak, sprint, look_at, assert_reachable, "
+                        + "command, chat, console, click_slot, "
                         + "close_menu, wait_for, assert_block, assert_player, assert_event, "
                         + "assert_inventory, assert_message. There is no sleep step — use "
                         + "wait_for and name what you are waiting for. move_to walks by default; "
@@ -377,6 +380,33 @@ final class SessionTools {
                 ArrayNode lines = scoreboard.putArray("lines");
                 view.scoreboard().lines().forEach(lines::add);
             }
+            if (view.health() != null) {
+                result.put("health", view.health());
+            } else {
+                result.putNull("health");
+            }
+            if (view.food() != null) {
+                result.put("food", view.food());
+            } else {
+                result.putNull("food");
+            }
+            if (view.experienceLevel() != null) {
+                result.put("experienceLevel", view.experienceLevel());
+            } else {
+                result.putNull("experienceLevel");
+            }
+            if (view.totalExperience() != null) {
+                result.put("totalExperience", view.totalExperience());
+            } else {
+                result.putNull("totalExperience");
+            }
+            if (view.experienceProgress() != null) {
+                result.put("experienceProgress", view.experienceProgress());
+            } else {
+                result.putNull("experienceProgress");
+            }
+            ArrayNode effects = result.putArray("effects");
+            view.effects().forEach(effects::add);
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);

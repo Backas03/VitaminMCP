@@ -55,6 +55,18 @@ export async function moveTo(bot, name, x, y, z, mode = 'path', timeoutMillis) {
   await walk(bot, name, x, y, z, limit);
 }
 
+/** Asks pathfinder for a route without changing the bot's goal or control state. */
+export function reachable(bot, x, y, z, timeoutMillis = DEFAULT_MOVE_TIMEOUT_MILLIS) {
+  const goal = new goals.GoalNear(x, y, z, 0.75);
+  const result = bot.pathfinder.getPathTo(bot.pathfinder.movements, goal, Number(timeoutMillis));
+  return {
+    // A partial path is only the best frontier found before the search budget expired. It is not
+    // evidence that the destination can be reached; sealed regions commonly return one.
+    reachable: result.status === 'success',
+    status: result.status,
+  };
+}
+
 /** Sends the same position packet as the Java runner, while stopping any old path first. */
 function teleport(bot, x, y, z) {
   // Calling stop with no active goal leaves pathfinder's stopPathing flag armed until its next

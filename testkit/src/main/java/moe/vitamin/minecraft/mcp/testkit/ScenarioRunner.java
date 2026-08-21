@@ -115,6 +115,77 @@ public final class ScenarioRunner {
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
             }
 
+            case "attack_entity" -> {
+                String[] hit = new String[1];
+                act(step, bot -> hit[0] = bot.attackEntity(
+                        step.path("x").asDouble(), step.path("y").asDouble(),
+                        step.path("z").asDouble(), step.path("radius").asDouble(2.0),
+                        step.path("entityType").asText(null)));
+                yield ScenarioResult.StepResult.ok(index, action,
+                        "sent to entity " + (hit[0] == null ? "" : hit[0]));
+            }
+
+            case "hold_item" -> {
+                act(step, bot -> bot.holdItem(step.path("slot").asInt()));
+                yield ScenarioResult.StepResult.ok(index, action, "holding hotbar slot "
+                        + step.path("slot").asInt());
+            }
+
+            case "drop_item" -> {
+                act(step, bot -> bot.dropItem(step.hasNonNull("count")
+                        ? step.path("count").asInt() : null));
+                yield ScenarioResult.StepResult.ok(index, action, "dropped");
+            }
+
+            case "place_block" -> {
+                act(step, bot -> bot.placeBlock(
+                        step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt(),
+                        step.path("face").asText("up")));
+                yield ScenarioResult.StepResult.ok(index, action, "placed");
+            }
+
+            case "jump" -> {
+                act(step, BotRunner.BotHandle::jump);
+                yield ScenarioResult.StepResult.ok(index, action, "jumped");
+            }
+
+            case "sneak", "sprint" -> {
+                boolean state = step.path("state").asBoolean(
+                        "on".equalsIgnoreCase(step.path("state").asText("on")));
+                act(step, bot -> {
+                    if ("sneak".equals(action)) bot.sneak(state);
+                    else bot.sprint(state);
+                });
+                yield ScenarioResult.StepResult.ok(index, action, state ? "on" : "off");
+            }
+
+            case "look_at" -> {
+                act(step, bot -> bot.lookAt(step.path("x").asDouble(), step.path("y").asDouble(),
+                        step.path("z").asDouble()));
+                yield ScenarioResult.StepResult.ok(index, action, "looking");
+            }
+
+            case "assert_reachable" -> {
+                long timeout = step.has("timeoutMillis")
+                        ? step.path("timeoutMillis").asLong() : 5_000L;
+                String botName = step.path("bot").asText("");
+                boolean reachable;
+                try {
+                    reachable = bots.assertReachable(botName, step.path("x").asDouble(),
+                            step.path("y").asDouble(), step.path("z").asDouble(), timeout);
+                } catch (java.io.IOException e) {
+                    throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+                }
+                boolean expected = step.path("reachable").asBoolean(true);
+                yield reachable == expected
+                        ? ScenarioResult.StepResult.ok(index, action,
+                                reachable ? "reachable" : "not reachable")
+                        : ScenarioResult.StepResult.failed(index, action,
+                                "expected reachable=" + expected + " but pathfinder returned "
+                                        + reachable,
+                                "pathfinder status did not match the assertion");
+            }
+
             case "command" -> {
                 act(step, bot -> bot.command(required(step, "command")));
                 yield ScenarioResult.StepResult.ok(index, action, "sent");
