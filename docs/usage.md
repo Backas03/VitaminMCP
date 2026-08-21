@@ -370,7 +370,7 @@ state the scenario never described makes those failures meaningless.
 |---|---|---|
 | `spawn` | `bot` | `clientIp` |
 | `despawn` | `bot` | |
-| `move_to` | `bot`, `x`, `y`, `z` | |
+| `move_to` | `bot`, `x`, `y`, `z` | `mode`: `path` (default) or `teleport`; `timeoutMillis` (or `timeout`) for path movement |
 | `break_block` | `bot`, `x`, `y`, `z` | |
 | `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Right-click — opens chests and menus |
 | `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Right-click the nearest entity — an NPC, a villager |

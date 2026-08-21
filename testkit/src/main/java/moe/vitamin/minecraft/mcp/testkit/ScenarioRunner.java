@@ -17,6 +17,9 @@ public final class ScenarioRunner {
     /** Long enough for a real condition, short enough that a wedged one fails the run. */
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(15);
 
+    /** Long enough for a short walk, but finite so an impossible route names its failure. */
+    private static final long DEFAULT_MOVE_TIMEOUT_MILLIS = Duration.ofSeconds(30).toMillis();
+
     private final BotRunner bots;
     private final AgentClient agent;
 
@@ -96,8 +99,15 @@ public final class ScenarioRunner {
             }
 
             case "move_to" -> {
-                act(step, bot -> bot.moveTo(step.path("x").asDouble(), step.path("y").asDouble(), step.path("z").asDouble()));
-                yield ScenarioResult.StepResult.ok(index, action, "sent");
+                String mode = step.path("mode").asText("path");
+                long timeout = step.has("timeoutMillis")
+                        ? step.path("timeoutMillis").asLong()
+                        : step.path("timeout").asLong(DEFAULT_MOVE_TIMEOUT_MILLIS);
+                act(step, bot -> bot.moveTo(
+                        step.path("x").asDouble(), step.path("y").asDouble(),
+                        step.path("z").asDouble(), mode, timeout));
+                yield ScenarioResult.StepResult.ok(index, action,
+                        "arrived using " + mode.toLowerCase(java.util.Locale.ROOT));
             }
 
             case "break_block" -> {

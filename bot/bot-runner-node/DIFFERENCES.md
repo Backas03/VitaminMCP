@@ -9,6 +9,26 @@ byte. Each entry below is allowed there by name, so a difference nobody decided 
 
 ## Deliberate
 
+### `move` without an explicit mode
+
+| | |
+|---|---|
+| Java | Sends one position packet and returns immediately; it is a teleport |
+| Node | Walks to the destination with `mineflayer-pathfinder` and waits for arrival |
+
+Stage 4 needs movement that can fire events along the route, including pressure plates. The Java
+runner remains the stage-5 oracle and cannot simulate a route, so its legacy behaviour stays intact
+while the Node runner gives `move_to` the new default. `mode: teleport` remains available for setup
+steps that only need a bot at a coordinate.
+
+### Movement failure categories
+
+The Node runner reports `No path exists`, `Pathfinding timed out`, and `did not arrive ... within
+<n>ms` separately. The Java runner ignores the optional mode and timeout fields because its move is
+the legacy packet send. This distinction is necessary for a scenario author to know whether a
+destination is sealed or merely too far for the chosen deadline; it is not a wrapper around an
+opaque library error.
+
 ### `use` with an unknown face
 
 | | |
@@ -62,3 +82,12 @@ The server picks a spawn point inside a radius, so two bots do not stand in the 
 `spawn` or `position` reply cannot be diffed by value. The parity test compares the field count and
 checks each coordinate is spelled the way `Double.toString` spells it, which is the part that has
 actually been wrong.
+
+### Tick timing was measured, not assumed
+
+On Paper 1.21.8 at about 20 TPS, a Node path command reached its client-side goal and the next
+server-side `wait_for player_near` matched after one observed tick. The same run produced three
+server `PlayerInteractEvent` records with `action=PHYSICAL` while crossing the pressure-plate
+fixture. No fixed wait was needed. The runner still uses a wall-clock arrival timeout because the
+server cannot cancel a child process's local physics loop; the server predicate remains the final
+assertion of where the player actually is.

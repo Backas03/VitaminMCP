@@ -49,6 +49,20 @@ export class Dispatch {
       case protocol.POSITION:
         return positionLine(verb, this.#bots.position(command[1]));
 
+      case protocol.MOVE: {
+        const mode = command.length > 5 ? command[5] : 'path';
+        const timeout = command.length > 6 ? command[6] : undefined;
+        await this.#bots.move(
+          command[1],
+          Number(command[2]),
+          Number(command[3]),
+          Number(command[4]),
+          mode,
+          timeout,
+        );
+        return ok(verb);
+      }
+
       case protocol.BREAK: {
         actions.breakBlock(
           this.#bots.require(command[1]),

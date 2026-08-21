@@ -117,28 +117,36 @@ Everything the client was told. The stage that **deliberately breaks a contract*
 
 **Work**
 
-- [ ] `move_to` gains `mode`: `"path"` (default) and `"teleport"`. **Teleport is not deleted** —
+- [x] `move_to` gains `mode`: `"path"` (default) and `"teleport"`. **Teleport is not deleted** —
       putting a bot at a coordinate during setup has to stay fast and certain, and a walk that
       cannot reach its destination would break every scenario that only wanted a bot standing
       somewhere
-- [ ] `mineflayer-pathfinder` for `"path"`. Verify its LICENSE before depending on it, the same
+- [x] `mineflayer-pathfinder` for `"path"`. Verify its LICENSE before depending on it, the same
       rule that applies to `prismarine-physics`
-- [ ] `mode: "teleport"` has to coexist with mineflayer's own physics timer, which will fight a
+- [x] `mode: "teleport"` has to coexist with mineflayer's own physics timer, which will fight a
       position it did not compute. Expect this to be the fiddly one
-- [ ] `timeout`, and **failure that says which failure it was.** "No path exists" and "did not
+- [x] `timeout`, and **failure that says which failure it was.** "No path exists" and "did not
       arrive in time" are different answers, and a scenario that cannot tell them apart is a
       debugging dead end
-- [ ] Tick determinism against `design.md` §12 — mineflayer runs its own timer while `wait_for` is
+- [x] Tick determinism against `design.md` §12 — mineflayer runs its own timer while `wait_for` is
       evaluated server-side. Establish whether the two can disagree
 
 **DoD**
 
-- A bot walks around a wall to a destination it cannot reach in a straight line
-- Walking across a pressure plate fires the plugin listening for it — the concrete thing
+- [x] A bot walks around a wall to a destination it cannot reach in a straight line
+- [x] Walking across a pressure plate fires the plugin listening for it — the concrete thing
   teleporting never did
-- A destination sealed behind a barrier returns "no path", not a timeout
-- `mode: "teleport"` still works, so existing scenarios are unaffected
-- `wait_for player_near` resolves from the walk, with no fixed wait anywhere in the scenario
+- [x] A destination sealed behind a barrier returns "no path", not a timeout
+- [x] `mode: "teleport"` still works, so existing scenarios are unaffected
+- [x] `wait_for player_near` resolves from the walk, with no fixed wait anywhere in the scenario
+
+**Verified 2026-08-22 on Paper 1.21.8:** the Node bot walked around a two-block wall, crossed a
+pressure-plate row producing `PlayerInteractEvent(PHYSICAL)`, and reached the destination confirmed
+by `state_query` plus `wait_for player_near` after one observed tick. A sealed room returned `No
+path exists`; a one-millisecond route returned `did not arrive ... within 1ms`; teleport moved the
+server-side player to its target despite mineflayer's physics timer. The first teleport attempt
+exposed that timer overwriting the raw packet, so the runner now synchronises local position and
+velocity and briefly suspends physics before restoring it.
 
 ---
 

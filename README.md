@@ -243,7 +243,7 @@ Available inside `bot_run_scenario`.
 | | |
 |---|---|
 | `spawn` / `despawn` | connect or disconnect a bot |
-| `move_to` | move to coordinates |
+| `move_to` | walk to coordinates by default; use `mode: "teleport"` for fast setup placement. Optional `timeoutMillis` distinguishes a sealed route from a walk that did not arrive in time |
 | `break_block` / `use_block` | break, or right-click a block — `use_block` is how you open a chest |
 | `use_entity` | right-click an NPC, villager or armour stand, named by the coordinates it stands at |
 | `click_slot` | click a slot: `left`, `right`, `shift_left`, `shift_right` |
@@ -453,16 +453,21 @@ Recommended alongside those:
 allow-flight=true
 ```
 
-**The bot has no physics engine.** `move_to` sends one position packet at the destination and calls
-itself on the ground; nothing simulates gravity, acceleration, or the path in between. That is
-deliberate — a bot that reimplemented client movement would be testing our physics rather than your
-plugin — but it means the server's flight check sees a player crossing distance no walking player
-could, and kicks it with `Flying is not enabled on this server`. The bot vanishes mid-scenario and
-the next step fails somewhere unrelated to the real cause.
+`move_to` walks to its destination by default, using the same client-side physics loop that sends
+the movement packets between the two points. That means plugins listening for pressure plates and
+movement events observe the route. A path that cannot be found fails with `No path exists`; a path
+that does not arrive before `timeoutMillis` fails with `did not arrive ... within ...`.
 
-With `allow-flight=true` the check is off and `move_to` behaves like a teleport. It costs nothing on
-a test server. Leave it alone on a real one — and note this is another reason not to point bots at
-production.
+For setup steps that only need a bot at a coordinate, use `"mode":"teleport"`. This retains the
+legacy one-position-packet behaviour and is still fast, but it does not fire the events that a
+walking player would have caused.
+
+Walking does not dig through or place blocks. The pathfinder is intentionally configured for
+ordinary traversal so a test wall remains a test wall.
+
+`allow-flight=true` is still useful only for legacy Java-runner scenarios that use the packet
+teleport, and for an explicit `mode: "teleport"` step. Leave it alone on a real one — and note this
+is another reason not to point bots at production.
 
 ### 4. Connect
 

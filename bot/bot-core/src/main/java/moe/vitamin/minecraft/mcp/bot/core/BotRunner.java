@@ -222,6 +222,20 @@ public final class BotRunner implements AutoCloseable {
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));
         }
 
+        /** Moves with the Node runner's path/teleport mode and arrival timeout. */
+        public void moveTo(double x, double y, double z, String mode, long timeoutMillis)
+                throws IOException {
+            if (!"path".equalsIgnoreCase(mode) && !"teleport".equalsIgnoreCase(mode)) {
+                throw new IOException("Unknown movement mode '" + mode + "'. Use path or teleport.");
+            }
+            if (timeoutMillis <= 0) {
+                throw new IOException("Movement timeout must be positive: " + timeoutMillis + "ms");
+            }
+            runner.send(RunnerProtocol.MOVE, name,
+                    String.valueOf(x), String.valueOf(y), String.valueOf(z),
+                    mode.toLowerCase(java.util.Locale.ROOT), String.valueOf(timeoutMillis));
+        }
+
         /** Right-clicks the nearest entity to a point — an NPC, a villager, an armour stand. */
         public String useEntity(double x, double y, double z, double radius, String type)
                 throws IOException {

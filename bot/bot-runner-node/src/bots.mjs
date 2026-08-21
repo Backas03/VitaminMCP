@@ -1,4 +1,5 @@
 import mineflayer from 'mineflayer';
+import { configurePathfinder, loadPathfinder, moveTo } from './movement.mjs';
 
 import { collect } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
@@ -55,6 +56,7 @@ export class BotRegistry {
       fakeHost: addressField(this.#host, address, id),
       checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
     });
+    loadPathfinder(bot);
 
     // Before waiting to join, not after: messages are events, and a plugin that greets or refuses
     // on join says so within a tick of the bot arriving. Attaching afterwards loses exactly the
@@ -75,8 +77,13 @@ export class BotRegistry {
     bot.on('kicked', () => {});
 
     this.#bots.set(name, bot);
+    configurePathfinder(bot);
     await settle(bot, name);
     return position(bot);
+  }
+
+  async move(name, x, y, z, mode, timeoutMillis) {
+    await moveTo(this.require(name), name, x, y, z, mode, timeoutMillis);
   }
 
   despawn(name) {
