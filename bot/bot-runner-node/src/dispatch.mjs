@@ -1,4 +1,5 @@
 import * as actions from './actions.mjs';
+import * as clientview from './clientview.mjs';
 import * as protocol from './protocol.mjs';
 
 /**
@@ -121,6 +122,42 @@ export class Dispatch {
         );
       }
 
+      case protocol.INSPECT: {
+        const view = clientview.inspect(this.#bots.require(command[1]), command[1]);
+        const open = view.menu;
+        const board = view.scoreboard;
+        return protocol.encode(
+          protocol.OK,
+          verb,
+          String(open === null ? -1 : open.containerId),
+          open === null ? '' : protocol.sanitize(open.title),
+          items(view.items),
+          recordList(view.messages),
+          bossBarList(view.bossBars),
+          board === null ? '' : protocol.sanitize(board.title),
+          board === null ? '' : recordList(board.lines),
+        );
+      }
+
+      // Not protocol. A development aid for seeing what prismarine actually hands over, because
+      // the shapes of item components and window titles are not documented anywhere useful.
+      case '__dump': {
+        const bot = this.#bots.require(command[1]);
+        const window = bot.currentWindow;
+        const item = window?.slots?.find((slot) => slot);
+        return protocol.encode(protocol.OK, verb, JSON.stringify({
+          windowTitle: window?.title,
+          windowTitleType: typeof window?.title,
+          scoreboardTitle: bot.scoreboard?.sidebar?.title,
+          scoreboardTitleType: typeof bot.scoreboard?.sidebar?.title,
+          scoreboardItems: bot.scoreboard?.sidebar?.items?.map((i) => ({ name: i.name, value: i.value })),
+          itemKeys: item ? Object.keys(item) : null,
+          customName: item?.customName,
+          customLore: item?.customLore,
+          components: item?.components,
+        }, (key, value) => (typeof value === 'bigint' ? String(value) : value)));
+      }
+
       default:
         return protocol.encode(protocol.ERROR, verb, `unknown command '${verb}'`);
     }
@@ -129,6 +166,35 @@ export class Dispatch {
 
 function ok(verb) {
   return protocol.encode(protocol.OK, verb);
+}
+
+/** `slot ␟ itemId ␟ amount ␟ name ␟ customModelData ␟ lore`, joined by ␞. */
+function items(list) {
+  return list
+    .map((item) => [
+      item.slot,
+      protocol.sanitize(item.itemId),
+      item.amount,
+      protocol.sanitize(item.name),
+      protocol.sanitize(item.customModelData),
+      protocol.sanitize(item.lore),
+    ].join(protocol.UNIT_SEPARATOR))
+    .join(protocol.RECORD_SEPARATOR);
+}
+
+/** `title ␟ progress ␟ colour`, one record each. */
+function bossBarList(bars) {
+  return bars
+    .map((bar) => [
+      protocol.sanitize(bar.title),
+      protocol.javaFloat(bar.progress),
+      protocol.sanitize(bar.color),
+    ].join(protocol.UNIT_SEPARATOR))
+    .join(protocol.RECORD_SEPARATOR);
+}
+
+function recordList(values) {
+  return values.map(protocol.sanitize).join(protocol.RECORD_SEPARATOR);
 }
 
 function positionLine(verb, at) {

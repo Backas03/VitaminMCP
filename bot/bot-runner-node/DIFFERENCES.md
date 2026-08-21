@@ -21,6 +21,27 @@ The Java text is not a message, it is an unhandled `IllegalArgumentException` fr
 a valid face would be. The scenario runner shows this string to whoever wrote the step, so it is
 worth being a sentence.
 
+### Vanilla translatable messages arrive as text, not as a translation key
+
+| | |
+|---|---|
+| Java | `multiplayer.player.joined` |
+| Node | `Tester1 joined the game` |
+
+A component like the join message is *translatable*: the server sends a key and the arguments, and
+the client looks the text up. Adventure's plain-text serializer has no translations registered, so
+the Java runner reports the key. mineflayer bundles the language file and resolves it.
+
+The resolved text is kept, because `assert_message` is written by a person, and nobody writes
+`multiplayer.player.joined` when they mean "joined the game". A plugin's own messages are literal
+components and read the same either way, so this only affects vanilla text.
+
+**Left inconsistent on purpose, for now.** The same resolution is *not* applied to a menu title,
+which still reports `container.chest` rather than `Chest`, because that half does match the Java
+runner. Resolving it too would be better for `wait_for inventory_open`, whose title argument a
+person also writes by hand — but it is a second contract change and belongs to a decision made
+deliberately at stage 5, not to a fix made in passing at stage 3.
+
 ## Not differences, but worth knowing
 
 ### The join lockout is longer than the documentation says

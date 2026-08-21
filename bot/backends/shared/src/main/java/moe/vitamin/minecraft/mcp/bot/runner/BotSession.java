@@ -353,7 +353,7 @@ public final class BotSession implements AutoCloseable {
             if (item == null) {
                 continue;
             }
-            out.add(new MenuItem(slot, item.getId(), item.getAmount(),
+            out.add(new MenuItem(slot, String.valueOf(item.getId()), item.getAmount(),
                     ItemText.nameOf(item), ItemText.modelDataOf(item), ItemText.loreOf(item)));
         }
         return out;

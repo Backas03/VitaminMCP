@@ -71,6 +71,22 @@ export function sanitize(text) {
  * 1e7 is not a hypothetical here: the world border reaches 3e7, which Java prints as `3.0E7`.
  */
 export function javaDouble(value) {
+  return javaFloatingPoint(value, (candidate) => candidate);
+}
+
+/**
+ * A float spelled the way `Float.toString` spells it.
+ *
+ * Boss bar progress is a `float` on the Java side, and `Float.toString` prints the shortest
+ * decimal that round-trips through 32 bits — `0.35`. The same bits widened to a JavaScript number
+ * are 0.3499999940395355, and printing that is both wrong and unreadable. `Math.fround` is what
+ * makes the round trip test the right width.
+ */
+export function javaFloat(value) {
+  return javaFloatingPoint(value, Math.fround);
+}
+
+function javaFloatingPoint(value, narrow) {
   if (Number.isNaN(value)) {
     return 'NaN';
   }
@@ -85,9 +101,7 @@ export function javaDouble(value) {
   const sign = value < 0 ? '-' : '';
   const magnitude = Math.abs(value);
 
-  // Shortest digits that round-trip, which is what both languages promise; JavaScript's own
-  // formatting is the cheapest way to obtain them.
-  const [digits, exponent] = shortestDigits(magnitude);
+  const [digits, exponent] = shortestDigits(magnitude, narrow);
 
   if (magnitude >= 1e-3 && magnitude < 1e7) {
     // Plain notation: exponent is the number of digits before the point.
@@ -108,9 +122,23 @@ export function javaDouble(value) {
 /**
  * The significant digits of a positive finite number, and the decimal exponent such that the
  * value is `0.<digits> * 10^exponent`.
+ *
+ * "Shortest that round-trips" is what both Java and JavaScript promise, but they promise it at
+ * different widths, so the round trip has to be tested at the width being printed — `narrow` is
+ * what makes that a float rather than a double.
  */
-function shortestDigits(magnitude) {
-  const exponential = magnitude.toExponential(); // e.g. "7.9e+1"
+function shortestDigits(magnitude, narrow) {
+  const target = narrow(magnitude);
+  let exponential = magnitude.toExponential();
+
+  for (let digits = 1; digits <= 17; digits += 1) {
+    const candidate = magnitude.toExponential(digits - 1);
+    if (narrow(Number(candidate)) === target) {
+      exponential = candidate;
+      break;
+    }
+  }
+
   const [mantissa, exponentPart] = exponential.split('e');
   const digits = mantissa.replace('.', '').replace(/0+$/, '') || '0';
   return [digits, Number(exponentPart) + 1];

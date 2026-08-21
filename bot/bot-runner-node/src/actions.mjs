@@ -1,4 +1,5 @@
 import { javaDouble } from './protocol.mjs';
+import { plainText } from './text.mjs';
 
 /**
  * What a bot can do once it is in the world.
@@ -256,32 +257,4 @@ function matchesType(entity, type) {
 /** Java formats these with %.1f, which rounds half away from zero rather than to even. */
 function fixed(value) {
   return value.toFixed(1);
-}
-
-/** A window title arrives as chat JSON as often as a string, and both have to end up readable. */
-export function plainText(title) {
-  if (title == null) {
-    return '';
-  }
-  if (typeof title === 'string') {
-    // prismarine-windows hands over the raw JSON string for a chat component.
-    if (title.startsWith('{') || title.startsWith('[')) {
-      try {
-        return plainText(JSON.parse(title));
-      } catch {
-        return title;
-      }
-    }
-    return title;
-  }
-  if (Array.isArray(title)) {
-    return title.map(plainText).join('');
-  }
-  if (typeof title === 'object') {
-    const own = typeof title.text === 'string' ? title.text : '';
-    const translated = own === '' && typeof title.translate === 'string' ? title.translate : '';
-    const extra = Array.isArray(title.extra) ? title.extra.map(plainText).join('') : '';
-    return own + translated + extra;
-  }
-  return String(title);
 }

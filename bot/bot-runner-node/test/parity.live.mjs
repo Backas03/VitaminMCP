@@ -45,6 +45,11 @@ const KNOWN_DIFFERENCES = [
     java: /^err\tuse\tNo enum constant .*Direction\.SIDEWAYS$/,
     node: /^err\tuse\tUnknown face 'sideways'\./,
   },
+  {
+    what: 'vanilla translatable chat renders as text rather than as its key',
+    java: /	multiplayer\.player\.joined	/,
+    node: /	<bot> joined the game	/,
+  },
 ];
 
 function isKnown(javaLine, nodeLine) {
@@ -64,6 +69,7 @@ const script = (bot) => [
   ['use', bot, '0', '-64', '0', 'sideways'],
   ['use_entity', bot, '30000', '200', '30000', '2'],
   ['use_entity', bot, '30000', '200', '30000', '2', 'villager'],
+  ['inspect', bot],
   ['nonsense', bot],
   ['break', 'Nobody', '0', '0', '0'],
   ['despawn', bot],

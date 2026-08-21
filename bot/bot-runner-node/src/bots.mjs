@@ -1,5 +1,6 @@
 import mineflayer from 'mineflayer';
 
+import { collect } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
 
 /** How long a bot has to get from a socket to standing in the world. */
@@ -54,6 +55,11 @@ export class BotRegistry {
       fakeHost: addressField(this.#host, address, id),
       checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
     });
+
+    // Before waiting to join, not after: messages are events, and a plugin that greets or refuses
+    // on join says so within a tick of the bot arriving. Attaching afterwards loses exactly the
+    // messages most worth having.
+    collect(bot);
 
     try {
       await joined(bot, name);

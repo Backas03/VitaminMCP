@@ -277,7 +277,7 @@ public final class BotRunner implements AutoCloseable {
             for (String record : RunnerProtocol.records(reply[4])) {
                 String[] parts = RunnerProtocol.fields(record);
                 items.add(new MenuItem(
-                        Integer.parseInt(parts[0]), Integer.parseInt(parts[1]),
+                        Integer.parseInt(parts[0]), parts[1],
                         Integer.parseInt(parts[2]), parts[3], parts[4], parts[5]));
             }
             List<BossBar> bossBars = new ArrayList<>();
