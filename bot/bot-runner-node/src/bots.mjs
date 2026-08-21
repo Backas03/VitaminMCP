@@ -1,0 +1,195 @@
+import mineflayer from 'mineflayer';
+
+import { addressField, identity } from './identity.mjs';
+
+/** How long a bot has to get from a socket to standing in the world. */
+const LOGIN_TIMEOUT_MILLIS = 30_000;
+
+/** How long it then has to stop falling. */
+const SETTLE_TIMEOUT_MILLIS = 15_000;
+
+/** Matching the Java runner: five polls 50ms apart with no change in Y is "landed". */
+const SETTLED_CHECKS = 5;
+const SETTLE_POLL_MILLIS = 50;
+
+/** The bots this runner holds, and the server they all connect to. */
+export class BotRegistry {
+  #host;
+
+  #port;
+
+  #version;
+
+  #bots = new Map();
+
+  constructor(host, port, version) {
+    this.#host = host;
+    this.#port = port;
+    this.#version = version;
+  }
+
+  /** Connects a bot and waits until it is standing in the world. */
+  async spawn(name, clientIp) {
+    // The Java runner overwrites the map entry, so a repeated spawn is not an error there and must
+    // not become one here. Closing the old socket first is the only difference: leaving it open
+    // would hold a player slot under a name this runner no longer tracks.
+    const existing = this.#bots.get(name);
+    if (existing) {
+      this.#bots.delete(name);
+      quietly(() => existing.quit());
+    }
+
+    const id = identity(name);
+    // Omitted, the bot reports the address it really connects from. The Java runner asks the
+    // socket for its own local address; before the socket exists there is nothing to ask, so
+    // loopback stands in — this runner is always launched beside the MCP server.
+    const address = clientIp && clientIp.trim() ? clientIp : '127.0.0.1';
+
+    const bot = mineflayer.createBot({
+      host: this.#host,
+      port: this.#port,
+      username: id.name,
+      auth: 'offline',
+      version: this.#version,
+      fakeHost: addressField(this.#host, address, id),
+      checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
+    });
+
+    try {
+      await joined(bot, name);
+    } catch (failure) {
+      quietly(() => bot.end());
+      throw failure;
+    }
+
+    // From here the bot outlives this call, so it needs an owner for its failures. An unhandled
+    // 'error' is fatal to the process in Node, which would turn one kicked bot into a dead runner
+    // and lose every other bot with it.
+    bot.on('error', () => {});
+    bot.on('kicked', () => {});
+
+    this.#bots.set(name, bot);
+    await settle(bot, name);
+    return position(bot);
+  }
+
+  despawn(name) {
+    const bot = this.#bots.get(name);
+    if (!bot) {
+      return;
+    }
+    this.#bots.delete(name);
+    quietly(() => bot.quit());
+  }
+
+  position(name) {
+    return position(this.require(name));
+  }
+
+  /** Disconnects every bot. */
+  shutdown() {
+    for (const bot of this.#bots.values()) {
+      quietly(() => bot.quit());
+    }
+    this.#bots.clear();
+  }
+
+  /** The bot, or the error the Java runner raises for the same mistake. */
+  require(name) {
+    const bot = this.#bots.get(name);
+    if (!bot) {
+      throw new Error(`no bot named ${name} — spawn it before acting with it`);
+    }
+    return bot;
+  }
+}
+
+function position(bot) {
+  const at = bot.entity?.position;
+  return at ? { x: at.x, y: at.y, z: at.z } : { x: 0, y: 0, z: 0 };
+}
+
+/**
+ * Waits until the bot has stopped falling.
+ *
+ * A bot that answers `spawn` mid-fall reports a position it is about to leave, and every
+ * coordinate assertion downstream inherits the error. The Java runner settles the same way, with
+ * the same numbers.
+ */
+async function settle(bot, name) {
+  const deadline = Date.now() + SETTLE_TIMEOUT_MILLIS;
+  let lastY = Number.NaN;
+  let settledChecks = 0;
+
+  while (Date.now() < deadline) {
+    const at = bot.entity?.position;
+    if (at) {
+      if (Math.abs(at.y - lastY) < 1.0e-6) {
+        if (++settledChecks >= SETTLED_CHECKS) {
+          return;
+        }
+      } else {
+        settledChecks = 0;
+        lastY = at.y;
+      }
+    }
+    await delay(SETTLE_POLL_MILLIS);
+  }
+
+  const at = bot.entity?.position;
+  throw new Error(
+    `Bot ${name} never settled within ${SETTLE_TIMEOUT_MILLIS}ms; last position `
+      + (at ? `${at.x}, ${at.y}, ${at.z}` : 'unknown'),
+  );
+}
+
+/** Resolves when the bot is in the world; rejects on a kick, an error, or the timeout. */
+function joined(bot, name) {
+  return new Promise((resolve, reject) => {
+    const finish = (settleFn, value) => {
+      clearTimeout(timer);
+      bot.removeListener('spawn', onSpawn);
+      bot.removeListener('kicked', onKicked);
+      bot.removeListener('error', onError);
+      settleFn(value);
+    };
+
+    const onSpawn = () => finish(resolve);
+    const onKicked = (reason) => finish(reject, new Error(`Bot ${name} was kicked: ${describe(reason)}`));
+    const onError = (error) => finish(reject, error);
+
+    const timer = setTimeout(
+      () => finish(reject, new Error(`Bot ${name} did not join within ${LOGIN_TIMEOUT_MILLIS}ms`)),
+      LOGIN_TIMEOUT_MILLIS,
+    );
+
+    bot.once('spawn', onSpawn);
+    bot.once('kicked', onKicked);
+    bot.once('error', onError);
+  });
+}
+
+/** A kick reason is chat JSON as often as a string, and both have to end up readable. */
+function describe(reason) {
+  if (typeof reason === 'string') {
+    return reason;
+  }
+  try {
+    return JSON.stringify(reason);
+  } catch {
+    return String(reason);
+  }
+}
+
+/** Closing an already-closed socket must not be the reason a shutdown fails. */
+function quietly(action) {
+  try {
+    action();
+  } catch {
+    // Intentionally ignored.
+  }
+}
+
+function delay(millis) {
+  return new Promise((resolve) => setTimeout(resolve, millis));
+}

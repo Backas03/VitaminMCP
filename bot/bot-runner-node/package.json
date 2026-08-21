@@ -9,5 +9,12 @@
   },
   "dependencies": {
     "mineflayer": "^4.37.1"
+  },
+  "bin": {
+    "vitaminmcp-bot-runner": "runner.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:live": "node test/lifecycle.live.mjs"
   }
 }

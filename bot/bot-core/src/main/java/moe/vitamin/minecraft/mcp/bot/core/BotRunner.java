@@ -37,15 +37,12 @@ public final class BotRunner implements AutoCloseable {
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
     }
 
-    /** Launches the runner jar and waits until it is ready. */
-    public static BotRunner launch(Path runnerJar, Path javaHome, String host, int port)
+    /** Launches the runner and waits until it is ready. */
+    public static BotRunner launch(Path runnerPath, Path javaHome, String host, int port)
             throws IOException {
-        Objects.requireNonNull(runnerJar, "runnerJar");
+        Objects.requireNonNull(runnerPath, "runnerPath");
 
-        Process process = new ProcessBuilder(
-                javaHome.resolve("bin").resolve("java").toString(),
-                "-jar", runnerJar.toAbsolutePath().toString(),
-                host, String.valueOf(port))
+        Process process = new ProcessBuilder(commandFor(runnerPath, javaHome, host, port))
 
                 .redirectError(ProcessBuilder.Redirect.INHERIT)
                 .start();
@@ -66,6 +63,54 @@ public final class BotRunner implements AutoCloseable {
     /** The protocol the loaded backend speaks, or 0 if the runner did not say. */
     public int protocol() {
         return protocol;
+    }
+
+    /**
+     * How to start this runner, decided by what it is.
+     *
+     * The runner is a separate process precisely so the bot implementation can be swapped without
+     * anything above this line noticing, and a JavaScript runner is that swap. Both are launched
+     * the same way and answer the same protocol, so which one is in use is a path and nothing
+     * more — which is what lets the two be run against the same server on the same afternoon.
+     */
+    static List<String> commandFor(Path runner, Path javaHome, String host, int port) {
+        String path = runner.toAbsolutePath().toString();
+        List<String> command = new ArrayList<>();
+
+        if (isScript(runner)) {
+            command.add(node());
+            command.add(path);
+        } else {
+            command.add(javaHome.resolve("bin").resolve("java").toString());
+            command.add("-jar");
+            command.add(path);
+        }
+
+        command.add(host);
+        command.add(String.valueOf(port));
+        return command;
+    }
+
+    private static boolean isScript(Path runner) {
+        String name = runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".mjs") || name.endsWith(".js");
+    }
+
+    /**
+     * The node to run a script runner with.
+     *
+     * {@code VITAMINMCP_NODE} wins for the same reason {@code JAVA_HOME} does on the other side: a
+     * machine with several runtimes usually means one of them was chosen deliberately, and PATH is
+     * the one nobody remembers setting.
+     */
+    private static String node() {
+        String configured = System.getenv("VITAMINMCP_NODE");
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")
+                ? "node.exe"
+                : "node";
     }
 
     /** Connects a bot and waits until it is standing in the world. */
