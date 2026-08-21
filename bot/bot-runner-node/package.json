@@ -15,6 +15,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
-    "test:live": "node test/lifecycle.live.mjs"
+    "test:live": "node test/lifecycle.live.mjs",
+    "test:parity": "node test/parity.live.mjs",
+    "test:actions": "node test/actions.live.mjs"
   }
 }

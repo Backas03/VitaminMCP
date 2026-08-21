@@ -1,3 +1,4 @@
+import * as actions from './actions.mjs';
 import * as protocol from './protocol.mjs';
 
 /**
@@ -46,6 +47,79 @@ export class Dispatch {
 
       case protocol.POSITION:
         return positionLine(verb, this.#bots.position(command[1]));
+
+      case protocol.BREAK: {
+        actions.breakBlock(
+          this.#bots.require(command[1]),
+          command[1],
+          Number(command[2]),
+          Number(command[3]),
+          Number(command[4]),
+        );
+        return ok(verb);
+      }
+
+      case protocol.COMMAND: {
+        actions.command(this.#bots.require(command[1]), command[1], command[2]);
+        return ok(verb);
+      }
+
+      case protocol.CHAT: {
+        actions.chat(this.#bots.require(command[1]), command[1], command[2]);
+        return ok(verb);
+      }
+
+      case protocol.USE: {
+        actions.useBlock(
+          this.#bots.require(command[1]),
+          command[1],
+          Number(command[2]),
+          Number(command[3]),
+          Number(command[4]),
+          command.length > 5 ? command[5] : '',
+        );
+        return ok(verb);
+      }
+
+      case protocol.USE_ENTITY: {
+        const radius = command.length > 5 && command[5].trim() !== '' ? Number(command[5]) : 2.0;
+        const type = command.length > 6 ? command[6] : null;
+        const entityId = actions.useEntity(
+          this.#bots.require(command[1]),
+          command[1],
+          Number(command[2]),
+          Number(command[3]),
+          Number(command[4]),
+          radius,
+          type,
+        );
+        return protocol.encode(protocol.OK, verb, String(entityId));
+      }
+
+      case protocol.CLICK: {
+        await actions.clickSlot(
+          this.#bots.require(command[1]),
+          command[1],
+          Number(command[2]),
+          command.length > 3 ? command[3] : 'left',
+        );
+        return ok(verb);
+      }
+
+      case protocol.CLOSE_MENU: {
+        actions.closeMenu(this.#bots.require(command[1]), command[1]);
+        return ok(verb);
+      }
+
+      case protocol.MENU: {
+        const open = actions.menu(this.#bots.require(command[1]), command[1]);
+        return protocol.encode(
+          protocol.OK,
+          verb,
+          String(open === null ? -1 : open.containerId),
+          open === null ? '' : protocol.sanitize(open.title),
+        );
+      }
 
       default:
         return protocol.encode(protocol.ERROR, verb, `unknown command '${verb}'`);
