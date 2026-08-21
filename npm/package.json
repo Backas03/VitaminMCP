@@ -1,0 +1,42 @@
+{
+  "name": "vitaminmcp",
+  "version": "1.5.0",
+  "mcpName": "io.github.backas03/vitaminmcp",
+  "description": "MCP server for testing Minecraft plugins: drives a real Paper server and real protocol bots from an AI agent.",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "minecraft",
+    "paper",
+    "purpur",
+    "bukkit",
+    "plugin-testing",
+    "end-to-end-testing"
+  ],
+  "homepage": "https://github.com/Backas03/VitaminMCP-minecraft#readme",
+  "bugs": "https://github.com/Backas03/VitaminMCP-minecraft/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Backas03/VitaminMCP-minecraft.git",
+    "directory": "npm"
+  },
+  "license": "MIT",
+  "author": "Backas03",
+  "type": "module",
+  "bin": {
+    "vitaminmcp": "bin/vitaminmcp.mjs"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "checksums.json",
+    "README.md"
+  ],
+  "scripts": {
+    "stamp": "node scripts/stamp-checksums.mjs",
+    "prepublishOnly": "node scripts/stamp-checksums.mjs --verify"
+  }
+}

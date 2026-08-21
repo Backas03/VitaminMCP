@@ -141,3 +141,6 @@ AGENTS.md
 
 # Loose patches kept while deciding whether to keep a change
 *.patch
+
+# Stamped into the npm package at release, from the release that exists by then.
+npm/checksums.json

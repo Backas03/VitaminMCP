@@ -1,0 +1,91 @@
+# Cuts a release: the three jars, the npm launcher, and the registry entry that points at it.
+#
+# Ordering is not arbitrary. The npm package pins the sha256 of jars that must already be
+# downloadable, and the registry validates that the npm package already exists and claims this
+# server name. So: jars, then npm, then registry — and every check that can fail runs before the
+# first irreversible step, because none of the three can be unpublished.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+
+      - name: Agree on one version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          gradle=$(sed -n 's/^version = "\(.*\)"$/\1/p' \
+            build-logic/src/main/kotlin/vitaminmcp.java-conventions.gradle.kts)
+          server=$(node -p "require('./server.json').version")
+          package=$(node -p "require('./server.json').packages[0].version")
+
+          echo "tag=$tag gradle=$gradle server.json=$server package=$package"
+          for found in "$gradle" "$server" "$package"; do
+            if [ "$found" != "$tag" ]; then
+              echo "::error::Version mismatch: tag $tag, but found $found" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build the jars
+        run: ./gradlew dist --no-daemon
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            build/dist/VitaminMCP.jar \
+            build/dist/mcp-server.jar \
+            build/dist/bot-runner.jar
+
+      # Pins the bytes just uploaded, so the package can only ever install this release.
+      - name: Stamp the launcher
+        working-directory: npm
+        run: node scripts/stamp-checksums.mjs --dist ../build/dist
+
+      - name: Publish the launcher
+        working-directory: npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          sudo mv mcp-publisher /usr/local/bin/
+
+      - name: Publish to the MCP registry
+        run: |
+          set -euo pipefail
+          mcp-publisher login github-oidc
+          mcp-publisher publish
