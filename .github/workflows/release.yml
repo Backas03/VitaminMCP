@@ -11,18 +11,34 @@ on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+
+  # For finishing a release that stopped partway. Every step below asks whether its work is
+  # already done, so a dispatch for a version that is half published completes it rather than
+  # repeating it.
   workflow_dispatch:
+    inputs:
+      version:
+        description: The released version to publish, for example 1.5.0
+        required: true
+        type: string
 
 permissions:
   contents: write
   id-token: write
+
+env:
+  VERSION: ${{ inputs.version || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
+      # The released source, not the branch. A dispatch runs this file from the default branch,
+      # so a workflow fixed after the fact can still finish a release cut before it.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
 
       - uses: actions/setup-java@v4
         with:
@@ -37,7 +53,7 @@ jobs:
       - name: Agree on one version
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="${VERSION}"
           gradle=$(sed -n 's/^version = "\(.*\)"$/\1/p' \
             build-logic/src/main/kotlin/vitaminmcp.java-conventions.gradle.kts)
           server=$(node -p "require('./server.json').version")
@@ -64,33 +80,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists; uploading any missing jars."
-            gh release upload "${GITHUB_REF_NAME}" \
-              build/dist/VitaminMCP.jar \
-              build/dist/mcp-server.jar \
-              build/dist/bot-runner.jar \
-              --clobber
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+
+            # Uploaded, never replaced. A shadow jar is not byte-reproducible — the same source
+            # builds a different file every time — so re-uploading would change the bytes a
+            # published npm version pins, and turn every install of it into a checksum failure
+            # that reads exactly like a compromised download. An asset that is already there is
+            # the asset, whatever this run happened to build.
+            echo "Release ${VERSION} exists; uploading only assets it does not have."
+            present=$(gh release view "${VERSION}" --json assets --jq '.assets[].name')
+            for jar in VitaminMCP.jar mcp-server.jar bot-runner.jar; do
+              if grep -qx "$jar" <<<"$present"; then
+                echo "  $jar is already published; leaving it alone."
+              else
+                gh release upload "${VERSION}" "build/dist/$jar"
+              fi
+            done
           else
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "${GITHUB_REF_NAME}" \
+            gh release create "${VERSION}" \
+              --title "${VERSION}" \
               --generate-notes \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
               build/dist/bot-runner.jar
           fi
 
-      # Pins the bytes just uploaded, so the package can only ever install this release.
+      # Pins what the release actually serves, which on a rerun is not what this run just built.
       - name: Stamp the launcher
         working-directory: npm
-        run: node scripts/stamp-checksums.mjs --dist ../build/dist
+        run: node scripts/stamp-checksums.mjs --tag "${VERSION}"
 
       - name: Publish the launcher
         working-directory: npm
         run: |
           set -euo pipefail
-          if npm view "vitaminmcp@${GITHUB_REF_NAME}" version >/dev/null 2>&1; then
-            echo "vitaminmcp@${GITHUB_REF_NAME} is already on npm; nothing to publish."
+          if npm view "vitaminmcp@${VERSION}" version >/dev/null 2>&1; then
+            echo "vitaminmcp@${VERSION} is already on npm; nothing to publish."
             exit 0
           fi
           npm publish --access public --provenance
@@ -120,8 +145,8 @@ jobs:
               });
             " "$name" || true)
 
-          if [ "$published" = "${GITHUB_REF_NAME}" ]; then
-            echo "${name} ${GITHUB_REF_NAME} is already in the registry; nothing to publish."
+          if [ "$published" = "${VERSION}" ]; then
+            echo "${name} ${VERSION} is already in the registry; nothing to publish."
             exit 0
           fi
           mcp-publisher login github-oidc

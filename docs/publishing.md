@@ -24,9 +24,29 @@ The package name `vitaminmcp` is claimed by whoever publishes it first, so publi
 announcing anything.
 
 - An npm account, and `npm login` locally for the first release
-- For CI: an **automation** access token from npmjs.com (Access Tokens → Generate → Automation),
-  stored as the repository secret **`NPM_TOKEN`**. Granular tokens work too, scoped to this
-  package with read/write
+- For CI: a token that can publish **without an interactive second factor**, stored as the
+  repository secret **`NPM_TOKEN`**
+
+**The second factor is the part that bites.** An account with 2FA required for publishing — which
+is the default for new accounts — rejects a publish from CI unless the token is explicitly allowed
+to bypass it: a classic **Automation** token, or a granular token with **Bypass 2FA** enabled. A
+token without that fails with
+
+```
+404 Not Found - PUT https://registry.npmjs.org/vitaminmcp
+```
+
+which says nothing about two-factor anything. npm answers an authorization failure with 404 rather
+than 403 so that it does not disclose whether a package exists, and a package you are creating does
+not exist yet. Publishing the same thing locally is what produces the honest error, because there
+it can ask for a one-time password instead:
+
+```
+403 Forbidden - Two-factor authentication or granular access token with bypass 2fa enabled is required
+```
+
+A granular token also has to be scoped to **all packages** for a first publish. Scoped to selected
+packages, it cannot create one that is not in its list yet — which a new package never is.
 
 The workflow publishes with `--provenance`, which links the tarball to the workflow run that built
 it. That needs `id-token: write`, which the workflow already declares.
@@ -103,8 +123,23 @@ gh release create 1.5.0 --title 1.5.0 --generate-notes \
 ```
 
 ```bash
-cd npm && node scripts/stamp-checksums.mjs --dist ../build/dist && npm publish --access public
+cd npm && node scripts/stamp-checksums.mjs --tag 1.5.0 && npm publish --access public
 ```
+
+`--tag` reads the hashes from the release you just created rather than from the jars on disk. Use
+it whenever the release already exists: a shadow jar is not byte-reproducible, so the same source
+built twice gives two different files, and only one of them is the one people will download.
+
+`npm publish` asks for a one-time password here, which is why the first release is easier by hand
+than through a token.
+
+If npm succeeded but the registry step did not, finish it without cutting anything again:
+
+```bash
+gh workflow run Release --ref master -f version=1.5.0
+```
+
+Every step checks whether its own work is already done, so that publishes only what is missing.
 
 Then install the publisher and claim the name. On Windows:
 
