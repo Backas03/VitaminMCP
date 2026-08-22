@@ -14,6 +14,11 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":orchestrator" to setOf(":contract"),
     ":testkit" to setOf(":bot-core", ":orchestrator", ":contract"),
     ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
+
+    // The dogfooding fixture depends on nothing of ours on purpose: it is a plugin like
+    // any other plugin a user would point VitaminMCP at, and a dependency here would make
+    // it a privileged one.
+    ":dogfood" to emptySet(),
 )
 
 fun allowedFor(path: String): Set<String>? = when {
