@@ -143,7 +143,12 @@ final class AgentTools {
                         + "reading a menu — opening one is not synchronous with the command that "
                         + "caused it. Use log_matches for work that changes nothing observable, "
                         + "such as a plugin loading a player's data asynchronously: waiting a "
-                        + "fixed number of ticks for that is a sleep by another name.",
+                        + "fixed number of ticks for that is a sleep by another name. What this "
+                        + "CANNOT wait for is a message arriving at a player: chat, action bar "
+                        + "and title are sent to a client and never reach the server-side agent, "
+                        + "so no condition here can see them. Wait for those on the bot side "
+                        + "instead — a scenario's assert_message waits, and bot_inspect reads "
+                        + "what has arrived so far.",
                 properties -> {
                     stringProperty(properties, "condition",
                             "Condition type, e.g. 'block_is_not' or 'event'.");

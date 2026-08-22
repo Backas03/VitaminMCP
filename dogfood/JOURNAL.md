@@ -10,6 +10,76 @@ Newest first.
 
 ---
 
+## 2026-08-23 — `async-reply`
+
+**Diagnosis:** right, in 15 tool calls. It also pushed back on the report — measured, the reply
+*always* arrives, so "it does nothing" is the player giving up inside a second rather than a
+message that never comes. That correction is worth more than the diagnosis.
+
+**Friction**
+
+- **`wait_for` cannot wait for the single most common thing a plugin does: answer a player.**
+  Its conditions cover blocks, events, players, inventories and logs. Chat is not among them, and
+  neither is the action bar or a title. `log_matches` does not help, because a reply to a player
+  never touches the log. So the round was forced into `wait_for ticks 20` — a fixed sleep, which
+  this tool's own description calls "a guess about timing that is right on an idle server and
+  wrong on a busy one". Every async plugin reply lands in this hole.
+
+- **`assert_message` was a race by construction.** A bare one-shot check with no wait, while its
+  neighbour `assert_inventory` is explicitly paired with `wait_for inventory_open` in the docs.
+  The natural scenario — send a command, assert the reply — failed against any plugin that does
+  not answer within the same tick, and reported `nothing said to RealPlayer contained 'points'`,
+  which reads as a verdict when the truth was "not yet".
+
+- **`command_exec` warns about the wrong half.** Its description explains at length that
+  `dispatched: false` always carries a reason "so it never has to be read as a command that ran
+  and did nothing". The trap the round actually hit is the inverse: `dispatched: true, output: [],
+  20ms` is *exactly* what a late async reply looks like. The one sentence that would have saved
+  it — "a declined command and one that did nothing look identical from the agent's side" — is in
+  `bot_inspect`'s description, not where a caller is standing when they need it.
+
+- **`command_exec`'s `as` is not what a player does, and nothing said so.** It dispatches
+  directly and never fires `PlayerCommandPreprocessEvent`; the round only noticed because
+  `events_summary` showed zero of them after three runs. A scenario's `command` step does go
+  through the real path. Two tools with the same apparent job and materially different fidelity,
+  with no note on either — on a server with a listener that cancels or rewrites commands, `as`
+  would silently exercise a different code path than the bug report.
+
+- **`events_summary` was 95% one event.** 8,295 `EndermanAttackPlayerEvent` out of 8,709, from a
+  single enderman. The counts that mattered sat 37 rows down.
+
+- **`logs_query` returned mostly the caller's own reflection.** Around twenty of twenty-five hits
+  were the agent logging its own `tools/call` requests and full JSON echoes of results the round
+  had just read — one of them 1,707 characters. There was no way to exclude it.
+
+- **Minor:** captured log messages carry raw ANSI colour codes, in a JSON field nothing renders.
+
+**Worked**
+
+- `bot_inspect` again. Without its `messages` array this scenario is unsolvable, and its
+  description advertises exactly that.
+- `session_start` returning the full agent tool schema inline — nothing had to be guessed.
+- `exceptions_recent` ruling out a whole branch in one empty answer.
+
+**Changed** — all in `fix(agent-core, agent-mcp, testkit)`:
+
+- `assert_message` now waits, with `timeoutMillis`, instead of checking once.
+- `wait_for`'s description says what it cannot see — messages go to a client, not to the agent —
+  and points at the bot side.
+- `command_exec`'s description carries the inverse trap, and says `as` skips
+  `PlayerCommandPreprocessEvent`.
+- `EndermanAttackPlayerEvent` joins the high-frequency exclusions.
+- The agent's own `MCP …` activity lines stay on the console but are kept out of the searchable
+  buffer, and ANSI escapes are stripped from captured messages.
+
+**Left alone**
+
+- A `message_matches` condition on `wait_for`. It cannot be built where `wait_for` lives: the
+  agent runs inside the server and never sees what a client was sent. Waiting for a message has
+  to happen on the bot side, which is what `assert_message` now does.
+
+---
+
 ## 2026-08-23 — `join-lockout`
 
 **Diagnosis:** right, in 23 tool calls. It also found a second fault nobody had reported — under

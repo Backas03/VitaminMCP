@@ -57,7 +57,12 @@ public final class HighFrequencyEvents {
             "PlayerTrackEntityEvent",
             "PlayerUntrackEntityEvent",
             "PlayerArmSwingEvent",
-            "BlockBreakProgressUpdateEvent");
+            "BlockBreakProgressUpdateEvent",
+
+            // One enderman with a grudge produced 8,295 of these out of 8,709 events — 95% of the
+            // buffer — and pushed the counts that mattered 37 rows down an events_summary
+            // (dogfood/JOURNAL.md, 2026-08-23). It fires every tick a player is in view.
+            "EndermanAttackPlayerEvent");
 
     private final Set<String> excluded;
 

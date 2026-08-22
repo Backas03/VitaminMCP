@@ -17,6 +17,9 @@ public final class ScenarioRunner {
     /** Long enough for a real condition, short enough that a wedged one fails the run. */
     private static final Duration DEFAULT_WAIT = Duration.ofSeconds(15);
 
+    /** How often a bot is asked again whether the message it is waiting for has arrived. */
+    private static final long MESSAGE_POLL_MILLIS = 100;
+
     /** Long enough for a short walk, but finite so an impossible route names its failure. */
     private static final long DEFAULT_MOVE_TIMEOUT_MILLIS = Duration.ofSeconds(30).toMillis();
 
@@ -300,21 +303,41 @@ public final class ScenarioRunner {
                 yield checkInventory(index, action, step, actual);
             }
 
+            // Waits rather than checking once. A plugin that answers from an async task — a
+            // leaderboard, a lookup, anything database-backed — replies a beat after the command,
+            // and a bare assert here failed on all of them while reporting "nothing said to X",
+            // which reads as "it never replied" rather than "not yet" (dogfood/JOURNAL.md,
+            // 2026-08-23). `wait_for` cannot cover this: a message to a client is not something
+            // the server-side agent can see.
             case "assert_message" -> {
 
                 String bot = required(step, "bot");
                 String wanted = required(step, "contains");
+                long timeout = step.has("timeoutMillis")
+                        ? step.path("timeoutMillis").asLong()
+                        : DEFAULT_WAIT.toMillis();
+
+                List<String> received = List.of();
+                long deadline = System.nanoTime()
+                        + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout);
                 try {
-                    List<String> received =
-                            new BotRunner.BotHandle(bots, bot, 0, 0, 0).inspect().messages();
-                    yield received.stream().anyMatch(line -> line.contains(wanted))
-                            ? ScenarioResult.StepResult.ok(index, action, "said to " + bot)
-                            : ScenarioResult.StepResult.failed(index, action,
-                                    "nothing said to " + bot + " contained '" + wanted + "'",
-                                    String.join(" | ", received));
+                    do {
+                        received = new BotRunner.BotHandle(bots, bot, 0, 0, 0).inspect().messages();
+                        if (received.stream().anyMatch(line -> line.contains(wanted))) {
+                            yield ScenarioResult.StepResult.ok(index, action, "said to " + bot);
+                        }
+                        Thread.sleep(MESSAGE_POLL_MILLIS);
+                    } while (System.nanoTime() < deadline);
                 } catch (java.io.IOException e) {
                     throw new IllegalStateException(String.valueOf(e.getMessage()), e);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                 }
+
+                yield ScenarioResult.StepResult.failed(index, action,
+                        "nothing said to " + bot + " contained '" + wanted + "' within "
+                                + timeout + "ms",
+                        String.join(" | ", received));
             }
 
             case "assert_event" -> {

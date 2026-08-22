@@ -13,6 +13,21 @@ public final class LogCapture {
 
     private static final String APPENDER_NAME = "VitaminMCP";
 
+    /**
+     * The agent's own activity lines start with this.
+     *
+     * <p>They belong on the console — a server owner watching it should see what the agent was
+     * asked to do — but not in the buffer people search. Left in, a `logs_query` for a plugin's
+     * output comes back mostly as the caller's own reflection: their tool calls, and full echoes
+     * of results they had just read. One dogfooding round had roughly twenty of its twenty-five
+     * hits be exactly that (dogfood/JOURNAL.md, 2026-08-23).
+     */
+    private static final String OWN_ACTIVITY_PREFIX = "MCP ";
+
+    /** Terminal colour codes, which are noise in a JSON field nothing will render. */
+    private static final java.util.regex.Pattern ANSI =
+            java.util.regex.Pattern.compile("\\x1B\\[[;\\d]*m");
+
     private final SequencedRingBuffer<LogEntry> buffer;
     private final ExceptionRegistry exceptions;
     private final java.util.logging.Logger pluginLogger;
@@ -95,6 +110,11 @@ public final class LogCapture {
         return LogLevel.TRACE;
     }
 
+    /** Whether this is the agent talking about itself. */
+    private boolean isOwnActivity(String logger, String message) {
+        return pluginLogger.getName().equals(logger) && message.startsWith(OWN_ACTIVITY_PREFIX);
+    }
+
     /** The appender itself. */
     private final class CapturingAppender extends AbstractAppender {
 
@@ -110,10 +130,17 @@ public final class LogCapture {
                 LogLevel level = toContractLevel(event.getLevel().intLevel());
                 String logger = event.getLoggerName() == null ? "" : event.getLoggerName();
                 String message = event.getMessage() == null ? "" : event.getMessage().getFormattedMessage();
+
+                if (isOwnActivity(logger, message)) {
+                    return;
+                }
+                message = ANSI.matcher(message).replaceAll("");
+
                 String throwableHash = exceptions.record(event.getThrown(), timestamp);
 
+                String captured = message;
                 buffer.append(sequence ->
-                        new LogEntry(sequence, timestamp, level, logger, message, throwableHash));
+                        new LogEntry(sequence, timestamp, level, logger, captured, throwableHash));
             } catch (RuntimeException | LinkageError e) {
 
             }
