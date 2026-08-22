@@ -111,8 +111,8 @@ Two traps here, both already hit:
 **Never `Stop-Process` the server.** On Windows that is `TerminateProcess` — no shutdown hook, so
 Paper never saves. Stop it with `command_exec("stop")` through the agent, or by typing `stop`.
 
-The scratch server is `C:\server\1.21.8`: Paper 1.21.8 build 60, `online-mode=false`,
-`bungeecord: false`, `gamemode=creative`, `spawn-protection=0`, agent at `read-only: false`.
+The scratch server is `C:\server\1.21.8`: Paper 1.21.8 build 60, `online-mode=false`, default
+BungeeCord parsing, `gamemode=creative`, `spawn-protection=0`, agent at `read-only: false`.
 Its token is in `plugins/VitaminMCP/config.yml`.
 
 ---

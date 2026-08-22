@@ -110,7 +110,6 @@ final class SetupPrompts {
                     to it can then impersonate anyone:
 
                        - server.properties: online-mode=false
-                       - spigot.yml: settings.bungeecord: false
 
                     Say plainly what each one does before I decide, and restart the server after \
                     changing them. Skip this step for a server that only needs inspecting — \

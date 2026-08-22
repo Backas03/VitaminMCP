@@ -51,11 +51,6 @@ public final class ManagedServer implements AutoCloseable {
                 """.formatted(port));
 
         Files.createDirectories(directory.resolve("config"));
-        Files.writeString(directory.resolve("spigot.yml"), """
-                settings:
-                  bungeecord: false
-                """);
-
         Path plugins = directory.resolve("plugins");
         Files.createDirectories(plugins.resolve("VitaminMCP"));
         Files.copy(agentJar, plugins.resolve("VitaminMCP.jar"), StandardCopyOption.REPLACE_EXISTING);

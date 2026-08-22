@@ -30,9 +30,8 @@ without opening the game.
 - Paper / Purpur **1.21 through 1.21.8**, from one install — the runner works out which protocol the
   server speaks and adapts
 
-Full usage is in [docs/usage.md](docs/usage.md), design rationale in
-[docs/design.md](docs/design.md), contribution rules in [CONTRIBUTING.md](CONTRIBUTING.md),
-release steps in [docs/publishing.md](docs/publishing.md).
+Full usage is in `docs/usage.md`. Contribution rules are in `CONTRIBUTING.md`, and release steps
+are in `docs/publishing.md`.
 
 ---
 
@@ -190,7 +189,7 @@ proxied parameters flat at the top level. Full parameters are in [docs/usage.md]
 
 | | |
 |---|---|
-| Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work). Anything below will not load the agent at all ([design.md §5](docs/design.md)) |
+| Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work) |
 | Java | 21, on the server and on the machine running your MCP client. Needed to build it too, if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) |
 | Node | 18.17 or later, for `npx`. Only to install the client side the easy way — [the jars need none](#installing-from-the-jars-instead) |
 
@@ -213,7 +212,7 @@ proxied parameters flat at the top level. Full parameters are in [docs/usage.md]
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
 **1.21 through 1.21.8 are supported today**, and every one of them runs in the matrix
-([versions.yaml](versions.yaml)). The other rows are on the roadmap without a date attached.
+(`versions.yaml`). The other rows are on the roadmap without a date attached.
 
 **You install one Node runner whatever the version.** It asks the server what it speaks and
 selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
@@ -314,8 +313,8 @@ is. Three defaults to know before you change anything:
   you need to.
 - **The endpoint never opens unauthenticated.** An empty `auth-token` is filled in with a generated
   one rather than waved through, and if it cannot be written the plugin still refuses to start
-  ([design.md §14](docs/design.md)). What was never negotiable is that a token exists; making you
-  fetch one out of a crash log was not part of it.
+  What was never negotiable is that a token exists; making you fetch one out of a crash log was not
+  part of it.
 - **Moving `bind-address` off loopback makes TLS mandatory.** The token grants console access, and
   over plain HTTP it crosses the network in the clear where anything on the path can read it. So
   that combination is a refusal to start, not a warning. Satisfy it with either `tls.enabled` (the
@@ -327,26 +326,17 @@ is. Three defaults to know before you change anything:
 
 Skip this section if you only need the agent.
 
-Bots do not authenticate with Mojang. They imitate a proxy forwarding handshake to inject an
-arbitrary UUID, so the backend has to be told to trust it
-([design.md §3.1](docs/design.md)):
+Bots use offline mode and reuse the same deterministic UUID when the bot name is reused:
 
 ```properties
 # server.properties
 online-mode=false
 ```
-```yaml
-# spigot.yml
-settings:
-  bungeecord: false
-```
-
 > **Never expose an offline-mode server to the internet.** This is a test-harness configuration,
-> not a production one.
+> not a production one. No BungeeCord setting is required for normal Node logins.
 
-`bungeecord: false` is the normal Node runner setup. Reusing a bot name reuses its deterministic
-offline UUID. Set it to `true` only for a test that explicitly passes `clientIp` and needs the
-optional BungeeCord forwarding handshake.
+Reusing a bot name reuses its deterministic offline UUID. Set BungeeCord forwarding explicitly only
+for a test that passes `clientIp` and needs a spoofed address or UUID.
 
 `move_to` walks to its destination by default, using the same client-side physics loop that sends
 the movement packets between the two points. That means plugins listening for pressure plates and
@@ -505,16 +495,16 @@ proceeds normally.
 ## Running against several versions
 
 The same scenario can be run across every supported version in one pass. The matrix is
-[versions.yaml](versions.yaml), not code — adding a version is a single block. Server jars are
+`versions.yaml`, not code — adding a version is a single block. Server jars are
 downloaded from the PaperMC API and started natively (no Docker, no ViaProxy;
-[design.md §15.1](docs/design.md)).
+no extra translation layer).
 
 **The protocol is deliberately not in that file.** The Node runner asks each server what it speaks
 and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
 to download.
 
 Versions beyond 1.21.8 are planned and require a compatibility run before they are added.
-See [docs/design.md §4](docs/design.md) for the current version strategy.
+The runner selects the matching data version from the server handshake.
 
 ---
 
