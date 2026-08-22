@@ -112,7 +112,7 @@ Two traps here, both already hit:
 Paper never saves. Stop it with `command_exec("stop")` through the agent, or by typing `stop`.
 
 The scratch server is `C:\server\1.21.8`: Paper 1.21.8 build 60, `online-mode=false`,
-`bungeecord: true`, `gamemode=creative`, `spawn-protection=0`, agent at `read-only: false`.
+`bungeecord: false`, `gamemode=creative`, `spawn-protection=0`, agent at `read-only: false`.
 Its token is in `plugins/VitaminMCP/config.yml`.
 
 ---

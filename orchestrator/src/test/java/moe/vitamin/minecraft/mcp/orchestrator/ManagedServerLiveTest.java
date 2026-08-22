@@ -70,7 +70,7 @@ class ManagedServerLiveTest {
                 .prepare(null, agentJar, TOKEN);
 
         assertTrue(Files.readString(directory.resolve("eula.txt")).contains("eula=true"));
-        assertTrue(Files.readString(directory.resolve("spigot.yml")).contains("bungeecord: true"));
+        assertTrue(Files.readString(directory.resolve("spigot.yml")).contains("bungeecord: false"));
         assertTrue(Files.readString(directory.resolve("server.properties")).contains("online-mode=false"));
         assertTrue(Files.exists(directory.resolve("plugins/VitaminMCP.jar")));
 

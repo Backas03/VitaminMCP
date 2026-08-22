@@ -49,9 +49,9 @@ export function undashed(uuid) {
 /**
  * Assembles the handshake's server address field, which is what carries a bot's identity.
  *
- * A backend on `online-mode=false` with `settings.bungeecord: true` reads the identity from here
- * rather than authenticating, which is what makes an arbitrary UUID and a chosen client address
- * possible at all (design.md 3.1).
+ * A server on `online-mode=false` with `settings.bungeecord: true` reads this optional forwarding
+ * field rather than authenticating, which makes an arbitrary UUID and chosen client address
+ * possible for tests that explicitly request them (design.md 3.1).
  */
 export function addressField(host, clientIp, id) {
   if (host.includes(SEPARATOR) || clientIp.includes(SEPARATOR)) {

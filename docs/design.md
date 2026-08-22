@@ -53,7 +53,7 @@ packet was sent.
 A server with `online-mode=true` will not accept an arbitrary bot, because of session verification.
 Three layers of response.
 
-### 3.1 Default strategy — offline plus a forwarding handshake (covers 95%)
+### 3.1 Default strategy — offline player identity, forwarding opt-in
 
 Plugin logic barely depends on online mode. Only four things actually differ.
 
@@ -64,7 +64,13 @@ Plugin logic barely depends on online mode. Only four things actually differ.
 | Connection encryption | on | off |
 | Chat signing (1.19+) | can be enforced | absent |
 
-So **imitating a proxy's forwarding handshake** is the practical answer.
+For ordinary tests, the Node bot connects normally with `online-mode=false`. Reusing the same bot
+name gives the same deterministic offline UUID, so a test does not need proxy forwarding merely to
+keep a bot identity stable.
+
+When a test specifically needs an arbitrary UUID, skin properties or a spoofed client address, it
+opts into the forwarding handshake by passing `clientIp` and enabling BungeeCord parsing on that
+test server.
 
 Put the backend on `online-mode=false` with `settings.bungeecord: true` in `spigot.yml`, and
 appending the following to the handshake packet's server address field is enough to inject an

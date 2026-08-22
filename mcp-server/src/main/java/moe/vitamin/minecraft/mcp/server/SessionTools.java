@@ -95,10 +95,9 @@ final class SessionTools {
                     session(properties);
                     string(properties, "name", "Bot name, at most 16 characters.");
                     string(properties, "clientIp",
-                            "Address the server should attribute the connection to. Omit unless "
-                                    + "you are testing something keyed on the address — an IP "
-                                    + "ban, a per-IP limit, geo logic. Omitted, the bot reports "
-                                    + "the address it really connects from.");
+                            "Optional spoofed address for the BungeeCord forwarding handshake. "
+                                    + "Omit for a normal login; pass it only when the server has "
+                                    + "bungeecord=true and the test needs an attributed IP.");
                 }));
 
         tools.add(tool("bot_inspect",

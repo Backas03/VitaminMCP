@@ -44,20 +44,12 @@ export class BotRegistry {
     }
 
     const id = identity(name);
-    // Omitted, the bot reports the address it really connects from. The Java runner asks the
-    // socket for its own local address; before the socket exists there is nothing to ask, so
-    // loopback stands in — this runner is always launched beside the MCP server.
-    const address = clientIp && clientIp.trim() ? clientIp : '127.0.0.1';
-
-    const bot = mineflayer.createBot({
-      host: this.#host,
-      port: this.#port,
-      username: id.name,
-      auth: 'offline',
-      version: this.#version,
-      fakeHost: addressField(this.#host, address, id),
-      checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
-    });
+    // Normal logins use the server's ordinary offline UUID for this name, which stays stable when
+    // a test reuses the same bot. A clientIp is an explicit request for the opt-in BungeeCord
+    // forwarding handshake used by tests that need a spoofed address or UUID.
+    const bot = mineflayer.createBot(
+      connectionOptions(this.#host, this.#port, this.#version, id, clientIp),
+    );
     loadPathfinder(bot);
 
     // Before waiting to join, not after: messages are events, and a plugin that greets or refuses
@@ -137,6 +129,22 @@ export class BotRegistry {
     }
     return bot;
   }
+}
+
+/** Builds a normal login, adding BungeeCord forwarding only for an explicit clientIp test. */
+export function connectionOptions(host, port, version, id, clientIp) {
+  const options = {
+    host,
+    port,
+    username: id.name,
+    auth: 'offline',
+    version,
+    checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
+  };
+  if (clientIp && clientIp.trim()) {
+    options.fakeHost = addressField(host, clientIp.trim(), id);
+  }
+  return options;
 }
 
 function position(bot) {

@@ -53,7 +53,7 @@ public final class ManagedServer implements AutoCloseable {
         Files.createDirectories(directory.resolve("config"));
         Files.writeString(directory.resolve("spigot.yml"), """
                 settings:
-                  bungeecord: true
+                  bungeecord: false
                 """);
 
         Path plugins = directory.resolve("plugins");

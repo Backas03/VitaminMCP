@@ -361,9 +361,9 @@ The name is the identity. The UUID derives from it, so `Tester1` is the same pla
 yesterday and permission-dependent behaviour reproduces. The response is the UUID and where it
 landed.
 
-Pass `clientIp` and the server records the connection as coming from that address. Use it only for
-things **keyed on the address** — IP bans, per-IP connection limits, geo logic. Leave it out and the
-real address is sent; a made-up address is a lie every later step has to carry.
+Omit `clientIp` for an ordinary login. If the test needs the server to attribute the connection to
+a chosen address — IP bans, per-IP connection limits or geo logic — pass `clientIp` and set the test
+server's `spigot.yml` `settings.bungeecord` to `true`; that opts into the forwarding handshake.
 
 After that, use the proxied agent tools directly. `wait_for`, `state_query` and `events_query` all
 go to the session's server — the only one open, or the one `session` names.

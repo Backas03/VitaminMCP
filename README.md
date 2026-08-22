@@ -440,11 +440,15 @@ online-mode=false
 ```yaml
 # spigot.yml
 settings:
-  bungeecord: true
+  bungeecord: false
 ```
 
-> **Never expose a server in this configuration to the internet.** Anyone who can open a socket can
-> impersonate anyone. This is a test-harness configuration, not a production one.
+> **Never expose an offline-mode server to the internet.** This is a test-harness configuration,
+> not a production one.
+
+`bungeecord: false` is the normal Node runner setup. Reusing a bot name reuses its deterministic
+offline UUID. Set it to `true` only for a test that explicitly passes `clientIp` and needs the
+optional BungeeCord forwarding handshake.
 
 `move_to` walks to its destination by default, using the same client-side physics loop that sends
 the movement packets between the two points. That means plugins listening for pressure plates and
