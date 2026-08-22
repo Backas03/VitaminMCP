@@ -42,7 +42,12 @@ jobs:
             os: windows-latest
 
     steps:
+      # The released source, for the same reason the release job below checks it out: a dispatch
+      # runs this file from the default branch, and the runner it ships has to be built from the
+      # tag being released rather than from whatever the default branch holds today.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -56,14 +61,30 @@ jobs:
         working-directory: bot/bot-runner-node
         run: npm run build:sea -- ${{ matrix.target }}
 
+      # Runs the built exe with no arguments and expects the entry point's own refusal: exit 2 and
+      # the usage line. That is the cheapest proof that postject actually injected the bundle —
+      # without it the asset is a bare node.exe that would start a REPL on a user's machine.
       - name: Smoke test Windows SEA runner
         if: matrix.target == 'win32-x64'
         shell: pwsh
         run: |
-          $output = & "build/dist/runners/${{ matrix.asset }}" 2>&1
-          if ($LASTEXITCODE -ne 2 -or ($output -notmatch 'usage: runner.mjs')) {
-            throw "SEA runner did not execute its entry point. exit=$LASTEXITCODE output=$output"
+          # GitHub runs pwsh with $ErrorActionPreference = 'stop', and PowerShell 7.4 promotes a
+          # native command's non-zero exit to a terminating error under it. The exit code this step
+          # exists to assert is 2, so without these two lines the call itself kills the script and
+          # the assertion below never runs — which is exactly how 2.0.0 failed.
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $output = & "build/dist/runners/${{ matrix.asset }}" 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          if ($code -ne 2 -or ($output -notmatch 'usage: runner.mjs')) {
+            Write-Host "SEA runner did not execute its entry point. exit=$code output=$output"
+            exit 1
           }
+          Write-Host "SEA runner runs its entry point. exit=$code"
+
+          # $LASTEXITCODE is still 2, and pwsh -command hands the step whatever it holds.
+          exit 0
 
       - uses: actions/upload-artifact@v4
         with:
