@@ -52,3 +52,18 @@ having checked. If it invents a fault, that is worth knowing about the tools too
 
 > `/kit` doesn't work. It doesn't say anything at all, doesn't give the items, no error. It just
 > silently does nothing.
+
+---
+
+## Worth planting, not yet planted
+
+**A config key that is decoration.** The fixture had one by accident: `kit.enabled` sat in the
+config and in a startup log line, and the code switched on something else entirely. A round
+followed the tooling straight to the wrong fix, and said so — an operator would have flipped the
+key, restarted, and been out of moves. Nothing in a runtime toolset can answer "is this key wired
+to anything". It is fixed here, but as a deliberate scenario it is nastier and more realistic than
+anything on the list above.
+
+**A permission declared and never checked.** The control round volunteered this one: `dogfood.shop`
+is declared `default: op` in plugin.yml and nothing enforces it outside one branch, so the command
+opens for anyone. Left in place — it is realistic, and now recorded rather than accidental.
