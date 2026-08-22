@@ -104,7 +104,7 @@ public final class MatrixRunner {
                 server.start(javaHome, timeout);
 
                 try (BotRunner bots =
-                             BotRunner.launch(runnerJar, javaHome, "127.0.0.1", port)) {
+                             BotRunner.launch(runnerJar, "127.0.0.1", port)) {
                     AgentClient agent = new AgentClient("127.0.0.1", agentPort, token);
                     ScenarioResult result = new ScenarioRunner(bots, agent).run(scenario);
                     return new MatrixResult.VersionOutcome(

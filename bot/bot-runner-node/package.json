@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The bot runner, on mineflayer. Speaks the same stdio line protocol as bot-runner.jar.",
+  "description": "The bot runner, on mineflayer. Speaks the VitaminMCP stdio line protocol.",
   "engines": {
     "node": ">=18.17"
   },

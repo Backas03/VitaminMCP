@@ -2,7 +2,7 @@
 /**
  * The bot runner, on mineflayer.
  *
- * Speaks the same stdio line protocol as `bot-runner.jar` and is launched the same way:
+ * Speaks the VitaminMCP stdio line protocol and is launched as the runner child process:
  *
  *   node runner.mjs <host> <port> [protocol]
  *

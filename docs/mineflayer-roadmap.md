@@ -45,7 +45,7 @@ Get a Node process speaking the existing line protocol, and the Java side launch
 - [ ] The stdio loop — read a line, dispatch, write `ok`/`err`, and print `ready` once connected.
       **`ready` carries the protocol number**, which `BotRunner.launch` parses
 - [ ] Lifecycle verbs only: `spawn`, `despawn`, `position`, `shutdown`
-- [ ] Negotiate the version by pinging the server, the way `BackendCatalog` does, rather than
+- [x] Negotiate the version by pinging the server rather than
       trusting `minecraft-data`'s auto-detection to arrive at the same answer
 - [ ] `BotRunner.launch` takes a command line rather than a jar path — the `ProcessBuilder` at
       `bot-core/.../BotRunner.java:45` becomes `node <runner.mjs>` when handed a `.mjs`
@@ -276,7 +276,7 @@ alone (`README.md` §Requirements); without this stage it would quietly start ne
 **DoD**
 
 - A machine with no Node installs from the jars and connects bots
-- A machine that has Node downloads **nothing** — the 93MB `bot-runner.jar` fetch is gone and
+- A machine that has Node downloads **nothing** — the legacy Java runner fetch is gone and
   nothing takes its place
 - A tampered asset is refused, with a message that says so rather than reporting a missing package
 - Release assets are five runners plus `VitaminMCP.jar` and `mcp-server.jar`, all checksummed
@@ -289,20 +289,16 @@ Last, and only once Stage 8 is done. Everything here is irreversible in practice
 
 **Work**
 
-- [ ] Delete `bot/backends/backend-*` and `bot/backends/shared`
-- [ ] Delete `bot/bot-runner` (the launcher) and the `BotBackend` SPI
-- [ ] Delete the `.backend` embedding, the extracted-backend cache and the Shadow workarounds they
-      needed. `docs/multi-version.md`'s three traps stop existing
-- [ ] `README.md`: drop `allow-flight=true` from the server setup, and the "bot has no physics
+- [x] Delete the retired per-protocol backend directories
+- [x] Delete the retired Java runner launcher and SPI
+- [x] Delete the backend embedding, extracted-backend cache and Shadow workarounds they needed
+- [x] `README.md`: drop `allow-flight=true` from the server setup, and the "bot has no physics
       engine" paragraph
-- [ ] `versions.yaml`: the protocol reasoning goes. `minecraft-data` already covers **1.21.9
-      through 26.2** — every version the support table lists as Planned above the floor — so adding
-      a version becomes one entry in the matrix
-- [ ] `design.md` §2 says "Being a Java stack, MCProtocolLib is the bot implementation". It gets a
-      **revision note, not a quiet edit** — the reversal is the useful part
-- [ ] `docs/multi-version.md` is largely about a design that no longer exists. Decide whether it is
-      rewritten or retired
-- [ ] Retire the `vitaminmcp-backend-per-protocol` memory
+- [x] `versions.yaml`: protocol reasoning removed; adding a version is a matrix configuration
+      change followed by compatibility verification
+- [x] `design.md` §2 records the Node/mineflayer reversal from the Java design
+- [x] Retire `docs/multi-version.md`, which described the superseded backend architecture
+- [x] Retire the `vitaminmcp-backend-per-protocol` memory
 
 **DoD**
 
@@ -316,6 +312,10 @@ checksum stamping, and the SEA build script are implemented. The Windows SEA ass
 darwin assets were built locally; Linux ELF injection aborts under the Windows postject host. The
 five-asset release checksum cannot be stamped honestly until Linux assets and macOS signing are
 available, so Stage 8 remains in progress.
+
+**Scope update 2026-08-22:** Windows x64 plus the Node source runner is the supported distribution
+scope for this migration. Linux and macOS native assets are planned and documented, but are not
+required for the current Stage 8 gate. Stage 9 may proceed without deleting the Node source path.
 
 **Windows implementation update 2026-08-22:** native SEA paths now launch directly from
 `BotRunner` instead of being mistaken for Java jars; cached jars and assets are re-hashed before

@@ -2,7 +2,7 @@
 
 Three things are published per release, in this order, and **none of them can be unpublished**:
 
-1. the **GitHub release** — the agent jar, MCP server jar, Java reference runner and platform Node runner assets
+1. the **GitHub release** — the agent jar, MCP server jar and platform Node runner assets
 2. the **npm package** `vitaminmcp` — the launcher, pinning the sha256 of those jars
 3. the **MCP registry** entry — `server.json`, pointing at that npm version
 
@@ -140,10 +140,8 @@ From a clean checkout at the commit you want released:
 
 ```bash
 gh release create 1.5.0 --title 1.5.0 --generate-notes \
-  build/dist/VitaminMCP.jar build/dist/mcp-server.jar build/dist/bot-runner.jar \
-  build/dist/runners/bot-runner-win-x64.exe build/dist/runners/bot-runner-linux-x64 \
-  build/dist/runners/bot-runner-linux-arm64 build/dist/runners/bot-runner-darwin-x64 \
-  build/dist/runners/bot-runner-darwin-arm64
+  build/dist/VitaminMCP.jar build/dist/mcp-server.jar \
+  build/dist/runners/bot-runner-win-x64.exe
 ```
 
 ```bash
@@ -204,7 +202,7 @@ how to run the launcher against unreleased changes:
 
 ```bash
 VITAMINMCP_SERVER_JAR=$PWD/build/dist/mcp-server.jar \
-VITAMINMCP_RUNNER_JAR=$PWD/build/dist/bot-runner.jar \
+VITAMINMCP_NODE_RUNNER=$PWD/npm/runner/runner.mjs \
   node npm/bin/vitaminmcp.mjs
 ```
 

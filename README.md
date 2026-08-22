@@ -49,7 +49,7 @@ Three jars, in three different places. Only the first is a Minecraft plugin.
         |                                    sees events, logs, exceptions, live state
         |  spawns
         v
-  bot-runner.jar ---- Minecraft protocol ->  the same server, on :25565
+  Node runner -------- Minecraft protocol ->  the same server, on :25565
                                              sees what a player's client was actually sent
 ```
 
@@ -57,7 +57,7 @@ Three jars, in three different places. Only the first is a Minecraft plugin.
 |---|---|---|
 | `VitaminMCP.jar` | **in the server, as a plugin** | Listens to every event, taps the log, and serves an authenticated MCP endpoint. The only piece with a view of server internals |
 | `mcp-server.jar` | on your machine, as a child of your MCP client | Speaks stdio to the client and HTTP to the plugin, and owns the bots |
-| `bot-runner.jar` | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
+| `runner.mjs` or `bot-runner-win-x64.exe` | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
 
 **Why the agent has to be a plugin.** Half of what a test needs to assert on has no protocol
 representation. Whether a `PlayerJoinEvent` fired, a stack trace on the console, whether `/op`
@@ -310,29 +310,22 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 
 | Versions | Protocol | Status |
 |---|---|---|
-| 1.18 – 1.20.6 | 757 – 766 | Planned. Below the agent floor; needs it lowered, and backends across MCProtocolLib's package rename |
-| **1.21, 1.21.1** | **767** | **Supported** |
-| **1.21.2, 1.21.3** | **768** | **Supported** |
-| **1.21.4** | **769** | **Supported** |
-| **1.21.5** | **770** | **Supported** |
-| **1.21.6** | **771** | **Supported** |
-| **1.21.7, 1.21.8** | **772** | **Supported** |
-| 1.21.9 – 26.2 | 773 – 776 | Planned. Needs a `bot/backends/backend-<protocol>` directory and a coordinate |
+| 1.18 – 1.20.6 | Planned | Below the agent floor |
+| **1.21 through 1.21.8** | **Supported** | Current matrix |
+| 1.21.9 and later | Planned | Needs a compatibility run |
 
 **1.21 through 1.21.8 are supported today**, and every one of them runs in the matrix
 ([versions.yaml](versions.yaml)). The other rows are on the roadmap without a date attached.
 
-**You install one runner whatever the version.** It carries a backend per protocol and picks the
-right one by asking the server what it speaks, so there is no version to choose and none to get
-wrong.
+**You install one Node runner whatever the version.** It asks the server what it speaks and
+selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
-to load the agent, and a server whose protocol has no backend is named as such at startup — which
-protocols the runner carries, and which one the server asked for.
+to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.
 
 Agent support and bot support can also differ. The agent needs a compatible Paper API; bots need a
-backend for the server's protocol. So a server may be readable by the agent before bots can join
-it — inspection, logs and events all still work without them.
+matching minecraft-data entry. So a server may be readable by the agent before bots can join it —
+inspection, logs and events all still work without them.
 
 ---
 
@@ -379,9 +372,9 @@ That is the whole client side. Nothing to download by hand and no path to get ri
 run, into `~/.vitaminmcp/jars/<version>/`, each checked against a SHA-256 pinned into the package
 when it was published.
 
-`mcp-server.jar` is two megabytes and is waited for. `bot-runner.jar` is ninety, so it arrives in
-the background — a session that never spawns a bot never waits for it, and one that does waits
-inside the call rather than inside your client's startup timeout.
+`mcp-server.jar` is two megabytes and is waited for. With Node installed, the source runner is used
+directly and no runner asset is downloaded. The Windows SEA runner is the fallback when Node is
+not available. Linux and macOS native runners are planned.
 
 `mcp-server` speaks stdio. It has no port and no token: it is a child process of the client, so the
 trust relationship already exists. Only the agent side crosses a network, which is why only the
@@ -453,13 +446,6 @@ settings:
 > **Never expose a server in this configuration to the internet.** Anyone who can open a socket can
 > impersonate anyone. This is a test-harness configuration, not a production one.
 
-Recommended alongside those:
-
-```properties
-# server.properties
-allow-flight=true
-```
-
 `move_to` walks to its destination by default, using the same client-side physics loop that sends
 the movement packets between the two points. That means plugins listening for pressure plates and
 movement events observe the route. A path that cannot be found fails with `No path exists`; a path
@@ -471,10 +457,6 @@ walking player would have caused.
 
 Walking does not dig through or place blocks. The pathfinder is intentionally configured for
 ordinary traversal so a test wall remains a test wall.
-
-`allow-flight=true` is still useful only for legacy Java-runner scenarios that use the packet
-teleport, and for an explicit `mode: "teleport"` step. Leave it alone on a real one — and note this
-is another reason not to point bots at production.
 
 ### 4. Connect
 
@@ -540,7 +522,8 @@ address — the same failure whichever detail was missing.
 
 ### Installing from the jars instead
 
-`npx` is a convenience, not a requirement. **Three artifacts**, all attached to every
+`npx` is a convenience, not a requirement. **Two artifacts**, plus the optional Windows runner,
+are attached to every
 [release](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest), and **each goes
 somewhere different:**
 
@@ -548,7 +531,7 @@ somewhere different:**
 |---|---|---|
 | `VitaminMCP.jar` | the server's `plugins/` | the agent — an ordinary Bukkit/Paper plugin |
 | `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
-| `bot-runner.jar` | beside `mcp-server.jar` | `mcp-server` launches it as a child process |
+| `runner.mjs` or `bot-runner-win-x64.exe` | beside `mcp-server.jar` | `mcp-server` launches it as a child process |
 
 To build them yourself instead:
 
@@ -562,11 +545,10 @@ Either way, point the client at the jar rather than at the package:
 claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar
 ```
 
-`bot-runner.jar` is found beside `mcp-server.jar`, which is where `dist` puts it.
-`VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names it anywhere else.
+`VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
-**One runner, every supported version.** It carries a backend per protocol inside it and chooses
-one by pinging the server before any bot connects, so the same file works on 1.21 and on 1.21.8.
+**One Node runner, every supported version.** It pings the server before any bot connects and
+selects the matching mineflayer data, so the same source runner works on 1.21 through 1.21.8.
 
 ---
 
@@ -625,18 +607,12 @@ The same scenario can be run across every supported version in one pass. The mat
 downloaded from the PaperMC API and started natively (no Docker, no ViaProxy;
 [design.md §15.1](docs/design.md)).
 
-**The protocol is deliberately not in that file.** The runner asks each server what it speaks and
-loads the matching backend, so a version needs nothing there beyond the build to download.
+**The protocol is deliberately not in that file.** The Node runner asks each server what it speaks
+and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
+to download.
 
-A *new protocol* — 1.21.9 and later — is a different matter: it needs a
-`bot/backends/backend-<protocol>` directory with the matching MCProtocolLib coordinate, and only
-the files that genuinely differ. Across 1.21 to 1.21.8 that came to five small files, and 1.21.5
-onward needed none. Until one exists, a server on that protocol is refused at startup by name —
-which protocols the runner carries, and which one the server asked for — rather than by an
-`Outdated client!` arriving from the server later.
-
-See [docs/design.md §4.4](docs/design.md) for why it is built this way, and
-[docs/multi-version.md](docs/multi-version.md) for the reasoning that got there.
+Versions beyond 1.21.8 are planned and require a compatibility run before they are added.
+See [docs/design.md §4](docs/design.md) for the current version strategy.
 
 ---
 
@@ -651,7 +627,7 @@ other plugins:
 |---|---|---|
 | Jackson | `VitaminMCP.jar`, `mcp-server.jar` | Apache-2.0 |
 | ClassGraph | `VitaminMCP.jar` | MIT |
-| MCProtocolLib, and with it Netty, Gson, JJWT | `bot-runner.jar` — one build of it per supported protocol, each in its own embedded jar | MIT / Apache-2.0 |
+| mineflayer, minecraft-data, mineflayer-pathfinder | Node runner dependencies | MIT |
 
 Their license and notice files travel inside the jars under `META-INF/` — relocating a package
 renames it, it does not lift the obligation to carry the notice.

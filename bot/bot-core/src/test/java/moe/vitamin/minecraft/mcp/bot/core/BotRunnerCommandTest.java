@@ -8,8 +8,6 @@ import org.junit.jupiter.api.Test;
 
 class BotRunnerCommandTest {
 
-    private static final Path JAVA_HOME = Path.of("C:/Program Files/Java/jdk-21");
-
     @Test
     void launchesWindowsSeaDirectly() {
         assertEquals(
@@ -19,7 +17,6 @@ class BotRunnerCommandTest {
                         "25565"),
                 BotRunner.commandFor(
                         Path.of("C:/runners/bot-runner-win-x64.exe"),
-                        JAVA_HOME,
                         "127.0.0.1",
                         25565));
     }
@@ -33,23 +30,20 @@ class BotRunnerCommandTest {
                         "25565"),
                 BotRunner.commandFor(
                         Path.of("C:/runners/bot-runner-linux-x64"),
-                        JAVA_HOME,
                         "127.0.0.1",
                         25565));
     }
 
     @Test
-    void keepsTheJavaJarLauncherPath() {
+    void launchesTheNodeScriptThroughNode() {
         assertEquals(
                 List.of(
-                        JAVA_HOME.resolve("bin").resolve("java").toString(),
-                        "-jar",
-                        absolute("C:/runners/bot-runner.jar"),
+                        "node.exe",
+                        absolute("C:/runners/runner.mjs"),
                         "127.0.0.1",
                         "25565"),
                 BotRunner.commandFor(
-                        Path.of("C:/runners/bot-runner.jar"),
-                        JAVA_HOME,
+                        Path.of("C:/runners/runner.mjs"),
                         "127.0.0.1",
                         25565));
     }

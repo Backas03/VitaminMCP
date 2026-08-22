@@ -3,11 +3,8 @@
 # Adding one is a block here and nothing else (CONTRIBUTING.md invariant 7). Every version is started
 # natively from a PaperMC build (docs/design.md §15).
 #
-# The protocol is deliberately absent. One `bot-runner.jar` carries a backend per protocol and
-# picks the right one by asking the server what it speaks, so a version needs nothing here beyond
-# the build to download (docs/multi-version.md §2.1). What a *new protocol* needs is a
-# `bot/backends/backend-<protocol>` directory: a coordinate, and — only where the library really
-# differs — one file.
+# The protocol is deliberately absent. The Node runner asks the server what it speaks and selects
+# the matching minecraft-data entry, so a version needs nothing here beyond the Paper build.
 #
 # The floor is 1.21. Below it the agent will not load at all (docs/design.md §5.4).
 
@@ -30,9 +27,7 @@ versions:
   - id: "1.21.6"
     paper: { version: "1.21.6" }
 
-  # Shares protocol 772 with 1.21.8, so the same backend drives it. Present to prove that a
-  # protocol-named backend really does span versions — if it did not, this entry would fail
-  # while the one below passed, and the naming would be a lie.
+  # Shares protocol 772 with 1.21.8, so the same runner data drives it.
   - id: "1.21.7"
     paper: { version: "1.21.7" }
 
@@ -41,7 +36,4 @@ versions:
   - id: "1.21.8"
     paper: { version: "1.21.8", build: 60 }
 
-# Not listed: 1.21.9 and later changed protocol again and need a sibling backend built against
-# the matching MCProtocolLib release. Adding a version without one no longer produces a puzzle,
-# though — the runner reports which protocols it carries and which one the server asked for,
-# rather than letting "Outdated client!" arrive from the server three layers away.
+# Not listed: versions beyond 1.21.8 need a compatibility run before they are added to the matrix.

@@ -13,7 +13,6 @@ const RELEASES = 'https://github.com/Backas03/VitaminMCP-minecraft/releases/down
 
 /** The jar this package launches, and the one it launches in turn. */
 export const MCP_SERVER_JAR = 'mcp-server.jar';
-export const BOT_RUNNER_JAR = 'bot-runner.jar';
 
 let checksumsPromise;
 let manifestPromise;

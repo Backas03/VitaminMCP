@@ -21,13 +21,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE = path.join(HERE, '..');
 const REPOSITORY = path.join(PACKAGE, '..');
 
-const WANTED = ['mcp-server.jar', 'bot-runner.jar'];
+const WANTED = ['mcp-server.jar'];
 const ASSETS = [
   'bot-runner-win-x64.exe',
-  'bot-runner-linux-x64',
-  'bot-runner-linux-arm64',
-  'bot-runner-darwin-x64',
-  'bot-runner-darwin-arm64',
 ];
 const API = 'https://api.github.com/repos/Backas03/VitaminMCP-minecraft/releases/tags';
 

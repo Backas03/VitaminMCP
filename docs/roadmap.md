@@ -1,4 +1,8 @@
-# VitaminMCP implementation roadmap
+# Historical VitaminMCP implementation roadmap
+
+> This is the pre-mineflayer roadmap and is retained for historical context only. The current
+> implementation order is `docs/mineflayer-roadmap.md`; references below to MCProtocolLib,
+> backends and the Java runner describe the superseded design.
 
 **Stages 0–5 are done and verified.** What follows is the plan they were built to, kept because the
 definitions of done are still the standard anything new is held to — not as a description of work

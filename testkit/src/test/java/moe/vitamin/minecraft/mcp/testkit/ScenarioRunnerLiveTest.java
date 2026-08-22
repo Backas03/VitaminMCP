@@ -30,7 +30,7 @@ class ScenarioRunnerLiveTest {
 
         bots = BotRunner.launch(
                 Path.of(System.getProperty("vitaminmcp.runnerJar", "")),
-                Path.of(System.getProperty("java.home")), HOST, PORT);
+                HOST, PORT);
     }
 
     @AfterEach

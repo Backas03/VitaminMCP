@@ -11,7 +11,6 @@ final class Session {
     private final int port;
     private final AgentClient agent;
     private final java.nio.file.Path runnerJar;
-    private final java.nio.file.Path javaHome;
 
     /** Replaced by {@link #reset()}, which restarts the process rather than reusing it. */
     private BotRunner bots;
@@ -23,9 +22,7 @@ final class Session {
         this.port = port;
         this.agent = new AgentClient(host, mcpPort, token, tls, tlsFingerprint);
         this.runnerJar = runnerJar;
-        this.javaHome = java.nio.file.Path.of(System.getProperty("java.home"));
-
-        this.bots = BotRunner.launch(runnerJar, javaHome, host, port);
+        this.bots = BotRunner.launch(runnerJar, host, port);
     }
 
     AgentClient agent() {
@@ -47,7 +44,7 @@ final class Session {
     /** Disconnects every bot but keeps the session. */
     void reset() throws java.io.IOException {
         bots.close();
-        bots = BotRunner.launch(runnerJar, javaHome, host, port);
+        bots = BotRunner.launch(runnerJar, host, port);
     }
 
     void close() {

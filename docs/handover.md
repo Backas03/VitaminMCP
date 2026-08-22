@@ -39,9 +39,7 @@ MCP client ──stdio MCP──> mcp-server.jar ──tab-separated stdio──
 ```
 
 - `bot/bot-runner-node/` — the new runner. `runner.mjs` is the entry point.
-- `bot/bot-core/.../BotRunner.java` — launches it. `commandFor()` picks `node` for a `.mjs` and
-  `java -jar` for a jar, which is what keeps both runners selectable.
-- `bot/backends/` + `bot/bot-runner/` — the old Java runner. Untouched, still working.
+- `bot/bot-core/.../BotRunner.java` — launches the Node script or native runner executable.
 - `docs/mineflayer-roadmap.md` — the plan.
 - `bot/bot-runner-node/DIFFERENCES.md` — **every place the two runners disagree, with reasons.**
   Stage 5 accepts or rejects the migration on this list. Add to it as you make differences.
@@ -155,7 +153,6 @@ npm test                                                    # pure, no server ne
 node test/lifecycle.live.mjs                                # spawn/despawn/position
 node test/actions.live.mjs                                  # the packet verbs
 node test/inspect.live.mjs 127.0.0.1 25565 SomeBot 50       # the client view; two-phase, see below
-JAVA_HOME="C:/Program Files/Java/jdk-21" node test/parity.live.mjs C:/vitaminmcp/bot-runner.jar
 ```
 
 **`parity.live.mjs` is the important one.** It drives both runners through the same script and diffs
@@ -274,7 +271,7 @@ Movement, and the reason for the migration.
   the whole migration and the most likely cause of a flaky matrix at stage 5.
 
 The Java runner's `move` is a single position packet at the destination — a teleport, which is why
-`allow-flight=true` is a documented requirement today. Note that the scratch server currently has
-`allow-flight=false`, so a teleporting bot may be kicked there.
+The Node runner owns movement physics; teleport mode remains available for setup steps but does
+not require `allow-flight=true` on the server.
 
 Do not start stage 5 until stage 4's DoD is met, and do not delete anything before stage 9.

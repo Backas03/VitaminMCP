@@ -11,7 +11,6 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":agent-core" to setOf(":contract"),
     ":agent-mcp" to setOf(":agent-core", ":contract"),
     ":bot-core" to setOf(":contract"),
-    ":bot-runner" to setOf(":bot-core", ":contract"),
     ":orchestrator" to setOf(":contract"),
     ":testkit" to setOf(":bot-core", ":orchestrator", ":contract"),
     ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
@@ -19,7 +18,6 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
 
 fun allowedFor(path: String): Set<String>? = when {
     allowedProjectDependencies.containsKey(path) -> allowedProjectDependencies[path]
-    path.startsWith(":backend-") -> setOf(":bot-core", ":contract")
     else -> null
 }
 

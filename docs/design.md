@@ -38,7 +38,8 @@ Instead we use **bots that connect over the real protocol**. They take the real 
 through packets, and the world state a bot observes *is* "what the player sees", which makes the
 meaning of a test unambiguous.
 
-Being a Java stack, **MCProtocolLib** is the bot implementation.
+The bot implementation is Node.js with mineflayer, minecraft-data and mineflayer-pathfinder. The
+Java MCP side communicates with it only through the version-neutral runner protocol.
 
 ### Limits (know them going in)
 
@@ -92,8 +93,9 @@ This path is introduced when it becomes necessary. It is out of the initial scop
 
 ### 3.3 Real accounts — final smoke only
 
-MCProtocolLib supports MSA authentication, but account cost and automation-flag risk rule out
-running many bots this way. One or two, for a final check on staging.
+Mineflayer's authenticated account path is outside the initial scope because account cost and
+automation-flag risk rule out running many real accounts. One or two real-account checks are a
+final staging smoke test only.
 
 ---
 
@@ -117,8 +119,7 @@ all of §4.3's risk.
 **Write and maintain per-version code where versions actually differ.** Branch only at the points
 where the protocol genuinely diverges; where it does not, one implementation covers the range.
 
-- The bot speaks each supported protocol directly, through a backend built against the matching
-  MCProtocolLib release
+- The bot asks the server for its protocol and selects the matching minecraft-data entry
 - Servers are started natively (§15)
 - When a version really diverges, that is when a branch gets written. No abstracting in advance
 
@@ -126,7 +127,10 @@ The `bot-via` module was left empty at the time of this revision and has since b
 entirely. If a real demand for versions below the floor appears, Via gets re-examined then — and at
 that point the cost of lowering the floor (§5.4) has to be counted too.
 
-### 4.4 One runner jar, a backend per protocol (revised 2026-08-01)
+### 4.4 Historical: Java runner and per-protocol backends (retired in Stage 9)
+
+> Everything in this section is the superseded Java/MCProtocolLib design. It is retained only to
+> explain the migration and the decisions that led to the Node runner.
 
 > **Revised.** §4.2 originally shipped one `bot-runner-<protocol>` **jar** per protocol, each its
 > own process. The processes were right; the jars were not.
@@ -322,11 +326,8 @@ agent/
   agent-mcp/         MCP server (the JDK's built-in HttpServer)
 bot/
   bot-core/          runner handle, line protocol, handshake, server ping, and the
-                     bot.spi contract. No protocol library
-  bot-runner/        THE runner jar: launcher, backend selection, dispatch (§4.4)
-  backends/
-    shared/          backend source compiled into every protocol, not a module
-    backend-<n>/     one per protocol: a coordinate, plus what differs
+                     process boundary. No protocol library
+  bot/bot-runner-node/ Node runner source and optional native SEA build
 orchestrator/        native server startup / world reset / version matrix
 testkit/             scenario runner, wait_for, assertions
 mcp-server/          tool exposure + assembly (entry point)
@@ -341,8 +342,7 @@ keeping the contract in sync.
 
 ```
 mcp-server  → testkit → {bot-core, orchestrator, contract}
-bot-runner  → bot-core → contract
-backend-*   → bot-core → contract
+bot-core    → contract
 agent-mcp   → agent-core → contract
 ```
 
@@ -612,10 +612,9 @@ versions:
     paper: { version: "1.21.11" }
 ```
 
-**The protocol is deliberately absent from it.** The runner asks the server what it speaks and
-loads the matching backend (§4.4), so writing the number here would be a second place for it to be
-wrong. What a new *protocol* needs is a `bot/backends/backend-<n>` directory; what a new *version*
-needs is this block.
+**The protocol is deliberately absent from it.** The Node runner asks the server what it speaks
+and selects the matching minecraft-data entry, so writing the number here would be a second place
+for it to be wrong. A new version needs this block and a compatibility run.
 
 ### 15.1 Why not Docker (revised)
 
@@ -670,13 +669,12 @@ not one of them**, so "publish the jars and register them" was never available. 
 
 npm wins on one thing the others do not have: `npx` is already how MCP clients launch local
 servers, so the install line looks like every other install line. The package is a launcher and
-nothing else — it finds a JDK, fetches the jars, and execs `java -jar`.
+nothing else — it finds a JDK, fetches the MCP server jar, and selects the Node runner.
 
-### 16.2 The jars are downloaded, not packaged
+### 16.2 The server jar is downloaded, not packaged
 
-`bot-runner.jar` is ninety megabytes, because it carries a backend per protocol (§4.4). Putting
-that in an npm tarball would be antisocial and would also mean republishing the whole thing for a
-change to the two-megabyte half.
+The Node runner source is staged separately and the Windows native fallback is a release asset, so
+neither is mixed into the small MCP server jar or npm launcher.
 
 So the package holds no jars; it downloads them from the release matching its own version, into
 `~/.vitaminmcp/jars/<version>/`, and checks each against a SHA-256 **stamped into the package at
@@ -686,16 +684,12 @@ checksum file names the version it was stamped for and the launcher refuses a mi
 one mistake this design invites — bumping the version without re-stamping — would otherwise
 surface as a hash failure indistinguishable from a compromised download.
 
-**The two jars are fetched differently, and that is the whole reason this works.** `mcp-server.jar`
-is small and nothing runs without it, so the launcher waits for it. `bot-runner.jar` is fetched in
-the background while the server is already answering: a client's startup timeout is around thirty
-seconds and ninety megabytes is not reliably inside it, but bots are opt-in and most sessions never
-need one. A session that does need one waits inside `session_start`, which is a tool call with a
-generous limit, not a startup.
+`mcp-server.jar` is small and nothing runs without it, so the launcher waits for it. With Node
+available, no runner asset is downloaded; the Windows native asset is fetched only when Node is
+not available and a bot session needs it.
 
-The handoff is a file rename. A partial download is `bot-runner.jar.part`; `mcp-server` waits for
-the rename rather than polling for a size, so it can never open a half-written jar, and it can tell
-"still arriving" from "not coming" by whether the `.part` file exists at all.
+The handoff is a file rename. Partial downloads use `.part`; `mcp-server` waits for the rename
+rather than polling for a size, so it can never open a half-written asset.
 
 ### 16.3 Release order
 

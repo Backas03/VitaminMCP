@@ -60,7 +60,7 @@ final class SessionTools {
                                     + "else, since nothing local can vouch for it.");
                     string(properties, "runnerJar",
                             "Path to a bot runner (Node script or platform executable). Optional: defaults to "
-                                    + "VITAMINMCP_RUNNER_JAR, or to the bot-runner jar sitting "
+                            + "VITAMINMCP_RUNNER_JAR, or to the Node runner sitting "
                                     + "beside this server's own jar, which is where both "
                                     + "'gradlew dist' and the npm package put it.");
                     string(properties, "tls",
@@ -588,7 +588,7 @@ final class SessionTools {
 
         List<java.nio.file.Path> found = new java.util.ArrayList<>();
         try (var entries = java.nio.file.Files.list(here)) {
-            entries.filter(path -> isRunnerJar(path.getFileName().toString())).forEach(found::add);
+            entries.filter(path -> isRunnerFile(path.getFileName().toString())).forEach(found::add);
         } catch (java.io.IOException e) {
             throw new IllegalArgumentException(
                     "session_start needs 'runnerJar': could not look in " + here + " (" + e + ")");
@@ -596,9 +596,8 @@ final class SessionTools {
 
         if (found.isEmpty()) {
             throw new IllegalArgumentException(
-                    "session_start needs 'runnerJar' — the bot runner built for this server's "
-                            + "protocol version. One JVM cannot speak two Minecraft protocols, so "
-                            + "bots run in a child process. No bot-runner jar was found in "
+                    "session_start needs 'runnerJar' — the Node runner built for this server. "
+                            + "Bots run in a child process. No Node runner was found in "
                             + here + ", so pass its path.");
         }
         if (found.size() > 1) {
@@ -611,20 +610,22 @@ final class SessionTools {
     }
 
     /**
-     * Whether a filename is a bot runner.
+     * Whether a filename is a supported Node runner.
      *
      * <p>Both spellings, because 'gradlew dist' stamps the version into the name and the release
      * artifact the npm package downloads does not.
      */
-    private static boolean isRunnerJar(String name) {
-        return name.endsWith(".jar")
-                && (name.equals("bot-runner.jar") || name.startsWith("bot-runner-"));
+    private static boolean isRunnerFile(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.equals("runner.mjs")
+                || lower.equals("runner.js")
+                || lower.equals("bot-runner-win-x64.exe");
     }
 
     /**
      * Waits for a runner that is still arriving.
      *
-     * <p>The runner is ninety megabytes, so the npm launcher fetches it in the background rather
+     * <p>The runner can be large, so the npm launcher fetches it in the background rather
      * than holding up a client that may never spawn a bot: this server starts answering while the
      * download runs, and only a call that actually needs bots waits for it. A partial file is
      * named {@code .part} and renamed when complete, so the wait is for a rename and never sees a

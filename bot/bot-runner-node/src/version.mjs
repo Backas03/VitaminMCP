@@ -7,9 +7,9 @@ export const PING_TIMEOUT_MILLIS = 10_000;
 /**
  * The protocol number a server speaks, asked without speaking it.
  *
- * The Java runner pings for exactly this reason (`ServerPing`, `RunnerLauncher`): the protocol
- * decides which implementation to load, and guessing it from a version string the caller supplied
- * is how a bot ends up failing at the login packet instead of at startup.
+ * The old launcher also pinged for exactly this reason: the protocol decides which data set to use,
+ * and guessing it from a version string supplied by the caller is how a bot ends up failing at the
+ * login packet instead of at startup.
  */
 export function pingProtocol(host, port, timeoutMillis = PING_TIMEOUT_MILLIS) {
   return new Promise((resolve, reject) => {

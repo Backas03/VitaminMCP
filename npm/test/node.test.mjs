@@ -10,13 +10,14 @@ import { verifyFileHash } from '../lib/jars.mjs';
 
 test('maps every supported platform to its release asset', () => {
   assert.equal(runnerAssetName('win32', 'x64'), 'bot-runner-win-x64.exe');
-  assert.equal(runnerAssetName('linux', 'x64'), 'bot-runner-linux-x64');
-  assert.equal(runnerAssetName('linux', 'arm64'), 'bot-runner-linux-arm64');
-  assert.equal(runnerAssetName('darwin', 'x64'), 'bot-runner-darwin-x64');
-  assert.equal(runnerAssetName('darwin', 'arm64'), 'bot-runner-darwin-arm64');
 });
 
-test('rejects an unsupported platform instead of guessing an asset', () => {
+test('explains that Linux and macOS assets are planned', () => {
+  assert.throws(() => runnerAssetName('linux', 'x64'), /planned but not released/);
+  assert.throws(() => runnerAssetName('darwin', 'arm64'), /planned but not released/);
+});
+
+test('rejects an unknown platform instead of guessing an asset', () => {
   assert.throws(() => runnerAssetName('freebsd', 'x64'), /No VitaminMCP runner asset exists/);
 });
 

@@ -1,4 +1,9 @@
-# Where the Node runner does not match the Java runner
+# Historical parity record
+
+The Java runner used during Stage 5 has been retired in Stage 9. The entries below are retained as
+the historical record of the parity gate and are not current runtime behavior.
+
+# Where the Node runner did not match the retired Java runner
 
 Stage 5 of `docs/mineflayer-roadmap.md` accepts or rejects the migration on this list, so it is
 written as the differences are made rather than reconstructed at the end. Every entry needs a

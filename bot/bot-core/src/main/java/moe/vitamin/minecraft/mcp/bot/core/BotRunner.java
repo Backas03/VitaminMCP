@@ -38,11 +38,11 @@ public final class BotRunner implements AutoCloseable {
     }
 
     /** Launches the runner and waits until it is ready. */
-    public static BotRunner launch(Path runnerPath, Path javaHome, String host, int port)
+    public static BotRunner launch(Path runnerPath, String host, int port)
             throws IOException {
         Objects.requireNonNull(runnerPath, "runnerPath");
 
-        Process process = new ProcessBuilder(commandFor(runnerPath, javaHome, host, port))
+        Process process = new ProcessBuilder(commandFor(runnerPath, host, port))
 
                 .redirectError(ProcessBuilder.Redirect.INHERIT)
                 .start();
@@ -73,18 +73,14 @@ public final class BotRunner implements AutoCloseable {
      * the same way and answer the same protocol, so which one is in use is a path and nothing
      * more — which is what lets the two be run against the same server on the same afternoon.
      */
-    static List<String> commandFor(Path runner, Path javaHome, String host, int port) {
+    static List<String> commandFor(Path runner, String host, int port) {
         String path = runner.toAbsolutePath().toString();
         List<String> command = new ArrayList<>();
 
         if (isScript(runner)) {
             command.add(node());
             command.add(path);
-        } else if (isNativeRunner(runner)) {
-            command.add(path);
         } else {
-            command.add(javaHome.resolve("bin").resolve("java").toString());
-            command.add("-jar");
             command.add(path);
         }
 
@@ -96,17 +92,6 @@ public final class BotRunner implements AutoCloseable {
     private static boolean isScript(Path runner) {
         String name = runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
         return name.endsWith(".mjs") || name.endsWith(".js");
-    }
-
-    /**
-     * Node SEA assets are native executables, not jars. The Windows asset has an extension; the
-     * Unix assets deliberately do not, so the published bot-runner-<platform>-<arch> names are
-     * the explicit marker for them. Keeping this separate from scripts preserves the old jar path.
-     */
-    private static boolean isNativeRunner(Path runner) {
-        String name = runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-        return name.endsWith(".exe")
-                || (name.startsWith("bot-runner-") && !name.endsWith(".jar"));
     }
 
     /**

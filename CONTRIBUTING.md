@@ -24,16 +24,11 @@ reason.
     That matches the toolchain today and **means something different**: the toolchain is what we
     compile with, this is *what a server can load*. It is the safety net when the floor moves or
     the toolchain is raised (design.md §5.1). Every other module runs on our JVM and is unaffected
-- **Bots: MCProtocolLib. ViaProxy is not used** (design.md §4)
-  - **One `bot-runner.jar` with a backend per protocol inside it.** At startup it pings the server,
-    reads the protocol out of the status reply, and loads the matching backend in a parent-last
-    class loader. Several MCProtocolLib builds cannot share a *class path* — every build occupies
-    the same package names — but they can share a process (design.md §4.4)
-  - A backend is named for the **protocol number**, not the Minecraft version: `backend-772` covers
-    1.21.7 and 1.21.8
-  - Backends share their source and override it **by file**. A version that genuinely differs drops
-    its own copy at the same path; the seams that have earned their place are `PlayerSync`,
-    `SessionFactory`, `EntitySync`, `ItemText` and `BlockUse`
+- **Bots: Node.js, mineflayer and minecraft-data** (design.md §4)
+  - The Node runner pings the server, reads its protocol number, and selects the matching
+    minecraft-data entry before a bot logs in.
+  - `mineflayer-pathfinder` supplies movement while the existing tab-separated runner protocol
+    remains the boundary between the Java MCP server and the Node child process.
 - **MCP is implemented directly** — the agent over HTTP on the JDK's `HttpServer`, `mcp-server` over
   stdio. Why not the MCP Java SDK is in the mcp-server commit
 - **Servers are started natively**: the jar is downloaded from the PaperMC API and run (design.md
@@ -51,8 +46,8 @@ one-to-one, while the `agent/` and `bot/` grouping is kept on disk.
 | `agent-core` | Capture engine and state queries, on the Bukkit API |
 | `agent-mcp` | The agent's MCP server, on the JDK's `HttpServer` |
 | `bot-core` | Runner handle, line protocol, handshake injection, server ping, and the `bot.spi` contract. No protocol library |
-| `bot-runner` | The runner jar: launcher, backend selection, dispatch. Runs as a child process |
-| `backend-<n>` | One per protocol, under `bot/backends/`. A coordinate plus whatever actually differs; the rest comes from `bot/backends/shared` |
+| `bot/bot-runner-node` | The Node runner source and optional SEA build. Runs as a child process |
+| `bot-runner-node` | Node runner source, protocol selection and optional native SEA build |
 | `orchestrator` | Native server startup, world reset, version matrix |
 | `testkit` | Scenario runner, `wait_for`, assertions |
 | `mcp-server` | Tool exposure and assembly. The entry point |
@@ -65,8 +60,7 @@ Dependencies flow **one way only**:
 
 ```
 mcp-server  → testkit → {bot-core, orchestrator, contract}
-bot-runner  → bot-core → contract
-backend-*   → bot-core → contract
+bot-core    → contract
 agent-mcp   → agent-core → contract
 ```
 
@@ -75,9 +69,9 @@ Three boundaries are load-bearing, and each is there for a reason that is not ob
 - **`mcp-server` never compiles against `agent-*`.** The agent is injected at runtime as a jar, and
   the only thing joining the two sides is `contract`. Break this and per-version agents stop being
   separable.
-- **Nothing above `testkit` compiles against a protocol library.** One JVM cannot speak two
-  Minecraft protocols — every MCProtocolLib build occupies the same package names — so bots live in
-  child processes. That is also what lets one matrix span versions whose protocols differ.
+- **Nothing above `testkit` compiles against a bot protocol library.** The Node runner and its
+  dependencies live in a child process, so the Java MCP server remains independent of the client
+  implementation and the matrix can select the data version at runtime.
 - **`contract` has no external dependencies.** It is the shared vocabulary of two artifacts that
   ship separately; anything it drags in, both sides inherit.
 
@@ -108,9 +102,9 @@ numbering is part of the contract.
 7. **The version matrix is [versions.yaml](versions.yaml), not code.** Adding a version must stay a
    configuration change, and **the protocol number never appears in it** — the runner asks the
    server.
-8. **`bot.spi` names no protocol library type.** It is the one package shared across the class
-   loader boundary, so a signature mentioning MCProtocolLib would put that library on the launcher's
-   own class path — the collision the whole bundle exists to prevent. A test asserts it.
+8. **`bot-core` names no protocol library type.** It is the Java-side process boundary shared by
+   the MCP server and the Node runner, so protocol client dependencies must stay outside its class
+   path.
 
 ### Adding an MCP tool
 
@@ -236,5 +230,5 @@ verifying, and real accounts are for a final smoke test only.
 - **Write version-specific code when versions actually diverge, not before.** Do not abstract in
   advance (design.md §4.2). Inside a backend that means: let the compiler tell you which file
   differs, then override that file. Do not add a seam for a difference nobody has seen
-- A `backend-*` directory is **not** a new module in the "propose it first" sense — it is the
-  mechanism working as designed
+- The Node runner is not a Gradle module; its npm package and optional SEA assets are built by the
+  scripts under `bot/bot-runner-node`.

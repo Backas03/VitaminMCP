@@ -53,7 +53,7 @@ class CompatibilityLiveTest {
 
             AgentClient agent = new AgentClient("127.0.0.1", AGENT_PORT, token);
 
-            try (BotRunner bots = BotRunner.launch(runnerJar, javaHome, "127.0.0.1", PORT)) {
+            try (BotRunner bots = BotRunner.launch(runnerJar, "127.0.0.1", PORT)) {
                 exercise(bots, agent);
             }
         } finally {

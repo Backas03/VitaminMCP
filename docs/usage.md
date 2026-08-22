@@ -173,9 +173,9 @@ the real player →  a full menu      ← only the client received it
 }
 ```
 
-**Items come back as numeric ids.** The protocol does not carry names and MCProtocolLib has no
-lookup table. Use `state_query` when you need material names — but only when the server really
-holds that inventory. Name, lore and CustomModelData arrive as components, so both sides show them.
+**Items come back with names.** Use `state_query` when you need the server-side inventory — but
+only when the server really holds that inventory. Name, lore and CustomModelData arrive as
+components, so both sides show them.
 
 ## A live view — `bot_view`
 
@@ -624,7 +624,7 @@ When the cause is not visible there, dig in this order:
 | Symptom | Cause |
 |---|---|
 | Bot connection refused with `did you forget to enable BungeeCord in spigot.yml?` | The server is not `online-mode=false` + `bungeecord: true` ([README](../README.md) §2) |
-| `err startup ... has no backend for protocol N` | The runner carries no backend for what this server speaks — it lists the ones it does carry. A version newer than the release needs a `bot/backends/backend-N` module ([design.md §4.4](design.md)) |
+| `err startup ... unsupported server version` | The Node runner has no minecraft-data entry for what this server speaks. Add the version to the compatibility matrix only after a live verification. |
 | Events are not captured | The type is on the high-frequency list. Name it in `types`, and enable `capture-high-frequency` if needed |
 | `command_exec` is missing | `read-only: true` (the default). `session_start`'s `agentTools` lists the tools that actually exist |
 | A proxied tool refuses with something like `... needs 'kind'` | Parameters were wrapped. Pass them flat, at the top level |

@@ -110,7 +110,6 @@ final class SetupPrompts {
                     to it can then impersonate anyone:
 
                        - server.properties: online-mode=false
-                       - server.properties: allow-flight=true
                        - spigot.yml: settings.bungeecord: true
 
                     Say plainly what each one does before I decide, and restart the server after \

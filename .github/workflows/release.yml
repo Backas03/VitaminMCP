@@ -40,18 +40,6 @@ jobs:
           - target: win32-x64
             asset: bot-runner-win-x64.exe
             os: windows-latest
-          - target: linux-x64
-            asset: bot-runner-linux-x64
-            os: ubuntu-latest
-          - target: linux-arm64
-            asset: bot-runner-linux-arm64
-            os: ubuntu-latest
-          - target: darwin-x64
-            asset: bot-runner-darwin-x64
-            os: macos-15-intel
-          - target: darwin-arm64
-            asset: bot-runner-darwin-arm64
-            os: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -63,17 +51,6 @@ jobs:
       - name: Install runner dependencies
         working-directory: bot/bot-runner-node
         run: npm ci
-
-      - name: Provide the Linux arm64 SEA host binary
-        if: matrix.target == 'linux-arm64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          node_version="$(node -p "process.version.slice(1)")"
-          archive="node-v${node_version}-linux-arm64.tar.xz"
-          curl -fsSL "https://nodejs.org/dist/v${node_version}/${archive}" -o "$RUNNER_TEMP/$archive"
-          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
-          echo "VITAMINMCP_SEA_NODE_LINUX_ARM64=$RUNNER_TEMP/node-v${node_version}-linux-arm64/bin/node" >> "$GITHUB_ENV"
 
       - name: Build SEA runner
         working-directory: bot/bot-runner-node
@@ -87,21 +64,6 @@ jobs:
           if ($LASTEXITCODE -ne 2 -or ($output -notmatch 'usage: runner.mjs')) {
             throw "SEA runner did not execute its entry point. exit=$LASTEXITCODE output=$output"
           }
-
-      - name: Smoke test Unix SEA runner
-        if: matrix.target != 'win32-x64'
-        shell: bash
-        run: |
-          set +e
-          output="$("build/dist/runners/${{ matrix.asset }}" 2>&1)"
-          status=$?
-          set -e
-          test "$status" -eq 2
-          grep -q 'usage: runner.mjs' <<<"$output"
-
-      - name: Ad-hoc sign macOS runner
-        if: startsWith(matrix.target, 'darwin-')
-        run: codesign --force --deep --sign - "build/dist/runners/${{ matrix.asset }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -188,12 +150,7 @@ jobs:
             for asset in \
               VitaminMCP.jar \
               mcp-server.jar \
-              bot-runner.jar \
-              runners/bot-runner-win-x64.exe \
-              runners/bot-runner-linux-x64 \
-              runners/bot-runner-linux-arm64 \
-              runners/bot-runner-darwin-x64 \
-              runners/bot-runner-darwin-arm64; do
+              runners/bot-runner-win-x64.exe; do
               name="${asset##*/}"
               if grep -qx "$name" <<<"$present"; then
                 echo "  $name is already published; leaving it alone."
@@ -207,12 +164,7 @@ jobs:
               --generate-notes \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
-              build/dist/bot-runner.jar \
-              build/dist/runners/bot-runner-win-x64.exe \
-              build/dist/runners/bot-runner-linux-x64 \
-              build/dist/runners/bot-runner-linux-arm64 \
-              build/dist/runners/bot-runner-darwin-x64 \
-              build/dist/runners/bot-runner-darwin-arm64
+              build/dist/runners/bot-runner-win-x64.exe
           fi
 
       # Pins what the release actually serves, which on a rerun is not what this run just built.
