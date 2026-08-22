@@ -697,6 +697,25 @@ not available and a bot session needs it.
 The handoff is a file rename. Partial downloads use `.part`; `mcp-server` waits for the rename
 rather than polling for a size, so it can never open a half-written asset.
 
+**The native runner bundles only the supported versions of minecraft-data.** minecraft-data ships
+every version of both editions — 426MB of JSON, 331MB of it Bedrock, which a Paper testing tool
+can never reach. Its `data.js` reaches all of it through *static* `require()` calls hidden behind
+lazy getters: free at runtime, but esbuild resolves each one while bundling and inlines the file.
+That is how the runner asset went from an 88MB jar to a 564MB executable when the bot side moved to
+mineflayer, and every user who has no Node installed downloads it.
+
+`scripts/slim-minecraft-data.mjs` replaces the versions outside the supported line with a module
+that throws, taking the asset to 134MB. The keep-set is **derived from `data.js`, not from
+directory names**, because a version entry borrows files from older ones — 1.21.x reads out of
+pc/1.16.1, pc/1.20, pc/1.20.2, pc/1.20.3 and pc/1.20.5 — so an obvious prune builds cleanly and
+then fails on a bot that asks for a recipe. The supported line comes from `SupportedVersions.FLOOR`
+rather than being written down a second time.
+
+The server-list ping names its version for the same reason. It happens before anything knows what
+the server speaks, so minecraft-protocol otherwise falls back to the newest version it has heard of
+and loads that whole data set to send a handshake — which both re-introduced the largest single
+version and made every startup pay for it.
+
 ### 16.3 Release order
 
 Three publishes, none of them reversible, and each depends on the last:

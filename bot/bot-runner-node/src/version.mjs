@@ -5,6 +5,20 @@ import mc from 'minecraft-protocol';
 export const PING_TIMEOUT_MILLIS = 10_000;
 
 /**
+ * The version whose packet definitions a server-list ping is written with.
+ *
+ * A ping happens before anything knows what the server speaks, so minecraft-protocol otherwise
+ * falls back to the newest version it has ever heard of and loads that entire data set — blocks,
+ * items, the lot — to send a handshake and read a status string. Naming a version here skips that,
+ * and it is safe because handshake and status have not changed shape since 1.7: the server answers
+ * with its own protocol number whatever we send.
+ *
+ * It must be a version the SEA build bundles, so keep it on the supported line — see
+ * `scripts/slim-minecraft-data.mjs`, which is what makes the others absent.
+ */
+export const PING_VERSION = '1.21';
+
+/**
  * The protocol number a server speaks, asked without speaking it.
  *
  * The old launcher also pinged for exactly this reason: the protocol decides which data set to use,
@@ -17,7 +31,7 @@ export function pingProtocol(host, port, timeoutMillis = PING_TIMEOUT_MILLIS) {
       () => reject(new Error(`${host}:${port} did not answer a server-list ping within ${timeoutMillis}ms`)),
       timeoutMillis,
     );
-    mc.ping({ host, port, closeTimeout: timeoutMillis }, (error, result) => {
+    mc.ping({ host, port, closeTimeout: timeoutMillis, version: PING_VERSION }, (error, result) => {
       clearTimeout(timer);
       if (error) {
         reject(error);

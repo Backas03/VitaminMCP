@@ -6,8 +6,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { slimMinecraftData } from './slim-minecraft-data.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repository = path.resolve(root, '..', '..');
+
+/**
+ * The supported Minecraft floor, read from the one file that owns it.
+ *
+ * Duplicating it here would let the bundled data and the project's supported range drift apart
+ * silently, and the symptom would be a runner that refuses a version the matrix says is fine.
+ * release.yml already reads the project version out of a Kotlin file the same way.
+ */
+const floor = (await fs.readFile(
+  path.join(repository, 'build-logic/src/main/kotlin/moe/vitamin/build/SupportedVersions.kt'),
+  'utf8',
+)).match(/const val FLOOR = "([^"]+)"/)?.[1];
+if (!floor) throw new Error('Could not read FLOOR from SupportedVersions.kt.');
 const targetKey = process.argv[2] ?? `${process.platform}-${process.arch}`;
 const targets = {
   'win32-x64': { asset: 'bot-runner-win-x64.exe', env: 'VITAMINMCP_SEA_NODE_WIN_X64' },
@@ -45,7 +60,11 @@ try {
     outfile: bundle,
     sourcemap: false,
     external: ['node:*'],
+    plugins: [slimMinecraftData(path.join(root, 'node_modules', 'minecraft-data'), floor)],
   });
+  process.stdout.write(
+    `bundle ${(await fs.stat(bundle)).size / 1048576 | 0} MB (minecraft-data trimmed to ${floor}.x)\n`,
+  );
   await fs.writeFile(config, JSON.stringify({
     main: bundle,
     output: blob,
