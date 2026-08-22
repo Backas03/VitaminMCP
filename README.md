@@ -59,114 +59,24 @@ Three jars, in three different places. Only the first is a Minecraft plugin.
 | `mcp-server.jar` | on your machine, as a child of your MCP client | Speaks stdio to the client and HTTP to the plugin, and owns the bots |
 | `runner.mjs` or `bot-runner-win-x64.exe` | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
 
-**Why the agent has to be a plugin.** Half of what a test needs to assert on has no protocol
-representation. Whether a `PlayerJoinEvent` fired, a stack trace on the console, whether `/op`
-actually resolved, what a permission node evaluates to — none of that reaches a connected client.
-Only code running inside the server can see it. Hence the split: the plugin reports what the
-*server* did, bots observe what a *player* was shown, and a single assertion can draw on both.
-
-**The plugin is worth installing on its own.** With nothing else set up, it turns "find out why the
-server died last night" into a question you can ask — events, logs, exceptions, plugin list, live
-state, all over MCP ([design.md §1](docs/design.md)). Bots are opt-in, and so is the server
-configuration they need ([Server setup](#2-server-setup-if-you-want-bots)); read-only is the
-default, so a plugin-only install cannot alter the server at all.
+The plugin sees server-side events, logs, permissions and state; the Node runner sees what a real
+client receives. Read-only mode is the default, and bots are optional.
 
 ---
 
-## Why
+## Example
 
-**Without VitaminMCP**, verifying a plugin change means:
-
-- Launch Minecraft, join the server
-- Click through the GUI by hand
-- Read the chat and eyeball whether it did the right thing
-- Repeat for every permission level, every edge case, every version
-
-**With VitaminMCP**, you type this to your agent:
-
-> **Prompt:** Spawn a bot, op it, open the `/shop` GUI, check slot 11 is a diamond sword listed at
-> 100 coins, buy it, confirm the sword is in the bot's inventory, then deop.
-
-and it drives the server, verifies each step, and tells you which one failed and what the server was
-doing at that moment.
-
-The difference that matters for an AI agent is not the automation — it is that **failures are
-attributable.** A scenario stops at the first failing step and returns the events and log lines from
-that instant, so there is no second round-trip to find out why.
-
----
-
-## What a test looks like
-
-Every action below is a real step. Type the prompt and let the agent build it, or hand
-`bot_run_scenario` the array yourself.
-
-### Buying from a shop GUI
-
-> **Prompt:** Spawn a bot called `Tester1` and op it. Open the `/shop` GUI and check slot 11 holds a
-> diamond sword named "Diamond Sword" with "100 coins" in its lore. Buy it, then confirm the sword
-> ended up in the bot's own inventory. Deop when you are done.
+Ask the agent to test a plugin, or pass a scenario to `bot_run_scenario`:
 
 ```json
 [
-  {"action": "spawn",         "bot": "Tester1"},
-  {"action": "console",       "command": "op Tester1"},
-  {"action": "assert_player", "bot": "Tester1", "op": true},
-
-  {"action": "command",       "bot": "Tester1", "command": "shop"},
-  {"action": "wait_for",      "condition": "inventory_open", "name": "Tester1", "title": "Shop"},
-  {"action": "assert_inventory", "bot": "Tester1", "size": 27, "slots": [
-      {"slot": 11, "material": "DIAMOND_SWORD", "name": "Diamond Sword", "lore": "100 coins"}
-  ]},
-
-  {"action": "click_slot",    "bot": "Tester1", "slot": 11},
-  {"action": "assert_event",  "eventType": "InventoryClickEvent", "player": "Tester1"},
-  {"action": "wait_for",      "condition": "inventory_contains",
-                              "name": "Tester1", "material": "DIAMOND_SWORD", "which": "player"},
-
-  {"action": "close_menu",    "bot": "Tester1"},
-  {"action": "console",       "command": "deop Tester1"}
+  {"action":"spawn", "bot":"Tester1"},
+  {"action":"command", "bot":"Tester1", "command":"shop"},
+  {"action":"wait_for", "condition":"inventory_open", "name":"Tester1", "title":"Shop"},
+  {"action":"assert_inventory", "bot":"Tester1", "slots":[
+    {"slot":11, "material":"DIAMOND_SWORD", "name":"Diamond Sword"}
+  ]}
 ]
-```
-
-### A login reward, and its cooldown
-
-> **Prompt:** Test the daily reward plugin. Join as `Newcomer`, wait for the reward menu, check slot
-> 13 is the claim button, click it and confirm the bot was told it claimed something. Then rejoin as
-> the same player, click again, and confirm it is refused this time because the cooldown is still
-> running.
-
-The second half tests the refusal, which is the part that usually goes unverified: a cooldown
-rejection is often one chat message with nothing behind it — no exception, no log line, no event.
-
-```json
-[
-  {"action": "spawn",    "bot": "Newcomer"},
-  {"action": "wait_for", "condition": "inventory_open", "name": "Newcomer", "title": "Daily Reward"},
-  {"action": "assert_inventory", "bot": "Newcomer", "slots": [
-      {"slot": 13, "material": "CHEST", "name": "Claim"}
-  ]},
-  {"action": "click_slot",     "bot": "Newcomer", "slot": 13},
-  {"action": "assert_message", "bot": "Newcomer", "contains": "claimed"},
-
-  {"action": "despawn", "bot": "Newcomer"},
-  {"action": "spawn",   "bot": "Newcomer"},
-  {"action": "wait_for","condition": "inventory_open", "name": "Newcomer"},
-  {"action": "click_slot",     "bot": "Newcomer", "slot": 13},
-  {"action": "assert_message", "bot": "Newcomer", "contains": "already"}
-]
-```
-
-That second run works because **a bot's UUID is derived from its name.** `Newcomer` is the same
-player across runs, so anything keyed on identity — permissions, cooldowns, stored data —
-reproduces instead of drifting.
-
-A failure comes back naming the step, the reason, and the evidence:
-
-```jsonc
-{"step": 5, "action": "assert_inventory", "passed": false,
- "detail": "slot 11 expected DIAMOND_SWORD but held AIR",
- "evidence": "events=[...] logs=[...]"}
 ```
 
 ---
@@ -271,30 +181,8 @@ Verification is the point, so this is where the surface is widest.
 | `assert_event` | an event fired, optionally for one player, since the scenario began |
 | `assert_message` | the server told this bot something containing a string |
 
-Two of these exist because the server alone cannot answer the question:
-
-- **`assert_message`** — a plugin's refusal is usually one message and nothing else. No exception,
-  no console line, no event. Without it, "denied for lack of permission" and "silently did nothing"
-  are indistinguishable. It matches action bar and title text too, since a plugin is as likely to
-  refuse above the hotbar as in chat.
-- **`assert_inventory` with `customModelData`** — with a resource pack, two buttons of the same
-  material and name can be entirely different icons. Checking material and name alone misses icon
-  bugs.
-
-**Permissions** are tested through `state_query` with `permissions: [...]` rather than a dedicated
-assertion — permission nodes can be tested but not enumerated, so you have to name the ones you care
-about. **A scoreboard or boss bar value** is read straight off the player's screen with
-`bot_inspect`, which is usually where a server draws money, region and quest progress. Anything
-still plugin-specific after that is reached through `command_exec` and its output.
-
-Two notes on calling them:
-
-- **Pass proxied parameters flat, at the top level** — `{"kind": "player", "target": "Tester1"}`,
-  not wrapped in an `arguments` object.
-- The usual GUI loop is `command_exec` → `wait_for inventory_open` → `state_query kind="inventory"`,
-  falling back to `bot_inspect` when the menu reads empty because the plugin draws it with packets.
-
-Full parameters and the complete step reference are in [docs/usage.md](docs/usage.md).
+Use `bot_inspect` for messages, screen state and effects; use `state_query` for server state. Pass
+proxied parameters flat at the top level. Full parameters are in [docs/usage.md](docs/usage.md).
 
 ---
 
