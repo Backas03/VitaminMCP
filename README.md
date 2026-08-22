@@ -308,11 +308,21 @@ Full parameters and the complete step reference are in [docs/usage.md](docs/usag
 
 ### Version support
 
-| Versions | Protocol | Status |
-|---|---|---|
-| 1.18 – 1.20.6 | Planned | Below the agent floor |
-| **1.21 through 1.21.8** | **Supported** | Current matrix |
-| 1.21.9 and later | Planned | Needs a compatibility run |
+| Minecraft version | Windows | Linux | macOS | Status |
+|---|:---:|:---:|:---:|---|
+| 1.18 – 1.20.6 | 🔴 | 🔴 | 🔴 | Below the Paper agent floor |
+| **1.21 – 1.21.8** | **🟢** | **🟡** | **🟡** | **Supported and live-tested** |
+| 1.21.9 and later | 🟡 | 🟡 | 🟡 | Planned; requires a compatibility run |
+
+#### Runner support by operating system
+
+| Operating system | Node source runner | Native runner asset | Meaning |
+|---|:---:|:---:|---|
+| **Windows x64** | 🟢 | 🟢 | Current supported distribution |
+| **Linux x64 / arm64** | 🟢 | 🔴 | Node required; native asset planned |
+| **macOS Intel / Apple Silicon** | 🟢 | 🔴 | Node required; native asset planned |
+
+**Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
 **1.21 through 1.21.8 are supported today**, and every one of them runs in the matrix
 ([versions.yaml](versions.yaml)). The other rows are on the roadmap without a date attached.
@@ -324,8 +334,8 @@ Outside the supported range, things fail clearly rather than misbehaving: an old
 to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.
 
 Agent support and bot support can also differ. The agent needs a compatible Paper API; bots need a
-matching minecraft-data entry. So a server may be readable by the agent before bots can join it —
-inspection, logs and events all still work without them.
+matching minecraft-data entry and a supported runner environment. So a server may be readable by
+the agent before bots can join it — inspection, logs and events all still work without them.
 
 ---
 
