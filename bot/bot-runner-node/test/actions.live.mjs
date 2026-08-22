@@ -1,7 +1,7 @@
 /**
  * The packet verbs, driven the way the MCP server drives them.
  *
- * Needs a running backend on `online-mode=false` with `settings.bungeecord: true`, and a stone
+ * Needs a running backend on `online-mode=false` with `settings.bungeecord: false`, and a stone
  * block at the coordinates below — put one there with `setblock` before running this.
  *
  *   node test/actions.live.mjs [host] [port] [botName] [x] [y] [z]

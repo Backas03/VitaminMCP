@@ -1,7 +1,7 @@
 /**
  * Drives the runner the way the MCP server drives it: as a child process, one line at a time.
  *
- * Needs a running backend on `online-mode=false` with `settings.bungeecord: true`, so it is not
+ * Needs a running backend on `online-mode=false` with `settings.bungeecord: false`, so it is not
  * part of `npm test` — the same reason the Java live tests are gated behind a system property.
  *
  *   node test/lifecycle.live.mjs [host] [port] [botName]
@@ -17,7 +17,6 @@ import { fileURLToPath } from 'node:url';
 const host = process.argv[2] ?? '127.0.0.1';
 const port = process.argv[3] ?? '25565';
 const bot = process.argv[4] ?? 'Stage1Bot';
-const clientIp = '203.0.113.9';
 
 const runner = fileURLToPath(new URL('../runner.mjs', import.meta.url));
 const child = spawn(process.execPath, [runner, host, port], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -58,7 +57,7 @@ const ready = (await next()).split('\t');
 check('ready names the protocol it negotiated', ready[0], 'ready');
 console.log(`      protocol ${ready[1]}`);
 
-const spawned = await ask('spawn', bot, clientIp);
+const spawned = await ask('spawn', bot);
 check('spawn answers ok with three coordinates', [spawned[0], spawned[1], spawned.length], ['ok', 'spawn', 5]);
 console.log(`      at ${spawned.slice(2).join(', ')}`);
 
