@@ -88,9 +88,15 @@ final class SessionTools {
                 }));
 
         tools.add(tool("bot_spawn",
-                "Connect a bot and wait until it is standing in the world. Its UUID is derived "
-                        + "from its name, so the same name is the same player every run and "
-                        + "permission-dependent behaviour is reproducible.",
+                "Connect a bot and wait until it is standing in the world with the ground "
+                        + "beneath it loaded. Its UUID is derived from its name, so the same name "
+                        + "is the same player every run and permission-dependent behaviour is "
+                        + "reproducible. This means the CLIENT is ready, not that the SERVER will "
+                        + "act on what the bot does: Paper drops a joining player's interactions "
+                        + "for a few seconds, and plugins commonly hold them longer while they "
+                        + "load that player's data. An action in that window is refused rather "
+                        + "than lost — break_block says which — so check what it answered instead "
+                        + "of assuming a spawn means ready.",
                 properties -> {
                     session(properties);
                     string(properties, "name", "Bot name, at most 16 characters.");

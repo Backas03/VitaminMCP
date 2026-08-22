@@ -55,12 +55,16 @@ public final class ScenarioRunner {
                 return new ScenarioResult(false, results);
             }
 
+            // Where the streams stand before this step, so a failure can be shown the window it
+            // happened in rather than everything the server has retained.
+            Moment before = moment();
+
             try {
-                results.add(execute(index, action, step, scenarioStart));
+                results.add(execute(index, action, step, scenarioStart, before));
             } catch (RuntimeException e) {
 
                 results.add(ScenarioResult.StepResult.failed(
-                        index, action, String.valueOf(e.getMessage()), snapshot()));
+                        index, action, String.valueOf(e.getMessage()), snapshot(before)));
                 return new ScenarioResult(false, results);
             }
 
@@ -72,7 +76,7 @@ public final class ScenarioRunner {
     }
 
     private ScenarioResult.StepResult execute(
-            int index, String action, JsonNode step, long scenarioStart) {
+            int index, String action, JsonNode step, long scenarioStart, Moment before) {
         return switch (action) {
             case "spawn" -> {
                 String name = required(step, "bot");
@@ -111,8 +115,10 @@ public final class ScenarioRunner {
             }
 
             case "break_block" -> {
-                act(step, bot -> bot.breakBlock(step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt()));
-                yield ScenarioResult.StepResult.ok(index, action, "sent");
+                String[] outcome = new String[1];
+                act(step, bot -> outcome[0] = bot.breakBlock(
+                        step.path("x").asInt(), step.path("y").asInt(), step.path("z").asInt()));
+                yield ScenarioResult.StepResult.ok(index, action, outcome[0]);
             }
 
             case "attack_entity" -> {
@@ -230,7 +236,7 @@ public final class ScenarioRunner {
                 yield actual.equals(expected)
                         ? ScenarioResult.StepResult.ok(index, action, expected)
                         : ScenarioResult.StepResult.failed(index, action,
-                                "expected " + expected + " but found " + actual, snapshot());
+                                "expected " + expected + " but found " + actual, snapshot(before));
             }
 
             case "assert_player" -> {
@@ -529,9 +535,48 @@ public final class ScenarioRunner {
     }
 
     /** Server state at the moment of an unexpected failure. */
-    private String snapshot() {
+    /** Where the event and log streams stood at some instant. */
+    private record Moment(String events, String logs) {}
+
+    private Moment moment() {
         try {
-            return "events=" + agent.call("events_summary", AgentClient.arguments()).path("counts");
+            JsonNode info = agent.call("server_info", AgentClient.arguments());
+            return new Moment(
+                    info.path("latestEventCursor").asText(""),
+                    info.path("latestLogCursor").asText(""));
+        } catch (RuntimeException unreachable) {
+
+            return new Moment("", "");
+        }
+    }
+
+    /**
+     * What the server did during the step that just failed.
+     *
+     * <p>This used to be {@code events_summary} with no window, which is every event the agent
+     * still holds, counted by type and sorted by count. On a server that had been up for a while
+     * that meant the evidence was led by whatever ambient event was most frequent, and the one
+     * type that mattered sat far down a list with a count that silently included the scenario's
+     * own earlier, successful attempts — so a failed run could produce evidence that read like a
+     * success (dogfood/JOURNAL.md, 2026-08-23).
+     *
+     * <p>So it is the individual events and log lines from this step's own window, which is what
+     * "what the server was doing at that moment" was always supposed to mean. Unfiltered by
+     * player on purpose: the cause of a bot's step failing is often something that happened to
+     * nobody in particular.
+     */
+    private String snapshot(Moment before) {
+        try {
+            ObjectNode events = AgentClient.arguments();
+            events.put("cursor", before.events());
+            events.put("limit", 25);
+
+            ObjectNode logs = AgentClient.arguments();
+            logs.put("cursor", before.logs());
+            logs.put("limit", 15);
+
+            return "events during this step=" + agent.call("events_query", events).path("items")
+                    + " logs=" + agent.call("logs_query", logs).path("items");
         } catch (RuntimeException e) {
             return "(could not read server state: " + e.getMessage() + ")";
         }

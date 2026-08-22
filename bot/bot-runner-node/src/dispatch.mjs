@@ -64,14 +64,15 @@ export class Dispatch {
       }
 
       case protocol.BREAK: {
-        actions.breakBlock(
+        // Carries what became of the dig, which is the whole point of waiting for it.
+        const outcome = await actions.breakBlock(
           this.#bots.require(command[1]),
           command[1],
           Number(command[2]),
           Number(command[3]),
           Number(command[4]),
         );
-        return ok(verb);
+        return protocol.encode(protocol.OK, verb, outcome);
       }
 
       case protocol.COMMAND: {

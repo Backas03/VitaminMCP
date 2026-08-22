@@ -16,6 +16,9 @@ const SETTLE_TIMEOUT_MILLIS = 15_000;
 const SETTLED_CHECKS = 5;
 const SETTLE_POLL_MILLIS = 50;
 
+/** How long the client gets to be sent the chunk it is standing in. */
+const WORLD_TIMEOUT_MILLIS = 15_000;
+
 /** The bots this runner holds, and the server they all connect to. */
 export class BotRegistry {
   #host;
@@ -73,6 +76,7 @@ export class BotRegistry {
     this.#bots.set(name, bot);
     configurePathfinder(bot);
     await settle(bot, name);
+    await worldKnown(bot, name);
     return position(bot);
   }
 
@@ -183,6 +187,36 @@ async function settle(bot, name) {
   throw new Error(
     `Bot ${name} never settled within ${SETTLE_TIMEOUT_MILLIS}ms; last position `
       + (at ? `${at.x}, ${at.y}, ${at.z}` : 'unknown'),
+  );
+}
+
+/**
+ * Waits until the bot's client knows the world it is standing in.
+ *
+ * `spawn` fires on the position packet, which can arrive before the chunk does. A bot that acts in
+ * that gap sends block actions against blocks it has never been told about, and the server answers
+ * with nothing at all — indistinguishable, from the caller's side, from a plugin cancelling the
+ * action silently. A dogfooding round spent most of itself on that ambiguity
+ * (dogfood/JOURNAL.md, 2026-08-23).
+ *
+ * This closes the client half. The server half — a plugin, or Paper itself, dropping interactions
+ * from a player who has only just joined — cannot be waited out from here, and is why
+ * `breakBlock` reports whether the server acknowledged the dig.
+ */
+async function worldKnown(bot, name) {
+  const deadline = Date.now() + WORLD_TIMEOUT_MILLIS;
+
+  while (Date.now() < deadline) {
+    const at = bot.entity?.position;
+    if (at && bot.blockAt(at.offset(0, -1, 0))) {
+      return;
+    }
+    await delay(SETTLE_POLL_MILLIS);
+  }
+
+  throw new Error(
+    `Bot ${name} joined but its client was never sent the world around it within `
+      + `${WORLD_TIMEOUT_MILLIS}ms`,
   );
 }
 

@@ -43,8 +43,8 @@ public interface AgentQueries {
     /** What the server believes about a player. */
     PlayerState playerState(String name, java.util.Collection<String> permissionNodes);
 
-    /** The material at a block position, or {@code null} if the world is unknown. */
-    String blockAt(String world, int x, int y, int z);
+    /** What is at a block position, or {@code null} if the world is unknown. */
+    moe.vitamin.minecraft.mcp.contract.BlockState blockAt(String world, int x, int y, int z);
 
     /** What a player has in front of them, or {@code null} if they are not online. */
     InventorySnapshot inventory(String name, boolean openMenu, int limit);

@@ -308,9 +308,17 @@ public final class BotRunner implements AutoCloseable {
             runner.send(RunnerProtocol.VIEW, name, "world", "third_person", "true");
         }
 
-        public void breakBlock(int x, int y, int z) throws IOException {
-            runner.send(RunnerProtocol.BREAK, name,
+        /**
+         * Breaks a block and reports what became of the dig.
+         *
+         * <p>Not {@code void}: the runner waits for the server to acknowledge the block action,
+         * so the answer separates a dig something cancelled from one that never arrived. Those
+         * used to be the same silence.
+         */
+        public String breakBlock(int x, int y, int z) throws IOException {
+            String[] reply = runner.send(RunnerProtocol.BREAK, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z));
+            return reply.length > 2 ? reply[2] : "sent";
         }
 
         public void command(String command) throws IOException {

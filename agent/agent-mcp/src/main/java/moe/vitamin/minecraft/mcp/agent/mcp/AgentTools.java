@@ -368,15 +368,18 @@ final class AgentTools {
                 int y = args.path("y").asInt();
                 int z = args.path("z").asInt();
                 String world = text(args.path("world"));
-                String material = capture.blockAt(world, x, y, z);
-                if (material == null) {
+                moe.vitamin.minecraft.mcp.contract.BlockState state =
+                        capture.blockAt(world, x, y, z);
+                if (state == null) {
                     throw new ToolException("No such world: " + world);
                 }
-                result.put("world", world);
-                result.put("x", x);
-                result.put("y", y);
-                result.put("z", z);
-                result.put("block", material);
+                // state.world() rather than the argument, which is null whenever the caller left
+                // it to the default and would make the answer unable to say what it read.
+                result.put("world", state.world());
+                result.put("x", state.x());
+                result.put("y", state.y());
+                result.put("z", state.z());
+                result.put("block", state.block());
                 yield result;
             }
             default -> throw new ToolException(

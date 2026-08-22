@@ -180,6 +180,16 @@ class AgentToolsTest {
         assertEquals("STONE", block.get("block").asText());
     }
 
+    /** A read tool has to say what it read, or a caller who omits the world learns nothing. */
+    @Test
+    void stateQueryNamesTheWorldItReadEvenWhenTheCallerDidNot() {
+        JsonNode block = tools().call("state_query",
+                args("{\"kind\":\"block\",\"x\":1,\"y\":2,\"z\":3}"));
+
+        assertEquals("world", block.get("world").asText());
+        assertEquals("STONE", block.get("block").asText());
+    }
+
     private static List<String> names(ArrayNode listed) {
         return StreamSupport.stream(listed.spliterator(), false)
                 .map(tool -> tool.get("name").asText())
@@ -441,8 +451,11 @@ class AgentToolsTest {
                     condition.describe(), 5L, 1);
         }
         @Override
-        public String blockAt(String world, int x, int y, int z) {
-            return "world".equals(world) || world == null ? "STONE" : null;
+        public moe.vitamin.minecraft.mcp.contract.BlockState blockAt(
+                String world, int x, int y, int z) {
+            return "world".equals(world) || world == null
+                    ? new moe.vitamin.minecraft.mcp.contract.BlockState("world", x, y, z, "STONE")
+                    : null;
         }
 
         @Override

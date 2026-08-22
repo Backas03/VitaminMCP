@@ -345,12 +345,15 @@ public final class CaptureService implements AgentQueries {
     }
 
     @Override
-    public String blockAt(String world, int x, int y, int z) {
+    public moe.vitamin.minecraft.mcp.contract.BlockState blockAt(String world, int x, int y, int z) {
         return onMainThread(() -> {
             org.bukkit.World target = world == null || world.isBlank()
                     ? Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0)
                     : Bukkit.getWorld(world);
-            return target == null ? null : target.getBlockAt(x, y, z).getType().name();
+            // The world's own name, not the argument: omitting it is the common case, and the
+            // answer has to say which world it came from.
+            return target == null ? null : new moe.vitamin.minecraft.mcp.contract.BlockState(
+                    target.getName(), x, y, z, target.getBlockAt(x, y, z).getType().name());
         }, Duration.ofSeconds(5), null);
     }
 

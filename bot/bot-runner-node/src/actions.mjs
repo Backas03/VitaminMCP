@@ -45,22 +45,91 @@ function requireInWorld(bot, name) {
   }
 }
 
-export function breakBlock(bot, name, x, y, z) {
+/** How long the server gets to confirm a dig before it counts as never having arrived. */
+const DIG_ACK_TIMEOUT_MILLIS = 1500;
+
+/** How long the resulting block change gets to come back after the confirmation. */
+const DIG_SETTLE_MILLIS = 300;
+
+/**
+ * Breaks a block, and says what became of the attempt.
+ *
+ * <p>This used to write two packets and answer `sent`, which made a dig the server cancelled and
+ * a dig the server never received the same observation — and a plugin that cancels
+ * BlockBreakEvent silently is exactly the thing someone reaches for this tool to find. A whole
+ * dogfooding round went on telling those apart by hand (dogfood/JOURNAL.md, 2026-08-23).
+ *
+ * <p>The server settles it for us. Every block action carries a sequence number, and the server
+ * answers with the highest one it has resolved — that is what the field is for, so the client
+ * knows when to stop predicting and accept what it is told. An acknowledgement means the dig
+ * reached the world and was dealt with; the block then says whether it was allowed.
+ */
+export async function breakBlock(bot, name, x, y, z) {
   requireInWorld(bot, name);
   const location = { x, y, z };
+  const at = new Vec3(x, y, z);
+
+  const before = bot.blockAt(at)?.name ?? null;
+  if (before === null) {
+    // Not a refusal and not a failure to send: this client has never been told what is there,
+    // which usually means it has only just joined and its chunks have not arrived.
+    return `the bot's client has no block at ${x}, ${y}, ${z} yet, so nothing was dug`;
+  }
+
+  const started = nextSequence(bot);
+  const finished = nextSequence(bot);
+
+  // Registered before the packets go out. The acknowledgement can come back inside the same tick.
+  const confirmed = acknowledgement(bot, finished);
 
   bot._client.write('block_dig', {
     status: START_DIGGING,
     location,
     face: FACES.up,
-    sequence: nextSequence(bot),
+    sequence: started,
   });
   bot._client.write('block_dig', {
     status: FINISH_DIGGING,
     location,
     face: FACES.up,
-    sequence: nextSequence(bot),
+    sequence: finished,
   });
+
+  if (!await confirmed) {
+    return `the server did not acknowledge the dig within ${DIG_ACK_TIMEOUT_MILLIS}ms, `
+      + 'so it never reached the world';
+  }
+
+  await delay(DIG_SETTLE_MILLIS);
+  const after = bot.blockAt(at)?.name ?? null;
+
+  return after === before
+    ? `the server acknowledged the dig and left ${before} in place, so something refused it`
+    : `broke ${before}`;
+}
+
+/** Resolves true once the server says it has resolved everything up to `sequence`. */
+function acknowledgement(bot, sequence) {
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      clearTimeout(timer);
+      bot._client.removeListener('acknowledge_player_digging', onAcknowledged);
+      resolve(value);
+    };
+
+    const onAcknowledged = (packet) => {
+      if (packet?.sequenceId >= sequence) {
+        finish(true);
+      }
+    };
+
+    const timer = setTimeout(() => finish(false), DIG_ACK_TIMEOUT_MILLIS);
+    bot._client.on('acknowledge_player_digging', onAcknowledged);
+  });
+}
+
+function delay(millis) {
+  return new Promise((resolve) => setTimeout(resolve, millis));
 }
 
 /** Runs a command as the bot. The leading slash is not part of the packet. */

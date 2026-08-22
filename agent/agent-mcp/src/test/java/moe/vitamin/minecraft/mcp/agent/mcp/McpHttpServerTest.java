@@ -530,8 +530,11 @@ class McpHttpServerTest {
                     condition.describe(), 5L, 1);
         }
         @Override
-        public String blockAt(String world, int x, int y, int z) {
-            return "world".equals(world) || world == null ? "STONE" : null;
+        public moe.vitamin.minecraft.mcp.contract.BlockState blockAt(
+                String world, int x, int y, int z) {
+            return "world".equals(world) || world == null
+                    ? new moe.vitamin.minecraft.mcp.contract.BlockState("world", x, y, z, "STONE")
+                    : null;
         }
 
         @Override
