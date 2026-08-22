@@ -187,11 +187,13 @@ proxied parameters flat at the top level. Full parameters are in [docs/usage.md]
 
 ## Requirements
 
+These are the requirements for using a prebuilt release:
+
 | | |
 |---|---|
 | Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work) |
-| Java | 21, on the server and on the machine running your MCP client. Needed to build it too, if you are not using the [prebuilt jars](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest) |
-| Node | 18.17 or later, for `npx`. Only to install the client side the easy way — [the jars need none](#installing-from-the-jars-instead) |
+| Java | 21, for the Paper server and local MCP server |
+| Node | 18.17 or later, for `npx` |
 
 ### Version support
 
@@ -216,6 +218,18 @@ proxied parameters flat at the top level. Full parameters are in [docs/usage.md]
 
 **You install one Node runner whatever the version.** It asks the server what it speaks and
 selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
+
+## Building from source
+
+Most users do not need this section. Contributors need JDK 21 and Node/npm:
+
+```bash
+./gradlew build
+cd bot/bot-runner-node && npm ci && npm test
+```
+
+The Windows native runner is built with `npm run build:sea -- win32-x64`. Linux and macOS native
+assets are planned.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
 to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.
