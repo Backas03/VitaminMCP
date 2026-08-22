@@ -334,8 +334,8 @@ newly built `mcp-server.jar` can exercise the native path end to end.
    the most likely cause of a flaky matrix.
 2. **`ClientView` fidelity.** Stage 3 changes `MenuItem` on purpose; the risk is changing anything
    *else* by accident, because the MCP tools' output is the product.
-3. **Packaging.** Stage 8 is five platforms, a signing requirement and a checksum format change,
-   all inside a release path whose failures are already documented as confusing.
+3. **Packaging.** Stage 8 is the Windows x64 release path for now, plus planned Linux/macOS
+   assets, signing and checksum verification.
 4. **Upstream cadence.** mineflayer 4.37.1, last published 2026-05-03 — active, not fast. A
    protocol this project needs could land later than the server it belongs to.
 5. **Velocity modern forwarding.** The spike covered only the BungeeCord form. `design.md` §3.1

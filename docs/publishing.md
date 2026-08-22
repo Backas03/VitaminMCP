@@ -2,7 +2,7 @@
 
 Three things are published per release, in this order, and **none of them can be unpublished**:
 
-1. the **GitHub release** — the agent jar, MCP server jar and platform Node runner assets
+1. the **GitHub release** — the agent jar, MCP server jar and the Windows x64 Node runner asset
 2. the **npm package** `vitaminmcp` — the launcher, pinning the sha256 of those jars
 3. the **MCP registry** entry — `server.json`, pointing at that npm version
 
@@ -113,11 +113,11 @@ publishing.
 ### 2. Tag it
 
 ```bash
-git tag 1.5.0
-git push origin 1.5.0
+git tag 2.0.0
+git push origin 2.0.0
 ```
 
-The workflow builds `dist`, creates the release with the agent/server jars and five platform runner assets, stamps the checksums from the
+The workflow builds `dist`, creates the release with the agent/server jars and the Windows x64 runner asset, stamps the checksums from the
 jars it just built, publishes to npm, and publishes `server.json`. Watch it — the first two steps
 are irreversible before the third runs.
 
@@ -139,13 +139,13 @@ From a clean checkout at the commit you want released:
 ```
 
 ```bash
-gh release create 1.5.0 --title 1.5.0 --generate-notes \
+gh release create 2.0.0 --title 2.0.0 --generate-notes \
   build/dist/VitaminMCP.jar build/dist/mcp-server.jar \
   build/dist/runners/bot-runner-win-x64.exe
 ```
 
 ```bash
-cd npm && node scripts/stamp-checksums.mjs --tag 1.5.0 && npm publish --access public
+cd npm && node scripts/stamp-checksums.mjs --tag 2.0.0 && npm publish --access public
 ```
 
 `--tag` reads the hashes from the release you just created rather than from the jars on disk. Use
@@ -158,7 +158,7 @@ than through a token.
 If npm succeeded but the registry step did not, finish it without cutting anything again:
 
 ```bash
-gh workflow run Release --ref master -f version=1.5.0
+gh workflow run Release --ref master -f version=2.0.0
 ```
 
 Every step checks whether its own work is already done, so that publishes only what is missing.
@@ -206,8 +206,8 @@ VITAMINMCP_NODE_RUNNER=$PWD/npm/runner/runner.mjs \
   node npm/bin/vitaminmcp.mjs
 ```
 
-`npm pack --dry-run` lists exactly what would be published. It should be six files and nothing
-else — no jars.
+`npm pack --dry-run` lists exactly what would be published. It should contain the launcher and
+Node runner source, with no jars or platform binaries.
 
 ---
 

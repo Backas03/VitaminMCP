@@ -7,7 +7,7 @@
  * prefer at release time:
  *
  *   node scripts/stamp-checksums.mjs --dist ../build/dist   hashes jars you just built
- *   node scripts/stamp-checksums.mjs --tag 1.5.0            reads what the release actually serves
+ *   node scripts/stamp-checksums.mjs --tag 2.0.0            reads what the release actually serves
  *
  * The version always comes from build-logic, which is the one place this project keeps it.
  */
