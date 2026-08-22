@@ -10,6 +10,67 @@ Newest first.
 
 ---
 
+## 2026-08-23 — `none` (the control)
+
+**Result: correct.** It said plainly that nothing is wrong, having checked, and ruled out all five
+fault paths one at a time rather than asserting it. It did not invent a fault — which is what this
+scenario exists to test.
+
+It also volunteered the one real oddity in a clean fixture: `plugin.yml` declares `dogfood.shop`
+default `op`, and outside the `silent-refusal` branch nothing checks it, so `/shop` opens for
+anyone. A declared-but-unenforced permission node is exactly the sort of thing that makes an owner
+say "something's off" without being able to name it. Left as it is — it is realistic, and now
+documented rather than accidental.
+
+**A caveat that governs how rounds 2 to 6 should be read.** These rounds drove the *installed*
+VitaminMCP 2.1.1 through its MCP server, and only the agent jar was redeployed between them. So
+every agent-side fix was live for the rounds after it — and several were quoted back approvingly —
+but the **bot-side fixes from round 1 were not**: `break_block`'s acknowledgement and `bot_spawn`'s
+readiness wait live in the runner, which the installed package supplies. When this round says
+`break_block` returns `"sent"` and cannot confirm the dig landed, it is describing 2.1.1, and the
+fix for it is already committed. The same goes for `bot_inspect`'s `items: []`, which it flagged
+as a near-misread — fixed in round 4, not yet released.
+
+**Friction**
+
+- **A bot that cannot break a block, and a plugin that cancels the break, are the same
+  observation.** Three scenarios were spent on this. The round eventually distinguished them by
+  reasoning that a *cancelled* BlockBreakEvent is still a *captured* one, so zero events meant the
+  bot rather than the plugin. That inference is correct and nothing points anyone at it. **A less
+  careful run reports "join-lockout confirmed" here and is wrong.** Round 1's acknowledgement fix
+  answers this directly; this round is independent confirmation that it was the right thing to
+  build.
+
+- **`assert_reachable` answers a different question than the one being asked.** Used as "can the
+  bot hit this block", it returned false for a block two metres away — it means "can the pathfinder
+  walk there", and the block was floating. The failure text restated the assertion instead of
+  saying what the pathfinder objected to.
+
+- **`wait_for`'s timeout evidence is bounded but not relevant.** Forty events of ambient mob churn
+  to find the two that mattered, unscoped to the player being waited for. The same complaint round
+  1 made about a scenario's evidence, which was fixed there and not here.
+
+- **Fourth mention of `session_start`'s payload**, now listing eight stale sessions from earlier
+  rounds, several still holding bots.
+
+**Worked**
+
+- `state_query kind='plugin'` — "the single best tool here", live config and permissions in one
+  call, corroborating the startup log independently. Added in round 3, decisive in rounds 4, 5 and
+  6.
+- `wait_for inventory_open` did exactly what it said.
+- `bot_inspect` for messages, again: `command_exec` returned identical empty output for all three
+  commands and the messages were the only thing separating working from broken.
+
+**Changed** — `fix(agent-core, testkit)`:
+
+- `wait_for`'s timeout snapshot is now filtered to the player the condition names, looking over a
+  wider window to find them.
+- `assert_reachable`'s failure says what reachable means — walkable, not within arm's reach — and
+  what to do instead.
+
+---
+
 ## 2026-08-23 — `disabled-feature`
 
 **Diagnosis:** right, in 12 tool calls. And it caught the harness lying, which no round before it

@@ -192,7 +192,14 @@ public final class ScenarioRunner {
                         : ScenarioResult.StepResult.failed(index, action,
                                 "expected reachable=" + expected + " but pathfinder returned "
                                         + reachable,
-                                "pathfinder status did not match the assertion");
+                                // Restating the assertion told a round nothing it did not already
+                                // know. What it needed was what 'reachable' means here
+                                // (dogfood/JOURNAL.md, 2026-08-23).
+                                "This asks whether the bot can WALK there, not whether it is "
+                                        + "within arm's reach. A block in mid-air, behind a gap, "
+                                        + "or with no standable surface beside it is unreachable "
+                                        + "however close it is. For 'can the bot act on this "
+                                        + "block', move the bot next to it and try the action.");
             }
 
             case "command" -> {

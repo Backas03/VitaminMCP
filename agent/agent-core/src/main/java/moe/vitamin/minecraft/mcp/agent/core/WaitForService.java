@@ -25,6 +25,15 @@ public final class WaitForService {
     /** Events and log lines attached to a timeout. */
     private static final int SNAPSHOT_SIZE = 40;
 
+    /**
+     * How far back a timeout's event snapshot looks.
+     *
+     * <p>Wider than what it returns, because it is now filtered: on a busy server the last forty
+     * records can be forty mob spawns, and the events belonging to the player being waited for
+     * sit behind them.
+     */
+    private static final int SNAPSHOT_WINDOW = 400;
+
     private final Plugin plugin;
     private final SequencedRingBuffer<EventRecord> events;
     private final SequencedRingBuffer<LogEntry> logs;
@@ -109,14 +118,27 @@ public final class WaitForService {
             return WaitResult.matched(condition.describe(), elapsedMillis, ticks.get());
         }
 
+        // Scoped to whoever was being waited for, when the condition names one. The tail of
+        // everything is bounded but not relevant: a round waiting on one bot got forty events of
+        // ambient mob churn to find the two that mattered (dogfood/JOURNAL.md, 2026-08-23).
+        String subject = subjectOf(condition);
+
         return new WaitResult(
                 false,
                 condition.describe(),
                 elapsedMillis,
                 ticks.get(),
-                events.read(Math.max(0, events.written() - SNAPSHOT_SIZE), SNAPSHOT_SIZE,
-                        record -> highFrequency.allowedInQuery(record.type(), null)).items(),
+                events.read(Math.max(0, events.written() - SNAPSHOT_WINDOW), SNAPSHOT_SIZE,
+                        record -> highFrequency.allowedInQuery(record.type(), null)
+                                && (subject == null || subject.equalsIgnoreCase(record.player())))
+                        .items(),
                 logs.read(Math.max(0, logs.written() - SNAPSHOT_SIZE), SNAPSHOT_SIZE, null).items());
+    }
+
+    /** The player a condition is about, or {@code null} when it is about the world. */
+    private static String subjectOf(WaitCondition condition) {
+        String named = condition.string("name", null);
+        return named != null ? named : condition.string("player", null);
     }
 
     /** Evaluates one condition. */
