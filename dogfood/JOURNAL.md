@@ -10,6 +10,65 @@ Newest first.
 
 ---
 
+## 2026-08-23 — `silent-listener`
+
+**Diagnosis:** right, in 10 tool calls. The source gave up the suspect on the first read — an NPE
+above `giveKit` in the join listener — so the round was about confirming *who* it happens to, and
+that is where the tools were exercised.
+
+**`state_query kind='plugin'`, added by the previous round, was the call that turned "the code can
+NPE" into "it NPEs for everyone except Tester1".** The roster is one entry, and nothing else could
+have shown that. First time an apparatus fix paid off inside the apparatus.
+
+**Friction**
+
+- **`bot_inspect`'s `items` nearly inverted the round's conclusion.** It returned `[]` for the
+  control bot while that player was holding a full kit, because `items` means *the open menu's*
+  contents and there was no menu. Nothing in the name says so. Read as "Tester1 has nothing" — the
+  exact opposite of the truth, on the one subject that was supposed to be the control. Only a
+  cross-check against `state_query kind='inventory' which='player'` caught it.
+
+- **Bots accumulate state across rounds, and nothing warns you.** UUIDs are name-derived, so
+  Tester1 came up carrying six bread and two wooden swords banked by earlier rounds. "Tester1 has
+  the kit" was therefore far weaker evidence than it looked — equally consistent with a kit
+  granted three rounds ago. The round recovered only because `exceptions_recent` gave `count: 1`
+  with a `firstSeen` it could pin to the join it had just caused. There is no "give me a bot that
+  has never played here".
+
+- **"Has this been happening, and to whom?" has no answer.** The report is historical; the server
+  had restarted 64 seconds earlier, so every real occurrence was gone and `count: 1` was the
+  round's own bot. The bug had to be *reproduced* to be seen at all. An empty `exceptions_recent`
+  reads as "this never happens" when it means "not since boot".
+
+**Worked**
+
+- `exceptions_recent` — called the best tool in the set. Collapsing to distinct exceptions with
+  `count`/`firstSeen`, and putting the stack behind a second `hash` call, meant one small answer
+  said *what* and a second said *where*, with no wading.
+- `command_exec`'s new bluntness about `as` + `dispatched: true` telling you nothing. The round
+  cited it and went to `state_query` for the real answer, exactly as the description now says to.
+- `state_query kind='plugin'`, above.
+
+**Changed** — `fix(mcp-server, agent-mcp)`:
+
+- `bot_inspect` returns `items: null` with a note when no menu is open, instead of an empty array,
+  and its description says in as many words that `items` is the open menu and never the player's
+  inventory.
+- `bot_spawn`'s description spells out the consequence of stable UUIDs: the server remembers these
+  players, so a reused bot is not a fresh one, and says how to get a clean slate.
+- `exceptions_recent`'s description says it covers the current server run only, so an empty answer
+  is not evidence of absence.
+
+**Left alone**
+
+- Correlating a join with a listener that threw partway through. Worth having and not cheap —
+  it wants the exception record to carry the event and player it happened inside, which is a
+  change to how exceptions are captured rather than to how they are read.
+- Wiping a bot's player data. A tool that deletes playerdata on a server this can be pointed at
+  is a worse idea than the problem it solves; using an unused name costs nothing.
+
+---
+
 ## 2026-08-23 — `silent-refusal`
 
 **Diagnosis:** right, in 14 tool calls, and fast — `bot_inspect`'s description sent it straight

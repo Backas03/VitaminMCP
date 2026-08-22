@@ -91,7 +91,12 @@ final class SessionTools {
                 "Connect a bot and wait until it is standing in the world with the ground "
                         + "beneath it loaded. Its UUID is derived from its name, so the same name "
                         + "is the same player every run and permission-dependent behaviour is "
-                        + "reproducible. This means the CLIENT is ready, not that the SERVER will "
+                        + "reproducible — which also means THE SERVER REMEMBERS THEM. Inventory, "
+                        + "position, advancements and anything a plugin stored against that UUID "
+                        + "survive from earlier runs, so a bot you have used before is not a "
+                        + "fresh player and 'it has the item' may be left over rather than just "
+                        + "granted. Use an unused name when a first join is what is being tested, "
+                        + "and clear what you left behind ('clear <name>' through command_exec). This means the CLIENT is ready, not that the SERVER will "
                         + "act on what the bot does: Paper drops a joining player's interactions "
                         + "for a few seconds, and plugins commonly hold them longer while they "
                         + "load that player's data. An action in that window is refused rather "
@@ -113,9 +118,12 @@ final class SessionTools {
                         + "inventory empty. Also returns the messages the server sent this bot, "
                         + "which is where a refusal like 'you lack permission' appears; those "
                         + "never reach the console, so a declined command and one that did "
-                        + "nothing look identical from the agent's side. Items are named the way "
-                        + "the registry names them — 'minecraft:diamond_sword' — so they read the "
-                        + "same as state_query's. 'messages' also covers action "
+                        + "nothing look identical from the agent's side. 'items' IS THE OPEN "
+                        + "MENU'S CONTENTS AND NOTHING ELSE — it is null when no menu is open, "
+                        + "and never the player's own inventory, which is state_query "
+                        + "kind='inventory' which='player'. Items are named the way the registry "
+                        + "names them — 'minecraft:diamond_sword' — so they read the same as "
+                        + "state_query's. 'messages' also covers action "
                         + "bar, title and subtitle text, each prefixed with where it appeared, "
                         + "since a plugin is as likely to refuse above the hotbar as in chat. "
                         + "Also reports health, food, experience and active effects. "
@@ -370,15 +378,27 @@ final class SessionTools {
                 menu.put("title", view.menu().title());
             }
 
-            ArrayNode items = result.putArray("items");
-            for (MenuItem item : view.items()) {
-                ObjectNode entry = items.addObject();
-                entry.put("slot", item.slot());
-                entry.put("itemId", item.itemId());
-                entry.put("amount", item.amount());
-                entry.put("name", item.name());
-                entry.put("customModelData", item.customModelData());
-                entry.put("lore", item.lore());
+            // Null rather than an empty array when nothing is open. 'items' has only ever meant
+            // the open menu's contents, but an empty array next to a player holding a full
+            // inventory reads as "this player has nothing" — a dogfooding round drew exactly that
+            // conclusion about its own control subject and nearly went hunting for the wrong bug
+            // (dogfood/JOURNAL.md, 2026-08-23).
+            if (view.menu() == null) {
+                result.putNull("items");
+                result.put("itemsNote", "No menu is open, so there is nothing here. This field is "
+                        + "only ever the open menu's contents — for what the player is carrying, "
+                        + "ask state_query kind='inventory' which='player'.");
+            } else {
+                ArrayNode items = result.putArray("items");
+                for (MenuItem item : view.items()) {
+                    ObjectNode entry = items.addObject();
+                    entry.put("slot", item.slot());
+                    entry.put("itemId", item.itemId());
+                    entry.put("amount", item.amount());
+                    entry.put("name", item.name());
+                    entry.put("customModelData", item.customModelData());
+                    entry.put("lore", item.lore());
+                }
             }
 
             ArrayNode messages = result.putArray("messages");

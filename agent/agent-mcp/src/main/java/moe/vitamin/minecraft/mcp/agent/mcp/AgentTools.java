@@ -92,7 +92,11 @@ final class AgentTools {
         tools.add(tool("exceptions_recent",
                 "Distinct exceptions, most recently seen first, each collapsed with an "
                         + "occurrence count and when it was first seen. Stack traces are "
-                        + "omitted; pass 'hash' to fetch one.",
+                        + "omitted; pass 'hash' to fetch one. THIS COVERS THE CURRENT SERVER RUN "
+                        + "ONLY — the record lives in memory and starts empty at every boot, so "
+                        + "an empty answer means 'not since this server started', never 'this "
+                        + "has never happened'. For a fault a player reports as recurring, "
+                        + "reproduce it and watch the count rather than reading the absence.",
                 properties -> {
                     numberProperty(properties, "limit", "Maximum groups.");
                     stringProperty(properties, "hash",
