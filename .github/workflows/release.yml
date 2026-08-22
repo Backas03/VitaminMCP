@@ -48,7 +48,7 @@ jobs:
             os: ubuntu-latest
           - target: darwin-x64
             asset: bot-runner-darwin-x64
-            os: macos-13
+            os: macos-15-intel
           - target: darwin-arm64
             asset: bot-runner-darwin-arm64
             os: macos-14
@@ -78,6 +78,26 @@ jobs:
       - name: Build SEA runner
         working-directory: bot/bot-runner-node
         run: npm run build:sea -- ${{ matrix.target }}
+
+      - name: Smoke test Windows SEA runner
+        if: matrix.target == 'win32-x64'
+        shell: pwsh
+        run: |
+          $output = & "build/dist/runners/${{ matrix.asset }}" 2>&1
+          if ($LASTEXITCODE -ne 2 -or ($output -notmatch 'usage: runner.mjs')) {
+            throw "SEA runner did not execute its entry point. exit=$LASTEXITCODE output=$output"
+          }
+
+      - name: Smoke test Unix SEA runner
+        if: matrix.target != 'win32-x64'
+        shell: bash
+        run: |
+          set +e
+          output="$("build/dist/runners/${{ matrix.asset }}" 2>&1)"
+          status=$?
+          set -e
+          test "$status" -eq 2
+          grep -q 'usage: runner.mjs' <<<"$output"
 
       - name: Ad-hoc sign macOS runner
         if: startsWith(matrix.target, 'darwin-')
