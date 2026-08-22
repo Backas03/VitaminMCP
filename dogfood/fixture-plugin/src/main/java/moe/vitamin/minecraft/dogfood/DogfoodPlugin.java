@@ -68,7 +68,7 @@ public final class DogfoodPlugin extends JavaPlugin implements Listener {
     // ---------------------------------------------------------------- commands
 
     private boolean kit(Player player) {
-        if (scenario == Scenario.DISABLED_FEATURE) {
+        if (!getConfig().getBoolean("kit.enabled", true)) {
             return true;
         }
         giveKit(player);

@@ -315,6 +315,23 @@ final class SessionTools {
             result.put("x", bot.blockX());
             result.put("y", bot.blockY());
             result.put("z", bot.blockZ());
+
+            // Gamemode belongs in the answer to "what did I just spawn". It changes how every
+            // later observation reads — creative masks a full-inventory failure, and item grants
+            // behave differently — and it used to be reachable only by inferring it from the
+            // 'view' field of an inventory query, which is documented as being about menus
+            // (dogfood/JOURNAL.md, 2026-08-23).
+            try {
+                ObjectNode query = AgentClient.arguments();
+                query.put("kind", "player");
+                query.put("target", name);
+                JsonNode state = session.agent().call("state_query", query);
+                result.put("gameMode", state.path("gameMode").asText(null));
+                result.put("op", state.path("op").asBoolean(false));
+            } catch (RuntimeException agentUnavailable) {
+
+                result.putNull("gameMode");
+            }
             return result;
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not spawn " + name + ": " + e.getMessage(), e);

@@ -10,6 +10,70 @@ Newest first.
 
 ---
 
+## 2026-08-23 — `disabled-feature`
+
+**Diagnosis:** right, in 12 tool calls. And it caught the harness lying, which no round before it
+had done.
+
+**The finding of the whole exercise so far: the tools pointed confidently at the wrong fix.**
+`state_query kind='plugin'` reported `kit.enabled: "false"`, and the startup log said
+`kit.enabled is false in config.yml; /kit will not hand anything out.` Both named `kit.enabled`.
+**The fixture's code never read that key** — it switched on `scenario` instead. An operator
+working from VitaminMCP alone would set `kit.enabled: true`, restart, watch `/kit` still do
+nothing, and have no next move. Nothing in the toolset can answer "is this config key wired to
+anything"; only the source can, and the round only got it right because it had the repository.
+
+That was the harness's fault, not the product's — an accident in the fixture, caught by the thing
+built to catch accidents. It is fixed: `/kit` now reads `kit.enabled`, so the log line is true.
+The bug class it exposed by accident — **a config key that is decoration, plus a log line that
+repeats the lie** — is realistic and nastier than anything deliberately planted here, and is worth
+a scenario of its own.
+
+**Friction**
+
+- **`bot_inspect.messages` has no cursor and no timestamps**, while `logs_query` and
+  `events_query` both page. "The plugin sent nothing" rested on eyeballing a one-element array and
+  trusting both that it was complete and that nothing had arrived before the round looked. With
+  twenty accumulated messages there would be no way to say which landed after the command.
+
+- **`bot_spawn` did not report gamemode.** The bot was in creative, learned incidentally from the
+  `view` field of an inventory query — a field documented as being about menus. Gamemode is
+  load-bearing for any inventory assertion.
+
+- **`state_query kind='plugin'` was sold for the wrong job.** Its description opens with "start
+  here for 'it works for admins but not for players'". What this round needed was the live config
+  as opposed to the repository's, and it found that capability by reading the raw schema dump
+  rather than because the description matched the problem.
+
+- **Third mention: `session_start`'s payload**, now also listing eight stale sessions from earlier
+  rounds, several still holding bots.
+
+**Worked**
+
+- `command_exec`'s description, quoted back approvingly: it warned that `as` + `dispatched: true`
+  + empty output cannot distinguish success from silent refusal and said to read `bot_inspect`
+  first. The round did exactly that. That text was written in response to round 3.
+- `exceptions_recent`'s new "not since boot" warning, likewise — written in response to round 4,
+  used correctly in round 5.
+
+**Changed** — `fix(dogfood, mcp-server, agent-mcp)`:
+
+- The fixture reads `kit.enabled`, so the key it blames is the key it obeys.
+- `bot_spawn` reports `gameMode` and `op` alongside the position.
+- `state_query kind='plugin'` leads with the live config, since that is what it is best at.
+
+**Left alone**
+
+- Cursors and timestamps on `bot_inspect.messages`. The right fix and the most invasive one left:
+  it changes the runner-to-Java line protocol, which CONTRIBUTING calls load-bearing. Design is
+  known — messages become records with a timestamp field, the way menu items already are — and it
+  wants doing deliberately rather than at the end of a long session. **Raised in some form in
+  every round from 2 onward; this is the top open item.**
+- `session_start`'s payload. Raised in rounds 1, 3 and 5. Every round that complained also praised
+  it for meaning nothing had to be guessed. Trimming the stale session list is the cheap half.
+
+---
+
 ## 2026-08-23 — `silent-listener`
 
 **Diagnosis:** right, in 10 tool calls. The source gave up the suspect on the first read — an NPE
