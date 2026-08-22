@@ -11,7 +11,7 @@
       "source": "./claude-code",
       "displayName": "VitaminMCP",
       "description": "Drives a real Paper/Purpur server and real protocol bots, so a Minecraft plugin can be tested without opening the game. Brings the MCP server and the working knowledge of how to use it.",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "author": {
         "name": "Backas03",
         "url": "https://github.com/Backas03"
