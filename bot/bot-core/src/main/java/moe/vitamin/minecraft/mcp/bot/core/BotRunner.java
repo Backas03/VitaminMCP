@@ -80,6 +80,8 @@ public final class BotRunner implements AutoCloseable {
         if (isScript(runner)) {
             command.add(node());
             command.add(path);
+        } else if (isNativeRunner(runner)) {
+            command.add(path);
         } else {
             command.add(javaHome.resolve("bin").resolve("java").toString());
             command.add("-jar");
@@ -94,6 +96,17 @@ public final class BotRunner implements AutoCloseable {
     private static boolean isScript(Path runner) {
         String name = runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
         return name.endsWith(".mjs") || name.endsWith(".js");
+    }
+
+    /**
+     * Node SEA assets are native executables, not jars. The Windows asset has an extension; the
+     * Unix assets deliberately do not, so the published bot-runner-<platform>-<arch> names are
+     * the explicit marker for them. Keeping this separate from scripts preserves the old jar path.
+     */
+    private static boolean isNativeRunner(Path runner) {
+        String name = runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
+        return name.endsWith(".exe")
+                || (name.startsWith("bot-runner-") && !name.endsWith(".jar"));
     }
 
     /**

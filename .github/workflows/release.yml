@@ -30,7 +30,67 @@ env:
   VERSION: ${{ inputs.version || github.ref_name }}
 
 jobs:
+  build-runners:
+    name: Build ${{ matrix.target }} SEA runner
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: win32-x64
+            asset: bot-runner-win-x64.exe
+            os: windows-latest
+          - target: linux-x64
+            asset: bot-runner-linux-x64
+            os: ubuntu-latest
+          - target: linux-arm64
+            asset: bot-runner-linux-arm64
+            os: ubuntu-latest
+          - target: darwin-x64
+            asset: bot-runner-darwin-x64
+            os: macos-13
+          - target: darwin-arm64
+            asset: bot-runner-darwin-arm64
+            os: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install runner dependencies
+        working-directory: bot/bot-runner-node
+        run: npm ci
+
+      - name: Provide the Linux arm64 SEA host binary
+        if: matrix.target == 'linux-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_version="$(node -p "process.version.slice(1)")"
+          archive="node-v${node_version}-linux-arm64.tar.xz"
+          curl -fsSL "https://nodejs.org/dist/v${node_version}/${archive}" -o "$RUNNER_TEMP/$archive"
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          echo "VITAMINMCP_SEA_NODE_LINUX_ARM64=$RUNNER_TEMP/node-v${node_version}-linux-arm64/bin/node" >> "$GITHUB_ENV"
+
+      - name: Build SEA runner
+        working-directory: bot/bot-runner-node
+        run: npm run build:sea -- ${{ matrix.target }}
+
+      - name: Ad-hoc sign macOS runner
+        if: startsWith(matrix.target, 'darwin-')
+        run: codesign --force --deep --sign - "build/dist/runners/${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-${{ matrix.target }}
+          path: build/dist/runners/${{ matrix.asset }}
+          if-no-files-found: error
+
   release:
+    needs: build-runners
     runs-on: ubuntu-latest
 
     steps:
@@ -79,6 +139,13 @@ jobs:
       - name: Build the jars
         run: ./gradlew dist --no-daemon
 
+      - name: Collect platform runner assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: runner-*
+          path: build/dist/runners
+          merge-multiple: true
+
       # Each publish step checks whether it has already happened. Creating a release with the gh
       # CLI pushes the tag, which triggers this workflow — so a release cut by hand arrives here
       # anyway, and "already done" has to mean carry on rather than fail. It also makes a rerun
@@ -98,11 +165,20 @@ jobs:
             # the asset, whatever this run happened to build.
             echo "Release ${VERSION} exists; uploading only assets it does not have."
             present=$(gh release view "${VERSION}" --json assets --jq '.assets[].name')
-            for jar in VitaminMCP.jar mcp-server.jar bot-runner.jar; do
-              if grep -qx "$jar" <<<"$present"; then
-                echo "  $jar is already published; leaving it alone."
+            for asset in \
+              VitaminMCP.jar \
+              mcp-server.jar \
+              bot-runner.jar \
+              runners/bot-runner-win-x64.exe \
+              runners/bot-runner-linux-x64 \
+              runners/bot-runner-linux-arm64 \
+              runners/bot-runner-darwin-x64 \
+              runners/bot-runner-darwin-arm64; do
+              name="${asset##*/}"
+              if grep -qx "$name" <<<"$present"; then
+                echo "  $name is already published; leaving it alone."
               else
-                gh release upload "${VERSION}" "build/dist/$jar"
+                gh release upload "${VERSION}" "build/dist/$asset"
               fi
             done
           else
@@ -111,7 +187,12 @@ jobs:
               --generate-notes \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
-              build/dist/bot-runner.jar
+              build/dist/bot-runner.jar \
+              build/dist/runners/bot-runner-win-x64.exe \
+              build/dist/runners/bot-runner-linux-x64 \
+              build/dist/runners/bot-runner-linux-arm64 \
+              build/dist/runners/bot-runner-darwin-x64 \
+              build/dist/runners/bot-runner-darwin-arm64
           fi
 
       # Pins what the release actually serves, which on a rerun is not what this run just built.

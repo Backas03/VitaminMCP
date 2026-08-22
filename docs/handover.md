@@ -16,16 +16,16 @@ Branch: **`feat/mineflayer-runner`**.
 | 1 | process and lifecycle | ✅ done |
 | 2 | the packet verbs | ✅ done |
 | 3 | `inspect` and the client view | ✅ done |
-| 4 | movement and pathfinding | ← **you are here** |
-| 5 | the parity gate | |
-| 6 | new verbs | |
-| 7 | live bot view | |
-| 8 | distribution | |
+| 4 | movement and pathfinding | ✅ done |
+| 5 | the parity gate | ✅ done |
+| 6 | new verbs | ✅ done |
+| 7 | live bot view | ✅ done |
+| 8 | distribution | ← **you are here** |
 | 9 | deletion and docs | |
 
-`SessionLiveTest` passes in full on the Node runner. The Java runner still passes everything it
-passed before, and **is not to be deleted until stage 5** — it is the only reference for what the
-MCP tools currently return.
+Stages 0–7 have passed their gates on the Node runner. The Java runner still passes everything it
+passed before, and **is not to be deleted until stage 9** — it remains the reference for what the
+MCP tools returned during the parity gate.
 
 ### The shape of it
 

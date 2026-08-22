@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { inspect } from './clientview.mjs';
 
@@ -124,16 +125,17 @@ async function startWorldViewer(bot, port, mode, version) {
 }
 
 /** Resolves only the declared viewer sidecar, never an unrelated ancestor node_modules. */
-export function viewerPackageSpecifier(configuredPath) {
+export function viewerPackageSpecifier(configuredPath, runnerPath = process.argv[1] || process.execPath) {
   if (configuredPath && configuredPath.trim()) {
     return /^[A-Za-z]:[\\/]/.test(configuredPath)
       ? pathToFileURL(configuredPath).href
       : configuredPath;
   }
-  return new URL(
-    '../../bot-runner-viewer/node_modules/prismarine-viewer/index.js',
-    import.meta.url,
-  ).href;
+  const sourceSidecar = path.resolve(
+    path.dirname(runnerPath),
+    '../bot-runner-viewer/node_modules/prismarine-viewer/index.js',
+  );
+  return pathToFileURL(sourceSidecar).href;
 }
 
 /** Maps a server patch version to the newest viewer data from the same major release. */

@@ -317,6 +317,13 @@ darwin assets were built locally; Linux ELF injection aborts under the Windows p
 five-asset release checksum cannot be stamped honestly until Linux assets and macOS signing are
 available, so Stage 8 remains in progress.
 
+**Windows implementation update 2026-08-22:** native SEA paths now launch directly from
+`BotRunner` instead of being mistaken for Java jars; cached jars and assets are re-hashed before
+reuse; and the release workflow builds the five target assets on matching GitHub runners, including
+ad-hoc signing for macOS. The local Windows asset probes successfully with protocol `772`; the
+official MCP connector must be restarted before that newly built `mcp-server.jar` can exercise the
+native path end to end.
+
 ---
 
 ## Risks, worst first

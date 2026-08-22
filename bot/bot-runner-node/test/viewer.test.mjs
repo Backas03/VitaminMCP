@@ -5,7 +5,7 @@ import { resolveViewerVersion, viewerPackageSpecifier } from '../src/viewer.mjs'
 
 test('viewer defaults to the declared sibling sidecar', () => {
   assert.match(
-    viewerPackageSpecifier(),
+    viewerPackageSpecifier(undefined, 'C:/repo/bot/bot-runner-node/runner.mjs'),
     /bot-runner-viewer\/node_modules\/prismarine-viewer\/index\.js$/,
   );
 });

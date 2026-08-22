@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -81,10 +81,14 @@ export async function cachedJar(version, name) {
   const file = path.join(cacheDirectory(version), name);
   try {
     await fs.access(file);
-    return file;
   } catch {
     return null;
   }
+  const expected = (await checksums(version))[name];
+  if (!expected) return null;
+  if (await verifyFileHash(file, expected)) return file;
+  await fs.rm(file, { force: true });
+  return null;
 }
 
 /**
@@ -168,10 +172,14 @@ export async function cachedAsset(version, name) {
   const file = path.join(assetCacheDirectory(version), name);
   try {
     await fs.access(file);
-    return file;
   } catch {
     return null;
   }
+  const expected = (await assetChecksums(version))[name];
+  if (!expected) return null;
+  if (await verifyFileHash(file, expected)) return file;
+  await fs.rm(file, { force: true });
+  return null;
 }
 
 /** Fetches a pinned platform asset only after Node fallback selection has failed. */
@@ -213,4 +221,17 @@ export async function ensureAsset(version, name, { log = () => {} } = {}) {
 
 export function assetPath(version, name) {
   return path.join(assetCacheDirectory(version), name);
+}
+
+async function sha256File(file) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(file)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+/** Verifies a cached release byte-for-byte without loading the whole file into memory. */
+export async function verifyFileHash(file, expected) {
+  return (await sha256File(file)) === expected;
 }

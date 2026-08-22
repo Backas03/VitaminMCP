@@ -41,6 +41,7 @@
     "README.md"
   ],
   "scripts": {
+    "test": "node --test test/*.test.mjs",
     "stamp": "node scripts/stamp-checksums.mjs",
     "stage-runner": "node scripts/stage-node-runner.mjs",
     "prepublishOnly": "node scripts/stage-node-runner.mjs && node scripts/stamp-checksums.mjs --verify"
