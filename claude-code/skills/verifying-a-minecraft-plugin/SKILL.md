@@ -98,9 +98,10 @@ Console output carries colour codes, so search for plain text and leave them out
 ### `as` runs the command as a real player, permissions and all
 
 Vanilla commands work through `as` — `/list`, `/tp`, `/gamemode` — because the server matches them
-with its own dispatcher against that player's permissions. **They are op-only by default**, so a
-bot that is not op is refused, which is exactly what you want when the permission is the thing
-under test. `op` the bot when it is not.
+with its own dispatcher against that player's permissions. That makes it the way to test a
+permission check on one. **Whether a non-op is refused depends on the server version**: Paper 1.21.8
+gates `/list` behind `minecraft.command.list`, Paper 1.21.1 does not. `op` the bot where the command
+has to run regardless, and take it away afterwards.
 
 **A command run as a player answers that player, not the console.** `output` is usually empty even
 when the command worked; the reply went to the client, so read it in `bot_inspect`'s `messages`.

@@ -606,10 +606,12 @@ the two things happened:
  "reason": "Nothing ran: this server has no command named 'lst'. ..."}
 ```
 
-**`as` runs vanilla commands too, and they are op-only by default.** `/list`, `/say`, `/tp` and the
-rest are matched by the server's own dispatcher against that player's permissions, so a player who
-is not op is refused — which is the point when the permission is what you are testing. Paper tells
-the player nothing at all in that case, not even "unknown command", which is why the reason above is
+**`as` runs vanilla commands too.** `/list`, `/say`, `/tp` and the rest are matched by the server's
+own dispatcher against that player's permissions rather than by a plugin, so this is how you test a
+permission check on one. **Whether a non-op is refused depends on the Paper version** — measured
+across the matrix, 1.21.8 gates `/list` behind `minecraft.command.list` and refuses, 1.21.1 does
+not. Op the player, or use the console, where the command has to run regardless. Paper tells the
+refused player nothing at all, not even "unknown command", which is why the reason above is
 assembled by the agent rather than read out of the server's reply.
 
 **A command run as a player answers that player, not the console**, so `output` is usually empty even

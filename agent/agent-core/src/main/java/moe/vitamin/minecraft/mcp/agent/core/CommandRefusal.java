@@ -16,7 +16,12 @@ import java.util.Locale;
  * <p>So the false is re-examined here rather than reported bare. The console is allowed every
  * command, which makes a failure there unambiguous. For a player it comes down to the permission
  * the refusal would have been about — the command's own if the Bukkit map knows it, otherwise the
- * {@code minecraft.command.<name>} node Paper puts in front of every vanilla command.
+ * {@code minecraft.command.<name>} node Paper puts in front of a vanilla command.
+ *
+ * <p>Where that gate sits is Paper's to move, and it has: on 1.21.8 a non-op is refused
+ * {@code /list}, on 1.21.1 the same call runs. Nothing here depends on which — the permission is
+ * asked about rather than assumed, so a version that does not gate a command simply never reaches
+ * this class for it.
  *
  * <p>The trap is that {@code hasPermission} answers for a node nobody defined: an undefined node
  * takes the default, which is op. Ask a non-op about {@code minecraft.command.nosuchthing} and it

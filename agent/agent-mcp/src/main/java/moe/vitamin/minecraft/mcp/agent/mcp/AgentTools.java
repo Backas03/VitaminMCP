@@ -197,9 +197,11 @@ final class AgentTools {
                                 "The command, with or without a leading slash.");
                         stringProperty(properties, "as",
                                 "Player name to run as. Omit to run as the console. Vanilla "
-                                        + "commands are op-only by default, so a player who is "
-                                        + "not op is refused — which is the point when the "
-                                        + "permission is what is under test.");
+                                        + "commands work here too, and on the Paper versions that "
+                                        + "gate them behind minecraft.command.<name> a player who "
+                                        + "is not op is refused — which is the point when the "
+                                        + "permission is what is under test. Where a command must "
+                                        + "run regardless, op the player or use the console.");
                     }));
         }
 
