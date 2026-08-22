@@ -10,6 +10,75 @@ Newest first.
 
 ---
 
+## 2026-08-23 — `silent-refusal`
+
+**Diagnosis:** right, in 14 tool calls, and fast — `bot_inspect`'s description sent it straight
+there on the first try.
+
+The sharpest round so far, because it produced a controlled comparison nothing else had: the
+**failing** call and the **succeeding** call returned byte-identical JSON.
+
+```
+/shop as a non-op   ->  dispatched: true, reason: null, output: []
+/shop as an op      ->  dispatched: true, reason: null, output: []
+```
+
+One opened a menu. The other refused on the action bar. `command_exec` cannot tell them apart,
+and its description was actively steering the wrong way: after the careful guarantee about the
+`false` branch it reassured the caller that empty output is normal "even when it worked; the reply
+reached the client" — which trains you to read this exact response as success.
+
+**Friction**
+
+- **`command_exec` reports a silent refusal as a clean success, and said so soothingly.** A plugin
+  that refuses and returns `true` is the commonest shape of "the command does nothing"; this is
+  the tool people point at it.
+
+- **No tool reported a plugin's effective config.** `server_info` gives name, version, enabled.
+  The round only recovered the live scenario because the fixture logs it at startup — a real
+  plugin does not. The harness's own warning comment in `config.yml` was correctly called out as
+  papering over a tooling gap rather than fixing one.
+
+- **No way to discover which permission gates a command.** `state_query`'s `permissions` can be
+  tested but never listed, so the node had to be known already — it came from reading plugin.yml.
+  The server holds all of it in memory. For "works for admins only", the most common report a
+  server owner writes down, that was the missing piece.
+
+- **A flake it got away with.** It read `bot_inspect` immediately after `command_exec` and the
+  action bar was already there — luck on an idle server. Round 2's fix put the wait in a
+  scenario's `assert_message`; the step-by-step path still has none, so a busy server would have
+  returned empty `messages` and the round would have concluded nothing was sent.
+
+**Worked**
+
+- `bot_inspect`'s description, called "the best-written thing in this toolset" — it states that
+  refusals live in `messages`, that they never reach the console, and that a declined command and
+  one that did nothing look identical from the agent's side. That sentence *is* this bug.
+- The `[action bar]` prefix. Without it the round would have assumed chat and told the player to
+  check their chat settings — the wrong fix.
+
+**Changed** — `feat(contract, agent-core, agent-mcp)`:
+
+- `state_query` gains `kind='plugin'`: a plugin's declared commands with the node gating each,
+  the permissions it declares with their defaults, and its live config. Verified against the
+  fixture — it reports `scenario: silent-refusal`, which is exactly what no tool could answer.
+- Config values whose key looks like a secret come back `(redacted)`, with the key still shown.
+  A plugin's config is where database passwords live and this tool is readable by anything
+  holding the agent's token, so the pattern errs wide and has its own test.
+- `command_exec`'s description now says outright that with `as` it CANNOT tell whether the
+  command worked, and names the three things that produce an identical answer.
+
+**Left alone**
+
+- A wait primitive for messages outside a scenario. Same reason as round 2: the agent cannot see
+  what a client was sent. Noted twice now; if a third round trips on it, `bot_inspect` should
+  probably grow a `waitFor` argument.
+- `session_start`'s payload size. Raised in rounds 1 and 3 both. Real, but it buys the caller
+  every agent-side parameter without a second call, and both rounds praised that in the same
+  breath as complaining about the size.
+
+---
+
 ## 2026-08-23 — `async-reply`
 
 **Diagnosis:** right, in 15 tool calls. It also pushed back on the report — measured, the reply

@@ -190,6 +190,26 @@ class AgentToolsTest {
         assertEquals("STONE", block.get("block").asText());
     }
 
+    @Test
+    void stateQueryReadsAPluginsCommandsAndTheNodesThatGateThem() {
+        JsonNode plugin = tools().call("state_query",
+                args("{\"kind\":\"plugin\",\"target\":\"DogfoodFixture\"}"));
+
+        assertEquals("dogfood.shop", plugin.get("commands").get(0).get("permission").asText());
+        assertEquals("dogfood.shop", plugin.get("permissions").get(0).get("node").asText());
+        assertEquals("OP", plugin.get("permissions").get(0).get("defaultValue").asText());
+        assertEquals("none", plugin.get("config").get("scenario").asText());
+    }
+
+    @Test
+    void stateQueryNeedsATargetPluginAndSaysSoWhenThereIsNoSuchOne() {
+        assertThrows(AgentTools.ToolException.class,
+                () -> tools().call("state_query", args("{\"kind\":\"plugin\"}")));
+        assertThrows(AgentTools.ToolException.class,
+                () -> tools().call("state_query",
+                        args("{\"kind\":\"plugin\",\"target\":\"Nope\"}")));
+    }
+
     private static List<String> names(ArrayNode listed) {
         return StreamSupport.stream(listed.spliterator(), false)
                 .map(tool -> tool.get("name").asText())
@@ -450,6 +470,20 @@ class AgentToolsTest {
             return moe.vitamin.minecraft.mcp.contract.WaitResult.matched(
                     condition.describe(), 5L, 1);
         }
+        @Override
+        public moe.vitamin.minecraft.mcp.contract.PluginDetail pluginDetail(
+                String name, int configLimit) {
+            return "DogfoodFixture".equals(name)
+                    ? new moe.vitamin.minecraft.mcp.contract.PluginDetail(
+                            name, "1.0", true,
+                            List.of(new moe.vitamin.minecraft.mcp.contract.PluginDetail
+                                    .CommandDetail("shop", "Opens the shop", "dogfood.shop", List.of())),
+                            List.of(new moe.vitamin.minecraft.mcp.contract.PluginDetail
+                                    .PermissionDetail("dogfood.shop", "OP", null)),
+                            java.util.Map.of("scenario", "none"), false)
+                    : null;
+        }
+
         @Override
         public moe.vitamin.minecraft.mcp.contract.BlockState blockAt(
                 String world, int x, int y, int z) {

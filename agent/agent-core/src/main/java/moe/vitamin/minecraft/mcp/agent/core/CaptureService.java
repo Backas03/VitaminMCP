@@ -344,6 +344,81 @@ public final class CaptureService implements AgentQueries {
                         .legacySection().serialize(component);
     }
 
+    /**
+     * Config keys whose values are not printed.
+     *
+     * <p>Deliberately broad and matched anywhere in the key. A false positive costs a caller one
+     * question to a human; a false negative puts a production database password in an LLM's
+     * context.
+     */
+    private static final Pattern SECRET_KEY = Pattern.compile(
+            "(?i)pass(word|wd)?|secret|token|api[-_.]?key|credential|auth|dsn|webhook|licen[cs]e");
+
+    @Override
+    public moe.vitamin.minecraft.mcp.contract.PluginDetail pluginDetail(String name, int configLimit) {
+        return onMainThread(() -> {
+            org.bukkit.plugin.Plugin plugin = Bukkit.getPluginManager().getPlugin(name);
+            if (plugin == null) {
+                return null;
+            }
+
+            @SuppressWarnings("deprecation")
+            org.bukkit.plugin.PluginDescriptionFile described = plugin.getDescription();
+
+            List<moe.vitamin.minecraft.mcp.contract.PluginDetail.CommandDetail> commands =
+                    new ArrayList<>();
+            described.getCommands().forEach((command, fields) -> commands.add(
+                    new moe.vitamin.minecraft.mcp.contract.PluginDetail.CommandDetail(
+                            command,
+                            text(fields.get("description")),
+                            text(fields.get("permission")),
+                            aliases(fields.get("aliases")))));
+
+            List<moe.vitamin.minecraft.mcp.contract.PluginDetail.PermissionDetail> permissions =
+                    new ArrayList<>();
+            for (org.bukkit.permissions.Permission permission : described.getPermissions()) {
+                permissions.add(new moe.vitamin.minecraft.mcp.contract.PluginDetail.PermissionDetail(
+                        permission.getName(),
+                        permission.getDefault() == null ? null : permission.getDefault().name(),
+                        permission.getDescription()));
+            }
+
+            Map<String, String> config = new java.util.LinkedHashMap<>();
+            boolean truncated = false;
+            org.bukkit.configuration.file.FileConfiguration loaded = plugin.getConfig();
+            for (String key : loaded.getKeys(true)) {
+                Object value = loaded.get(key);
+                if (value instanceof org.bukkit.configuration.ConfigurationSection) {
+                    continue;
+                }
+                if (config.size() >= configLimit) {
+                    truncated = true;
+                    break;
+                }
+                config.put(key, SECRET_KEY.matcher(key).find()
+                        ? moe.vitamin.minecraft.mcp.contract.PluginDetail.REDACTED
+                        : String.valueOf(value));
+            }
+
+            return new moe.vitamin.minecraft.mcp.contract.PluginDetail(
+                    plugin.getName(), described.getVersion(), plugin.isEnabled(),
+                    commands, permissions, config, truncated);
+        }, Duration.ofSeconds(5), null);
+    }
+
+    private static String text(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static List<String> aliases(Object value) {
+        if (value instanceof Collection<?> many) {
+            List<String> names = new ArrayList<>();
+            many.forEach(alias -> names.add(String.valueOf(alias)));
+            return names;
+        }
+        return value == null ? List.of() : List.of(String.valueOf(value));
+    }
+
     @Override
     public moe.vitamin.minecraft.mcp.contract.BlockState blockAt(String world, int x, int y, int z) {
         return onMainThread(() -> {

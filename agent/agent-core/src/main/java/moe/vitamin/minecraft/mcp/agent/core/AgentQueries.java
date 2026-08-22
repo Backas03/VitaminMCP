@@ -43,6 +43,13 @@ public interface AgentQueries {
     /** What the server believes about a player. */
     PlayerState playerState(String name, java.util.Collection<String> permissionNodes);
 
+    /**
+     * What a plugin declares and how it is configured, or {@code null} if no such plugin.
+     *
+     * <p>Config values whose key looks like a secret come back redacted.
+     */
+    moe.vitamin.minecraft.mcp.contract.PluginDetail pluginDetail(String name, int configLimit);
+
     /** What is at a block position, or {@code null} if the world is unknown. */
     moe.vitamin.minecraft.mcp.contract.BlockState blockAt(String world, int x, int y, int z);
 

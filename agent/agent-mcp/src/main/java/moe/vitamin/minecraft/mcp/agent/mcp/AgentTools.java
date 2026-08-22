@@ -110,12 +110,23 @@ final class AgentTools {
                         + "buttons of the same material and name can still be different icons. "
                         + "Empty slots are omitted; 'size' and 'occupiedSlots' describe the "
                         + "whole inventory. A 'view' of CRAFTING or CREATIVE means no menu is "
-                        + "open.",
+                        + "open. kind='plugin' needs 'target' (a plugin name) and answers what "
+                        + "that plugin declares and how it is configured: its commands with the "
+                        + "permission node gating each one, the permissions it declares with "
+                        + "their defaults, and its live config. Start here for 'it works for "
+                        + "admins but not for players' — it is the only way to learn which node "
+                        + "to test, since kind='player' can test a node but never list one. A "
+                        + "command's 'permission' is null when its plugin.yml does not declare "
+                        + "one, which is common — plenty of plugins check a node in code instead, "
+                        + "so read the 'permissions' list too rather than concluding a command is "
+                        + "ungated. Config values whose key looks like a secret read "
+                        + "'(redacted)'; the key is still shown, so ask a human for the value.",
                 properties -> {
                     enumProperty(properties, "kind", "What to read.",
-                            List.of("player", "block", "inventory"));
+                            List.of("player", "block", "inventory", "plugin"));
                     stringProperty(properties, "target",
-                            "Player name, for kind='player' and kind='inventory'.");
+                            "Player name, for kind='player' and kind='inventory'. Plugin name, "
+                                    + "for kind='plugin'.");
                     arrayProperty(properties, "permissions",
                             "Permission nodes to test. They can only be tested, not listed.");
                     stringProperty(properties, "world", "World name, for kind='block'.");
@@ -194,9 +205,19 @@ final class AgentTools {
                             + "'dispatched': false always carries a 'reason' saying nothing ran "
                             + "and which of the two causes it was — no such command, or the "
                             + "sender was not permitted — so it never has to be read as a "
-                            + "command that ran and did nothing. A command run 'as' a player "
-                            + "answers that player rather than the console, so 'output' is "
-                            + "usually empty even when it worked; the reply reached the client.",
+                            + "command that ran and did nothing. WITH 'as', THIS RESPONSE CANNOT "
+                            + "TELL YOU WHETHER THE COMMAND WORKED. A command run as a player "
+                            + "answers that player, not the console, so a plugin that opened a "
+                            + "menu, a plugin that refused in chat or on the action bar, and a "
+                            + "plugin still computing an async reply all return the same "
+                            + "'dispatched': true with an empty 'output'. A plugin that refuses "
+                            + "and returns true is the commonest shape of 'the command does "
+                            + "nothing', and it looks like success here. Read what the player was "
+                            + "sent with bot_inspect before concluding anything. Note also that "
+                            + "'as' dispatches directly and does NOT fire "
+                            + "PlayerCommandPreprocessEvent, so a plugin that cancels, rewrites "
+                            + "or logs commands in that listener is not exercised — have a bot "
+                            + "send the command itself when that path is what is under test.",
                     properties -> {
                         stringProperty(properties, "command",
                                 "The command, with or without a leading slash.");
@@ -365,6 +386,20 @@ final class AgentTools {
                     throw new ToolException("No such online player: " + target);
                 }
                 yield mapper.valueToTree(snapshot);
+            }
+
+            case "plugin" -> {
+                String target = text(args.path("target"));
+                if (target == null) {
+                    throw new ToolException("state_query kind='plugin' needs 'target'.");
+                }
+                moe.vitamin.minecraft.mcp.contract.PluginDetail detail =
+                        capture.pluginDetail(target, budget.maxItems());
+                if (detail == null) {
+                    throw new ToolException("No plugin named " + target
+                            + ". server_info lists what is installed.");
+                }
+                yield mapper.valueToTree(detail);
             }
 
             case "block" -> {
