@@ -200,8 +200,10 @@ public final class ScenarioRunner {
                 ObjectNode arguments = AgentClient.arguments();
                 arguments.put("command", required(step, "command"));
                 JsonNode result = agent.call("command_exec", arguments);
+                boolean dispatched = result.path("dispatched").asBoolean();
                 yield ScenarioResult.StepResult.ok(index, action,
-                        "dispatched=" + result.path("dispatched").asBoolean()
+                        "dispatched=" + dispatched
+                                + (dispatched ? "" : " (" + result.path("reason").asText() + ")")
                                 + " output=" + result.path("output"));
             }
 

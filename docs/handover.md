@@ -77,7 +77,7 @@ old `java -jar C:/vitaminmcp/mcp-server.jar` registration was removed on 2026-08
 | `events_summary` → `events_query` | always the summary first; it is small however busy the server is. High-frequency types (`PlayerMoveEvent`, `BlockPhysicsEvent`, chunk/entity movement) are excluded unless you name them in `types` |
 | `exceptions_recent` | startup produces exceptions from every other plugin. Open the stack and see which jar it came from before believing it is yours |
 | `state_query` | `kind="player"` also answers permission questions via `permissions`. `kind="block"` for what a block *is now*. `kind="inventory"` is the **only** way to see a plugin GUI |
-| `command_exec` | runs a command as console. **This changes the server.** Returns only what the command answered synchronously — a plugin replying from an async callback returns `output: []`, which is not a failure; find the reply with `logs_query` |
+| `command_exec` | runs a command as the console, or as a player with `as`. **This changes the server.** Returns only what the command answered synchronously — a plugin replying from an async callback returns `output: []`, which is not a failure; find the reply with `logs_query`. `dispatched: false` always carries a `reason` separating "no such command" from "the sender was not permitted"; vanilla commands are op-only, and a command run `as` a player answers that player, so read the reply with `bot_inspect` |
 | `wait_for` | never sleep. `ticks`, `block_is`, `block_is_not`, `event`, `player_online`, `player_offline`, `player_near`, `inventory_open`, `inventory_contains`, `log_matches` |
 | `bot_spawn` / `bot_inspect` / `bot_run_scenario` | the bot side |
 

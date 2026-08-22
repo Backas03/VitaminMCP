@@ -539,12 +539,12 @@ class McpHttpServerTest {
                 String command, String asPlayer, java.time.Duration timeout) {
             this.lastCommand = command;
             this.lastCommandAs = asPlayer;
-            return new moe.vitamin.minecraft.mcp.contract.CommandResult(
+            return moe.vitamin.minecraft.mcp.contract.CommandResult.dispatched(
                     command,
                     asPlayer == null
                             ? moe.vitamin.minecraft.mcp.contract.CommandResult.CONSOLE
                             : asPlayer,
-                    true, List.of("ok"), 1L);
+                    List.of("ok"), 1L);
         }
     }
 }

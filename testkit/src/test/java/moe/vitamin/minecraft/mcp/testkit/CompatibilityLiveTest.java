@@ -112,6 +112,45 @@ class CompatibilityLiveTest {
                     "op never took effect the second time");
         });
 
+        // /list is vanilla, so it never reaches Bukkit's command map — it is matched by the
+        // server's own dispatcher against the sender's permissions. Running it as a player is
+        // therefore the check that the 'as' path reaches the vanilla side at all, and that a
+        // permission refusal comes back as a refusal rather than as silence.
+        check("a vanilla command as a player", () -> {
+            console(agent, "deop Tester1");
+            require(await(() -> !playerState(agent, "Tester1").path("op").asBoolean()),
+                    "deop never took effect");
+
+            JsonNode refused = as(agent, "list", "Tester1");
+            require(!refused.path("dispatched").asBoolean(),
+                    "a non-op ran /list, so this server does not gate it on a permission");
+            String reason = refused.path("reason").asText("");
+            require(reason.contains("minecraft.command.list"),
+                    "the refusal did not name the permission it was about: " + reason);
+            require(reason.contains("Tester1"),
+                    "the refusal did not name the player it was about: " + reason);
+
+            console(agent, "op Tester1");
+            require(await(() -> playerState(agent, "Tester1").path("op").asBoolean()),
+                    "op never took effect");
+
+            JsonNode ran = as(agent, "list", "Tester1");
+            require(ran.path("dispatched").asBoolean(),
+                    "/list as an op player was not dispatched, so the player path never reaches "
+                            + "the vanilla dispatcher: " + ran.path("reason").asText());
+            require(ran.path("reason").isNull(),
+                    "a dispatched command still carried a reason: " + ran.path("reason"));
+        });
+
+        check("an unknown command is not a refusal", () -> {
+            JsonNode unknown = as(agent, "definitelynotacommand", "Tester1");
+            require(!unknown.path("dispatched").asBoolean(),
+                    "the server claims to have a command named definitelynotacommand");
+            String reason = unknown.path("reason").asText("");
+            require(reason.contains("no command named"),
+                    "an unknown command was not reported as unknown: " + reason);
+        });
+
         check("break a block", () -> {
             String before = block(agent, bx, by - 1, bz);
             require(!"AIR".equals(before),
@@ -352,6 +391,14 @@ class CompatibilityLiveTest {
         ObjectNode arguments = AgentClient.arguments();
         arguments.put("command", command);
         agent.call("command_exec", arguments);
+    }
+
+    /** A command run as a player rather than as the console. */
+    private static JsonNode as(AgentClient agent, String command, String player) {
+        ObjectNode arguments = AgentClient.arguments();
+        arguments.put("command", command);
+        arguments.put("as", player);
+        return agent.call("command_exec", arguments);
     }
 
     private static JsonNode playerState(AgentClient agent, String name) {

@@ -185,12 +185,21 @@ final class AgentTools {
                     "Runs a command on the server, as the console by default. This CHANGES the "
                             + "server. Returns whether a handler accepted it plus whatever it "
                             + "logged, which is usually where the real answer is — many commands "
-                            + "report failure in their output while still succeeding formally.",
+                            + "report failure in their output while still succeeding formally. "
+                            + "'dispatched': false always carries a 'reason' saying nothing ran "
+                            + "and which of the two causes it was — no such command, or the "
+                            + "sender was not permitted — so it never has to be read as a "
+                            + "command that ran and did nothing. A command run 'as' a player "
+                            + "answers that player rather than the console, so 'output' is "
+                            + "usually empty even when it worked; the reply reached the client.",
                     properties -> {
                         stringProperty(properties, "command",
                                 "The command, with or without a leading slash.");
                         stringProperty(properties, "as",
-                                "Player name to run as. Omit to run as the console.");
+                                "Player name to run as. Omit to run as the console. Vanilla "
+                                        + "commands are op-only by default, so a player who is "
+                                        + "not op is refused — which is the point when the "
+                                        + "permission is what is under test.");
                     }));
         }
 

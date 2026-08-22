@@ -591,6 +591,30 @@ not restricted; it is absent.
 `dispatched` in the response means "a handler accepted it", not that it succeeded. **The real answer
 is in `output`** — plenty of commands succeed formally while reporting failure in their output.
 
+**`dispatched: false` always carries a `reason`**, because on its own it is indistinguishable from a
+command that ran and did nothing — both are `false` with an empty `output`. The reason says which of
+the two things happened:
+
+```jsonc
+// a vanilla command as a player who is not op
+{"dispatched": false,
+ "reason": "Nothing ran: 'list' was refused before it executed, because Tester1 does not have
+            minecraft.command.list. ..."}
+
+// a command that does not exist
+{"dispatched": false,
+ "reason": "Nothing ran: this server has no command named 'lst'. ..."}
+```
+
+**`as` runs vanilla commands too, and they are op-only by default.** `/list`, `/say`, `/tp` and the
+rest are matched by the server's own dispatcher against that player's permissions, so a player who
+is not op is refused — which is the point when the permission is what you are testing. Paper tells
+the player nothing at all in that case, not even "unknown command", which is why the reason above is
+assembled by the agent rather than read out of the server's reply.
+
+**A command run as a player answers that player, not the console**, so `output` is usually empty even
+when it worked. The reply reached the client: read it with `bot_inspect`'s `messages`.
+
 ---
 
 # E. Reading a failure

@@ -107,7 +107,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 | | |
 |---|---|
 | `server_info` | Version, TPS, players online, installed plugins, capture statistics |
-| `command_exec` | Run a command as the console or as a player. **Changes the server** — absent entirely unless `read-only: false` |
+| `command_exec` | Run a command as the console or as a player, vanilla commands included. **Changes the server** — absent entirely unless `read-only: false`. When nothing takes the command it says why, rather than only that it did not |
 
 ### World and state
 

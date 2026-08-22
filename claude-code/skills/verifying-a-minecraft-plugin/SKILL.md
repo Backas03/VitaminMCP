@@ -95,6 +95,33 @@ logs_query(pattern="rank|points")  →  "1. Tester 10 points"
 
 Console output carries colour codes, so search for plain text and leave them out of the pattern.
 
+### `as` runs the command as a real player, permissions and all
+
+Vanilla commands work through `as` — `/list`, `/tp`, `/gamemode` — because the server matches them
+with its own dispatcher against that player's permissions. **They are op-only by default**, so a
+bot that is not op is refused, which is exactly what you want when the permission is the thing
+under test. `op` the bot when it is not.
+
+**A command run as a player answers that player, not the console.** `output` is usually empty even
+when the command worked; the reply went to the client, so read it in `bot_inspect`'s `messages`.
+
+```
+command_exec("list", as="Tester1")  →  dispatched: true, output: []
+bot_inspect("Tester1")              →  "There are 1 of a max of 20 players online: Tester1"
+```
+
+### `dispatched: false` says why
+
+Nothing ran — but the reason separates the two causes, which the server itself does not. Paper
+prunes a command a player may not use during parsing and then reports the same "no" it reports for
+a command that does not exist, telling the player nothing, not even "unknown command":
+
+| `reason` says | What happened |
+|---|---|
+| `was refused before it executed, because ... does not have <node>` | The command exists and the sender may not use it. Grant the node, or op the bot |
+| `this server has no command named '...'` | Nothing by that name. Check the spelling, or whether the plugin registered it |
+| `nothing on this server answers to '...'` | Asked by a bot that is not op, where the two cannot be told apart. Run it as the console to settle it |
+
 ### `exceptions_recent` — do not adopt another plugin's exception
 
 The default output has no stack traces; pass a `hash` for one. **Startup produces exceptions from

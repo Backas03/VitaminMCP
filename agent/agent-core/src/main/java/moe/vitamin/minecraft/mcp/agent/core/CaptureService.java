@@ -362,15 +362,17 @@ public final class CaptureService implements AgentQueries {
         long from = logs.written();
         long startedAt = System.nanoTime();
 
-        Boolean dispatched = onMainThread(() -> {
+        // Null when a handler took it. Anything else is the explanation, worked out on the main
+        // thread while the sender is still there to be asked about permissions.
+        String refusal = onMainThread(() -> {
             org.bukkit.command.CommandSender sender = asPlayer == null
                     ? Bukkit.getConsoleSender()
                     : Bukkit.getPlayerExact(asPlayer);
             if (sender == null) {
                 throw new IllegalArgumentException("No player online named " + asPlayer);
             }
-            return Bukkit.dispatchCommand(sender, normalised);
-        }, timeout, Boolean.FALSE);
+            return Bukkit.dispatchCommand(sender, normalised) ? null : refusalFor(normalised, sender);
+        }, timeout, "Nothing ran: the agent stopped waiting for the server's main thread.");
 
         long millis = (System.nanoTime() - startedAt) / 1_000_000;
 
@@ -378,8 +380,40 @@ public final class CaptureService implements AgentQueries {
         logs.read(from, 200, null).items()
                 .forEach(entry -> output.add(entry.message()));
 
-        return new CommandResult(
-                normalised, executedAs, Boolean.TRUE.equals(dispatched), output, millis);
+        return refusal == null
+                ? CommandResult.dispatched(normalised, executedAs, output, millis)
+                : CommandResult.refused(normalised, executedAs, refusal, output, millis);
+    }
+
+    /** Main thread only: asks the server what it knows about the command and the sender. */
+    private static String refusalFor(String commandLine, org.bukkit.command.CommandSender sender) {
+        String label = CommandRefusal.label(commandLine);
+
+        if (!(sender instanceof org.bukkit.entity.Player player)) {
+            return new CommandRefusal(
+                    label, sender.getName(), true, false, null, CommandRefusal.Standing.HELD)
+                    .explain();
+        }
+
+        // Vanilla commands are absent from the Bukkit map on modern Paper — syncCommands only
+        // resends the client's command tree — so a miss here means "vanilla, or nothing".
+        org.bukkit.command.Command known = Bukkit.getCommandMap().getCommand(label);
+        String permission = known == null ? "minecraft.command." + label : known.getPermission();
+
+        CommandRefusal.Standing standing;
+        if (permission == null) {
+            standing = CommandRefusal.Standing.OPEN;
+        } else {
+            // Paper registers a permission for each vanilla command it knows about, so whether
+            // this one exists is what separates "may not" from "no such command".
+            boolean defined = known != null
+                    || Bukkit.getPluginManager().getPermission(permission) != null;
+            standing = CommandRefusal.standing(
+                    defined, player.hasPermission(permission), player.isOp());
+        }
+
+        return new CommandRefusal(
+                label, player.getName(), false, known != null, permission, standing).explain();
     }
 
     /** Runs something on the server's main thread and waits for it. */
