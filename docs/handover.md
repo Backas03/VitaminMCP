@@ -20,12 +20,12 @@ Branch: **`feat/mineflayer-runner`**.
 | 5 | the parity gate | ✅ done |
 | 6 | new verbs | ✅ done |
 | 7 | live bot view | ✅ done |
-| 8 | distribution | ← **you are here** |
-| 9 | deletion and docs | |
+| 8 | distribution | ✅ Windows scope done; Linux/macOS planned |
+| 9 | deletion and docs | ✅ done |
 
-Stages 0–7 have passed their gates on the Node runner. The Java runner still passes everything it
-passed before, and **is not to be deleted until stage 9** — it remains the reference for what the
-MCP tools returned during the parity gate.
+Stages 0–9 have passed their implementation gates on the Node runner. The Java runner was retired
+in Stage 9 after the parity gate; the historical parity record remains in
+`bot/bot-runner-node/DIFFERENCES.md`.
 
 ### The shape of it
 

@@ -302,16 +302,18 @@ Last, and only once Stage 8 is done. Everything here is irreversible in practice
 
 **DoD**
 
-- `./gradlew build` green with the backend modules gone
-- No reference to MCProtocolLib outside a historical note
-- A fresh clone builds and runs — verified from `git archive`, not from this working tree
-- The README's requirements table is honest about Node
+- [x] `./gradlew build` green with the backend modules gone
+- [x] No reference to MCProtocolLib outside a historical note
+- [x] A fresh clone builds and runs — verified from `git archive`, not from this working tree
+- [x] The README's requirements table is honest about Node
 
-**Progress 2026-08-22:** hybrid Node/source selection, generic asset cache/checksum code, platform
-checksum stamping, and the SEA build script are implemented. The Windows SEA asset and both
-darwin assets were built locally; Linux ELF injection aborts under the Windows postject host. The
-five-asset release checksum cannot be stamped honestly until Linux assets and macOS signing are
-available, so Stage 8 remains in progress.
+**Verified 2026-08-22:** the retired Java runner, per-protocol backends, SPI, backend cache and
+parity driver were removed. The full build passed from a fresh `git archive` checkout, and the
+remaining legacy design references are explicitly historical.
+
+**Progress 2026-08-22:** hybrid Node/source selection, generic asset cache/checksum code, Windows
+SEA fallback, and the Windows release checksum path are implemented. Linux and macOS native
+assets remain planned rather than part of the current supported release scope.
 
 **Scope update 2026-08-22:** Windows x64 plus the Node source runner is the supported distribution
 scope for this migration. Linux and macOS native assets are planned and documented, but are not
@@ -319,10 +321,9 @@ required for the current Stage 8 gate. Stage 9 may proceed without deleting the 
 
 **Windows implementation update 2026-08-22:** native SEA paths now launch directly from
 `BotRunner` instead of being mistaken for Java jars; cached jars and assets are re-hashed before
-reuse; and the release workflow builds the five target assets on matching GitHub runners, including
-ad-hoc signing for macOS. The local Windows asset probes successfully with protocol `772`; the
-official MCP connector must be restarted before that newly built `mcp-server.jar` can exercise the
-native path end to end.
+reuse; and the release workflow builds and smoke-tests the Windows target. The local Windows asset
+probes successfully with protocol `772`; the official MCP connector must be restarted before that
+newly built `mcp-server.jar` can exercise the native path end to end.
 
 ---
 
