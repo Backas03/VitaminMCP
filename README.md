@@ -373,7 +373,8 @@ session_start
 No arguments. The agent writes its host, both ports and its token to
 `~/.vitaminmcp/agents/<port>.properties` while it runs, and `session_start` reads them — so for a
 server on this machine there is nothing to pass and nothing to look up. A successful connection
-returns the server version, TPS and plugin list.
+returns the server version, TPS and plugin list, the agent's real tool definitions, and the current
+session roster. Sessions whose runner process has exited are removed from that roster.
 
 Pass what differs, and only that. A server somewhere else needs `host` and `token`, because a token
 minted on this machine says nothing about a server on another one and is not sent there:

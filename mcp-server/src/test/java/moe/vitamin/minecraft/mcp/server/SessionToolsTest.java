@@ -37,6 +37,16 @@ class SessionToolsTest {
     }
 
     @Test
+    void sessionStartDescribesTheLiveSessionRoster() {
+        JsonNode start = findTool(new SessionTools().listTools(), "session_start");
+
+        String description = start.path("description").asText();
+        assertTrue(description.contains("real agent tool definitions"));
+        assertTrue(description.contains("runner process has exited"));
+        assertTrue(description.contains("current session roster"));
+    }
+
+    @Test
     void aMessageCursorRejectsASameNamedBotWithAnotherStreamId() {
         ClientView first = view(43L, "opaque-stream-a", List.of(
                 new ClientMessage(42L, 1_000L, "first connection")));

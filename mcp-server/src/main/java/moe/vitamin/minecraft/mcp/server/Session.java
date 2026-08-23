@@ -33,6 +33,11 @@ final class Session {
         return bots;
     }
 
+    /** Whether the child runner still exists. */
+    boolean isRunning() {
+        return bots.isRunning();
+    }
+
     ScenarioRunner runner() {
         return new ScenarioRunner(bots, agent);
     }

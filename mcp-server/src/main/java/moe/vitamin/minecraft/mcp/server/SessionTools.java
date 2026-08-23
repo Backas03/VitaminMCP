@@ -37,7 +37,9 @@ final class SessionTools {
                         + "is what a BungeeCord network needs: one per backend server, each with "
                         + "its own agent. Starting one never disturbs the others, so bots stay "
                         + "connected. Starting one that names the same server and agent as an open "
-                        + "session replaces it.",
+                        + "session replaces it. The response includes the server details, the real "
+                        + "agent tool definitions and the current session roster; sessions whose "
+                        + "runner process has exited are removed from that roster.",
                 properties -> {
                     string(properties, "session",
                             "Name for this session, used by every other tool to say which server "
@@ -225,6 +227,7 @@ final class SessionTools {
     }
 
     private JsonNode sessionStart(JsonNode args) {
+        pruneDeadSessions();
         Connection connection = resolveConnection(args);
         String token = connection.token();
 
@@ -297,11 +300,25 @@ final class SessionTools {
 
     /** What is open, so a caller never has to remember what it named things. */
     private ArrayNode roster() {
+        pruneDeadSessions();
         ArrayNode open = MAPPER.createArrayNode();
         sessions.forEach((name, session) -> open.addObject()
                 .put("session", name)
                 .put("connected", session.describe()));
         return open;
+    }
+
+    /** Removes runner processes that exited without a matching session_reset/close call. */
+    private void pruneDeadSessions() {
+        java.util.Iterator<java.util.Map.Entry<String, Session>> iterator =
+                sessions.entrySet().iterator();
+        while (iterator.hasNext()) {
+            java.util.Map.Entry<String, Session> entry = iterator.next();
+            if (!entry.getValue().isRunning()) {
+                iterator.remove();
+                entry.getValue().close();
+            }
+        }
     }
 
     private String nameOf(Session session) {
@@ -766,6 +783,7 @@ final class SessionTools {
 
     /** The session a call is about. */
     private Session require(JsonNode args) {
+        pruneDeadSessions();
         String name = args.path("session").asText("");
         if (!name.isBlank()) {
             Session named = sessions.get(name);

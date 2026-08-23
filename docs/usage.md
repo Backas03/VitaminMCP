@@ -331,7 +331,8 @@ vouches for everything it signs; a fingerprint vouches for one certificate). Omi
 certificate.
 
 Call `server_info` once right here. If the host, port or token is wrong, this is where it says so,
-instead of blowing up inside some unrelated tool later.
+instead of blowing up inside some unrelated tool later. The response also returns the current
+session roster; sessions whose bot runner has exited are removed before that list is returned.
 
 The response also carries `agentTools` — **the real parameters of the proxied tools.** mcp-server
 publishes its tool list at startup, when no agent is attached yet, so it cannot state their

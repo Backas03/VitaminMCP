@@ -136,9 +136,10 @@ means the compat run *and* checking the bundle still covers it.
 
 ## 7. Smaller, in rough order
 
-- **`session_start`'s response**, complained about in rounds 1, 3 and 5 and praised in the same
-  breath every time — it means nothing has to be guessed. The cheap half is the stale session
-  list, which by the sixth round held eight dead sessions, several still owning bots.
+- **`session_start`'s response — completed 2026-08-24.** The response still carries the full server
+  details and real agent tool definitions, but it now removes sessions whose child runner has
+  exited before reporting the roster. The same pruning runs before session resolution, so a dead
+  session cannot make an unnamed call ambiguous or leave a stale name behind.
 - **The `open a container` flake.** It failed once in about five live compatibility runs, on the
   client-side window opening. It passed on the unmodified branch and on reruns, so it is not a
   regression — but it is the gate for adding a version, and a gate you cannot trust is not a gate.
