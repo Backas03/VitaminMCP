@@ -8,10 +8,9 @@ Much of what follows is strict, because a tool that can run console commands on 
 has to be. None of it is aimed at you. If a rule here blocks something reasonable, say so — that is
 worth knowing, and the rule can be wrong.
 
-**This file is the rules.** Design rationale is in [docs/design.md](docs/design.md) and
-implementation order in [docs/roadmap.md](docs/roadmap.md); when an intent here is unclear, read
-design.md rather than guessing — most of what looks arbitrary is written down there with its
-reason.
+**This file is the rules.** Design rationale is in [docs/design.md](docs/design.md); when an
+intent here is unclear, read design.md rather than guessing — most of what looks arbitrary is
+written down there with its reason.
 
 ## Stack
 

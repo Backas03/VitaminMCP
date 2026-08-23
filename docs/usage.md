@@ -704,4 +704,4 @@ When the cause is not visible there, dig in this order:
 
 ---
 
-Design rationale is in [design.md](design.md), remaining work in [roadmap.md](roadmap.md).
+Design rationale is in [design.md](design.md).

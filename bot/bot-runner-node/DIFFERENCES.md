@@ -5,9 +5,9 @@ the historical record of the parity gate and are not current runtime behavior.
 
 # Where the Node runner did not match the retired Java runner
 
-Stage 5 of `docs/mineflayer-roadmap.md` accepts or rejects the migration on this list, so it is
-written as the differences are made rather than reconstructed at the end. Every entry needs a
-reason that is not "mineflayer does it that way".
+The migration was accepted or rejected on this list, so it was written as the differences were
+made rather than reconstructed at the end. Every entry needs a reason that is not "mineflayer does
+it that way".
 
 `test/parity.live.mjs` drives both runners through the same script and diffs their replies byte for
 byte. Each entry below is allowed there by name, so a difference nobody decided on still fails.

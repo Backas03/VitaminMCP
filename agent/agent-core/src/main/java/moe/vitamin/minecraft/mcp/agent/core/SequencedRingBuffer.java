@@ -12,7 +12,7 @@ import moe.vitamin.minecraft.mcp.contract.Sequenced;
 /** Fixed-capacity, lock-free ring buffer that overwrites its oldest records. */
 public final class SequencedRingBuffer<T extends Sequenced> {
 
-    /** Default capacity, per docs/roadmap.md Stage 1b. */
+    /** Default capacity: enough that a busy server's recent history survives a quiet client. */
     public static final int DEFAULT_CAPACITY = 100_000;
 
     /** Largest power of two an array can be sized to here. */

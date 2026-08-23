@@ -366,7 +366,7 @@ public final class ScenarioRunner {
             case "sleep" -> throw new IllegalArgumentException(
                     "there is no sleep step. Use wait_for and name what you are waiting for — a "
                             + "fixed wait is right on the machine that wrote it and wrong "
-                            + "everywhere else (docs/roadmap.md Stage 3).");
+                            + "everywhere else.");
 
             default -> throw new IllegalArgumentException("unknown action '" + action + "'");
         };

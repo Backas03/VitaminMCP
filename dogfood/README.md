@@ -1,10 +1,5 @@
 # Dogfooding harness
 
-[roadmap.md](../docs/roadmap.md) ends Stage 1 with an instruction that was never carried out:
-
-> At the end of Stage 1 **this is already usable as a standalone product.** Use it for real once
-> here, refine the tool schemas, then go to Stage 2.
-
 Every tool in this project has been driven by a test that already knew the answer. This is the
 apparatus for the other thing: someone who does **not** know the answer, trying to find one, and
 being watched while they fail to.
