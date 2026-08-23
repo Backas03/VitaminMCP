@@ -16,7 +16,8 @@ things stand" half is a snapshot from 2026-08-22.
 
 ## Where things stand
 
-2.2.0 is published to GitHub, npm and the MCP registry. `publishing.md` is the release runbook;
+3.0.0 is the version being published to GitHub, npm and the MCP registry; 2.2.0 was the one before
+it. `publishing.md` is the release runbook;
 a release is a version bump plus a tag push, and the version lives in exactly one file
 (`build-logic/src/main/kotlin/vitaminmcp.java-conventions.gradle.kts`) with
 `node npm/scripts/stamp-checksums.mjs --sync` copying it to the other four.
