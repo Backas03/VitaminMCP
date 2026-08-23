@@ -208,8 +208,8 @@ These are the requirements for using a prebuilt release:
 | Operating system | Node source runner | Native runner asset | Meaning |
 |---|:---:|:---:|---|
 | **Windows x64** | 🟢 | 🟢 | Current supported distribution |
-| **Linux x64 / arm64** | 🟢 | 🟢 | Native asset available |
-| **macOS Intel / Apple Silicon** | 🟢 | 🟢 | Native asset available; ad-hoc signed |
+| **Linux x64 / arm64** | 🟢 | 🟡 | Built by the release workflow; first published with the next release |
+| **macOS Intel / Apple Silicon** | 🟢 | 🟡 | The same, and ad-hoc signed |
 
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
@@ -285,7 +285,8 @@ when it was published.
 
 `mcp-server.jar` is two megabytes and is waited for. With Node installed, the source runner is used
 directly and no runner asset is downloaded. Without Node, the launcher selects the native runner
-asset for the current platform.
+asset for the current platform — Windows x64 in the current release, every supported platform from
+the next one.
 
 `mcp-server` speaks stdio. It has no port and no token: it is a child process of the client, so the
 trust relationship already exists. Only the agent side crosses a network, which is why only the

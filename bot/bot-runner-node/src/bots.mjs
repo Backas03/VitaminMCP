@@ -3,7 +3,7 @@ import { configurePathfinder, loadPathfinder, moveTo } from './movement.mjs';
 import { reachable } from './movement.mjs';
 import { stopAllViews, stopView as stopBotView, view as startView } from './viewer.mjs';
 
-import { collect } from './clientview.mjs';
+import { collect, forget } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
 
 /** How long a bot has to get from a socket to standing in the world. */
@@ -108,6 +108,7 @@ export class BotRegistry {
       return;
     }
     this.#bots.delete(name);
+    forget(name);
     stopBotView(bot);
     quietly(() => bot.quit());
   }
@@ -119,7 +120,8 @@ export class BotRegistry {
   /** Disconnects every bot. */
   shutdown() {
     stopAllViews();
-    for (const bot of this.#bots.values()) {
+    for (const [name, bot] of this.#bots) {
+      forget(name);
       quietly(() => bot.quit());
     }
     this.#bots.clear();

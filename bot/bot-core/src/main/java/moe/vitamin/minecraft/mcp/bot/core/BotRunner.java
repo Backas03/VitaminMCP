@@ -90,8 +90,21 @@ public final class BotRunner implements AutoCloseable {
         return command;
     }
 
+    /** How many fields an {@code inspect} reply carries, message sequence and stream id included. */
+    private static final int INSPECT_FIELDS = 17;
+
     /** Decodes one {@code inspect} reply from the runner line protocol. */
     static ClientView parseInspect(String[] reply) {
+        // Said plainly, because the runner is replaceable: VITAMINMCP_RUNNER_JAR can point at any
+        // runner, and one built before message cursors existed answers with a shorter reply. Left
+        // to the field reads below that arrives as an index out of bounds naming nothing.
+        if (reply.length < INSPECT_FIELDS) {
+            throw new IllegalStateException(
+                    "This runner answered inspect with " + reply.length + " fields; "
+                            + INSPECT_FIELDS + " are expected. It predates message timestamps and "
+                            + "cursors — use the runner that ships with this version.");
+        }
+
         int containerId = Integer.parseInt(reply[2]);
 
         List<MenuItem> items = new ArrayList<>();

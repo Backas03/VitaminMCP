@@ -31,6 +31,19 @@ const state = new WeakMap();
 const messageStreamsByName = new Map();
 
 /**
+ * Drops the message stream a despawned bot left behind.
+ *
+ * The stream outlives the bot on purpose while a replacement is connecting, but a bot that is gone
+ * for good would otherwise keep its entry for the lifetime of the runner. The next bot of the same
+ * name gets a new id either way, so nothing that survives here is ever reused.
+ */
+export function forget(name) {
+  const stream = messageStreamsByName.get(name);
+  if (stream) stream.activeCollector = null;
+  messageStreamsByName.delete(name);
+}
+
+/**
  * Starts collecting what the server tells this bot.
  *
  * Must be called as soon as the bot exists: this is all events, so anything said before the

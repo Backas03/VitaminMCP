@@ -30,8 +30,11 @@ class ManagedServerLiveTest {
         VersionMatrix matrix = VersionMatrix.load(Path.of("..", "versions.yaml"));
         VersionMatrix.Entry entry = matrix.versions().get(0);
 
-        Path jar = new PaperDownloader(work.resolve("cache"))
-                .fetch(entry.paperVersion(), entry.build());
+        // The shared cache rather than one under @TempDir. A server started from a jar keeps that
+        // file open past the close that stopped it, and on Windows the temp-directory cleanup that
+        // follows the test then fails on the still-locked jar — reproducibly, once a second test in
+        // this class had already run. Caching outside the temp directory also downloads Paper once.
+        Path jar = new PaperDownloader().fetch(entry.paperVersion(), entry.build());
         assertTrue(Files.size(jar) > 1_000_000, "the downloaded jar looks truncated");
 
         int port = 25599;
@@ -86,8 +89,7 @@ class ManagedServerLiveTest {
 
         VersionMatrix matrix = VersionMatrix.load(Path.of("..", "versions.yaml"));
         VersionMatrix.Entry entry = matrix.versions().get(0);
-        Path paper = new PaperDownloader(work.resolve("cache"))
-                .fetch(entry.paperVersion(), entry.build());
+        Path paper = new PaperDownloader().fetch(entry.paperVersion(), entry.build());
         Path javaHome = Path.of(System.getProperty("java.home"));
         Path template;
 

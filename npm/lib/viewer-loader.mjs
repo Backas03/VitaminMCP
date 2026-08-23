@@ -11,7 +11,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
-  VIEWER_ASSET,
   assetCacheDirectory,
   ensureAsset,
 } from './jars.mjs';
@@ -26,7 +25,7 @@ if (!asset) {
   );
 }
 
-const archive = await ensureAsset(version, asset || VIEWER_ASSET, {
+const archive = await ensureAsset(version, asset, {
   log: (message) => process.stderr.write(`[vitaminmcp] ${message}\n`),
 });
 const extractionRoot = path.join(assetCacheDirectory(version), 'viewer');

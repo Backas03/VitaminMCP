@@ -8,7 +8,11 @@ dependencies {
 }
 
 tasks.test {
-    listOf("vitaminmcp.liveServer", "vitaminmcp.agentJar").forEach { key ->
+    listOf(
+        "vitaminmcp.liveServer",
+        "vitaminmcp.agentJar",
+        "vitaminmcp.paperCache",
+    ).forEach { key ->
         providers.systemProperty(key).orNull?.let { systemProperty(key, it) }
     }
     testLogging { showStandardStreams = true }

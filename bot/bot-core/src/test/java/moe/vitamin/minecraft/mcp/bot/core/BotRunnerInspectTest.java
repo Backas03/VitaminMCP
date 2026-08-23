@@ -1,6 +1,8 @@
 package moe.vitamin.minecraft.mcp.bot.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
@@ -37,6 +39,19 @@ class BotRunnerInspectTest {
         assertEquals(List.of(), view.messages());
         assertEquals(42L, view.nextMessageSequence());
         assertEquals("bot-42-3f86c68d", view.messageStreamId());
+    }
+
+    @Test
+    void aRunnerWithoutMessageCursorsIsNamedRatherThanIndexedOutOfBounds() {
+        String[] older = RunnerProtocol.decode(RunnerProtocol.encode(
+                RunnerProtocol.OK, RunnerProtocol.INSPECT,
+                "-1", "", "", "", "", "", "", "", "", "", "", "", ""));
+
+        IllegalStateException refused = assertThrows(
+                IllegalStateException.class, () -> BotRunner.parseInspect(older));
+
+        assertTrue(refused.getMessage().contains("15 fields"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("message timestamps"), refused.getMessage());
     }
 
     @Test

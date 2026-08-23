@@ -76,6 +76,16 @@ try {
   await fs.mkdir(outputDirectory, { recursive: true });
   await fs.copyFile(nodeExecutable, output);
   if (targetKey !== 'win32-x64') await fs.chmod(output, 0o755);
+
+  // A Mach-O binary ships signed, and injecting a section invalidates that signature. macOS
+  // refuses to run a binary whose signature no longer matches, so the copied node is stripped
+  // first and signed again by the caller afterwards. Only a macOS host has codesign; a
+  // cross-build produces the binary and leaves the signing to the target platform.
+  const darwin = targetKey.startsWith('darwin-');
+  if (darwin && process.platform === 'darwin') {
+    run('codesign', ['--remove-signature', output]);
+  }
+
   run(process.execPath, [
     path.join(root, 'node_modules', 'postject', 'dist', 'cli.js'),
     output,
@@ -83,6 +93,9 @@ try {
     blob,
     '--sentinel-fuse',
     'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
+    // Node looks for its blob in this segment and postject would otherwise write its own default,
+    // leaving a binary that starts a REPL instead of running the bundle.
+    ...(darwin ? ['--macho-segment-name', 'NODE_SEA'] : []),
   ]);
   process.stdout.write(`built ${output}\n`);
 } finally {
