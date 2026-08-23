@@ -5,11 +5,21 @@ import test from 'node:test';
 import os from 'node:os';
 import path from 'node:path';
 
-import { checkNode, runnerAssetName } from '../lib/node.mjs';
-import { verifyFileHash } from '../lib/jars.mjs';
+import { checkNode, runnerAssetName, viewerAssetName } from '../lib/node.mjs';
+import { assetCacheDirectory, verifyFileHash, VIEWER_ASSET } from '../lib/jars.mjs';
 
 test('maps every supported platform to its release asset', () => {
   assert.equal(runnerAssetName('win32', 'x64'), 'bot-runner-win-x64.exe');
+});
+
+test('keeps the viewer as a separate versioned optional asset', () => {
+  assert.equal(VIEWER_ASSET, viewerAssetName('win32', 'x64'));
+  assert.match(assetCacheDirectory('2.2.0'), /assets[\\/]2\.2\.0$/);
+});
+
+test('does not pretend a native viewer exists on an unreleased platform', () => {
+  assert.throws(() => viewerAssetName('linux', 'x64'), /planned but not released/);
+  assert.throws(() => viewerAssetName('darwin', 'arm64'), /planned but not released/);
 });
 
 test('explains that Linux and macOS assets are planned', () => {

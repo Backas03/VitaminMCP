@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Optional on-demand viewer asset for the VitaminMCP Node runner.",
+  "scripts": {
+    "build:asset": "node scripts/build-viewer-asset.mjs"
+  },
   "dependencies": {
     "canvas": "3.1.0",
     "prismarine-viewer": "1.33.0"

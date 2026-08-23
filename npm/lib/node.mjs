@@ -41,3 +41,15 @@ export function runnerAssetName(platform = process.platform, arch = process.arch
   }
   throw new Error(`No VitaminMCP runner asset exists for ${platform}-${arch}.`);
 }
+
+/** The optional world-view asset for the platforms currently published. */
+export function viewerAssetName(platform = process.platform, arch = process.arch) {
+  if (platform === 'win32' && arch === 'x64') return 'bot-runner-viewer-win-x64.tgz';
+  if (platform === 'linux' || platform === 'darwin') {
+    throw new Error(
+      `Optional world viewer assets for ${platform}-${arch} are planned but not released yet. `
+        + 'Set VITAMINMCP_VIEWER_PATH to a local prismarine-viewer sidecar.',
+    );
+  }
+  throw new Error(`No VitaminMCP world viewer asset exists for ${platform}-${arch}.`);
+}

@@ -10,7 +10,7 @@ import {
   MCP_SERVER_JAR, assetPath, ensureAsset, ensureJar,
 } from '../lib/jars.mjs';
 import { checkJava, findJava } from '../lib/java.mjs';
-import { checkNode, findNode, runnerAssetName } from '../lib/node.mjs';
+import { checkNode, findNode, runnerAssetName, viewerAssetName } from '../lib/node.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -91,6 +91,13 @@ async function main() {
   const configuredRunner = process.env.VITAMINMCP_RUNNER_JAR;
   const node = findNode();
   const nodeCheck = checkNode(node);
+  let viewerAsset;
+  try {
+    viewerAsset = viewerAssetName();
+  } catch {
+    // The source runner can still be used on platforms whose native viewer asset is not released.
+    viewerAsset = '';
+  }
   const sourceRunner = process.env.VITAMINMCP_NODE_RUNNER
     ?? path.join(HERE, '..', 'runner', 'runner.mjs');
   let runner;
@@ -114,7 +121,7 @@ async function main() {
   }
 
   await runnerReady;
-  return await run(java, server, runner);
+  return await run(java, server, runner, release, viewerAsset);
 }
 
 /**
@@ -124,10 +131,20 @@ async function main() {
  * `.part` file it leaves is claimed again by the next start, and a client waiting on a process
  * that no longer serves anything is worse than a jar fetched twice.
  */
-function run(java, server, runner) {
+function run(java, server, runner, release, viewerAsset) {
+  const env = {
+    ...process.env,
+    VITAMINMCP_RUNNER_JAR: runner,
+    VITAMINMCP_VERSION: release,
+    VITAMINMCP_VIEWER_ASSET: viewerAsset,
+  };
+  // The loader imports the pinned archive only when the Node runner receives bot_view(world).
+  if (!env.VITAMINMCP_VIEWER_PATH) {
+    env.VITAMINMCP_VIEWER_PATH = path.join(HERE, '..', 'lib', 'viewer-loader.mjs');
+  }
   const child = spawn(java, ['-jar', server], {
     stdio: 'inherit',
-    env: { ...process.env, VITAMINMCP_RUNNER_JAR: runner },
+    env,
   });
 
   return new Promise((resolve) => {

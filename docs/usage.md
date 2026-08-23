@@ -196,6 +196,8 @@ Minecraft client or expose a port beyond `127.0.0.1`:
 The same bot reuses its URL. The world view uses the optional prismarine asset; the inventory view
 is a lightweight live page showing the open menu. A session reset or bot despawn closes the port.
 An installation that never calls `bot_view` does not install or download the viewer asset.
+The current npx native viewer asset is Windows x64; on Linux or macOS, point
+`VITAMINMCP_VIEWER_PATH` at a local sidecar.
 
 ### The rest of the screen
 

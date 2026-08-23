@@ -24,6 +24,7 @@ const REPOSITORY = path.join(PACKAGE, '..');
 const WANTED = ['mcp-server.jar'];
 const ASSETS = [
   'bot-runner-win-x64.exe',
+  'bot-runner-viewer-win-x64.tgz',
 ];
 const API = 'https://api.github.com/repos/Backas03/VitaminMCP-minecraft/releases/tags';
 
@@ -58,12 +59,12 @@ async function fromDist(directory) {
 }
 
 async function fromDistAssets(directory) {
-  const source = path.join(directory, 'runners');
-  const entries = await fs.readdir(source).catch(() => []);
   const assets = {};
   for (const name of ASSETS) {
+    const source = path.join(directory, name.endsWith('.tgz') ? 'assets' : 'runners');
+    const entries = await fs.readdir(source).catch(() => []);
     if (!entries.includes(name)) {
-      throw new Error(`${source} holds no ${name}. Build all SEA targets first.`);
+      throw new Error(`${source} holds no ${name}. Build the runner and viewer assets first.`);
     }
     assets[name] = createHash('sha256').update(await fs.readFile(path.join(source, name))).digest('hex');
   }

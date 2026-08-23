@@ -14,6 +14,9 @@ const RELEASES = 'https://github.com/Backas03/VitaminMCP-minecraft/releases/down
 /** The jar this package launches, and the one it launches in turn. */
 export const MCP_SERVER_JAR = 'mcp-server.jar';
 
+/** The optional viewer archive fetched only when a world view is requested. */
+export const VIEWER_ASSET = 'bot-runner-viewer-win-x64.tgz';
+
 let checksumsPromise;
 let manifestPromise;
 

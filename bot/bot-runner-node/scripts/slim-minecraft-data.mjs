@@ -54,7 +54,23 @@ function supported(floor) {
 
 /** Every data file the supported versions reach, including the ones they borrow from elsewhere. */
 export function keptFiles(packageRoot, floor) {
-  const wanted = supported(floor);
+  return keptFilesForVersions(packageRoot, supported(floor), floor);
+}
+
+/**
+ * Every data file a set of exact Minecraft versions reaches.
+ *
+ * The viewer has two extra consumers of minecraft-data: it asks for the version it renders and its
+ * model code asks for 1.16.2's tint table. Keeping this primitive here lets both the SEA plugin and
+ * the optional viewer asset use the same data.js-derived reference walk.
+ */
+export function keptFilesForVersions(packageRoot, versions, description) {
+  const matcher = versions instanceof RegExp ? versions : null;
+  const wanted = matcher ? null : versions instanceof Set ? versions : new Set(versions);
+  const label = description ?? (matcher ? matcher.source : [...wanted].join(', '));
+  const matches = matcher
+    ? (version) => matcher.test(version ?? '')
+    : (version) => wanted.has(version);
   const source = fs.readFileSync(path.join(packageRoot, 'data.js'), 'utf8');
 
   const keep = new Set();
@@ -71,9 +87,8 @@ export function keptFiles(packageRoot, floor) {
     const isVersion = line.match(VERSION_LINE);
     if (isVersion) {
       version = isVersion[1];
-      continue;
     }
-    if (edition !== 'pc' || !wanted.test(version ?? '')) continue;
+    if (edition !== 'pc' || !matches(version)) continue;
 
     for (const reference of line.matchAll(DATA_REFERENCE)) {
       keep.add(path.resolve(packageRoot, reference[0]));
@@ -82,7 +97,8 @@ export function keptFiles(packageRoot, floor) {
 
   if (keep.size === 0) {
     throw new Error(
-      `No minecraft-data entries matched ${floor}. Either the floor moved past what this copy of `
+      `No minecraft-data entries matched ${label}. Either the requested versions `
+        + 'moved past what this copy of '
         + 'minecraft-data ships, or data.js changed shape — check it before trusting this build.',
     );
   }

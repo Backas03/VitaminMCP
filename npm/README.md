@@ -60,6 +60,7 @@ agent leaves its host, ports and token where this server reads them.
 | `VITAMINMCP_RUNNER_JAR` | use this runner path instead of automatic selection |
 | `VITAMINMCP_NODE` | Node executable for the source runner fallback |
 | `VITAMINMCP_NODE_RUNNER` | bundled `runner.mjs` path when Node is available |
+| `VITAMINMCP_VIEWER_PATH` | local viewer module to use instead of the pinned optional asset |
 
 ## What it downloads
 
@@ -71,8 +72,15 @@ matching this package's version, into `~/.vitaminmcp/jars/<version>/`:
 - otherwise one platform runner asset (`win-x64`, `linux-x64`, `linux-arm64`, `darwin-x64` or
   `darwin-arm64`), checked against a SHA-256 pinned into this package
 
-Both are checked against a SHA-256 pinned into this package at publish time. A file that does not
-match is deleted rather than run.
+The trimmed `bot-runner-viewer-win-x64.tgz` is separate and is downloaded into
+`~/.vitaminmcp/assets/<version>/` only when `bot_view` asks for a world view. It is checked against
+the SHA-256 pinned into this package at publish time, extracted on first use, and never fetched by
+an installation that only spawns bots or uses the inventory viewer. The current native viewer asset
+is Windows x64; on Linux and macOS, set `VITAMINMCP_VIEWER_PATH` to a local sidecar until those
+assets are released.
+
+Every downloaded file is checked against its pinned SHA-256. A file that does not match is deleted
+rather than run.
 
 Full documentation, design notes and the plugin itself:
 **[github.com/Backas03/VitaminMCP-minecraft](https://github.com/Backas03/VitaminMCP-minecraft)**

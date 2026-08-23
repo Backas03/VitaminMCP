@@ -36,6 +36,9 @@ Before changing any tool description, read it. `dogfood/ANSWERS.md` must never b
 
 ## 1. Timestamps and a cursor on `bot_inspect.messages`
 
+**Completed 2026-08-24 in `e4416b5`.** Messages now carry arrival timestamps and per-connection
+sequence cursors; stale streams are rejected and retention loss is reported.
+
 **The top open item.** Raised in some form by every dogfooding round from the second onward.
 
 `messages` is a bare array of strings. `logs_query` and `events_query` both page with cursors and
@@ -59,6 +62,10 @@ since a cursor; `assert_message` still passes; and a dogfooding round can say "t
 400ms after the command" instead of "there is a reply in the array".
 
 ## 2. Trim `prismarine-viewer`, the way `minecraft-data` was trimmed
+
+**Completed 2026-08-24.** The Windows viewer sidecar is derived from the package's own supported
+version and data references, reduced to a 31MB archive (179MB unpacked), and fetched lazily with a
+pinned checksum only when `bot_view` requests a world view.
 
 `mineflayer-roadmap.md` Stage 7 leaves this open with "decide with a number rather than a guess".
 There is now a number and a proven technique.

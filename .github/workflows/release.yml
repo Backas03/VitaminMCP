@@ -61,6 +61,17 @@ jobs:
         working-directory: bot/bot-runner-node
         run: npm run build:sea -- ${{ matrix.target }}
 
+      - name: Install viewer dependencies
+        working-directory: bot/bot-runner-viewer
+        run: npm ci
+
+      - name: Ensure the native canvas binary is present
+        working-directory: bot/bot-runner-viewer
+        run: npm rebuild canvas --foreground-scripts
+
+      - name: Build trimmed viewer asset
+        run: node bot/bot-runner-viewer/scripts/build-viewer-asset.mjs build/dist/assets/bot-runner-viewer-win-x64.tgz
+
       # Runs the built exe with no arguments and expects the entry point's own refusal: exit 2 and
       # the usage line. That is the cheapest proof that postject actually injected the bundle —
       # without it the asset is a bare node.exe that would start a REPL on a user's machine.
@@ -89,7 +100,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: runner-${{ matrix.target }}
-          path: build/dist/runners/${{ matrix.asset }}
+          path: |
+            build/dist/runners/${{ matrix.asset }}
+            build/dist/assets/bot-runner-viewer-win-x64.tgz
           if-no-files-found: error
 
   release:
@@ -146,7 +159,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: runner-*
-          path: build/dist/runners
+          path: build/dist
           merge-multiple: true
 
       # Each publish step checks whether it has already happened. Creating a release with the gh
@@ -171,7 +184,8 @@ jobs:
             for asset in \
               VitaminMCP.jar \
               mcp-server.jar \
-              runners/bot-runner-win-x64.exe; do
+              runners/bot-runner-win-x64.exe \
+              assets/bot-runner-viewer-win-x64.tgz; do
               name="${asset##*/}"
               if grep -qx "$name" <<<"$present"; then
                 echo "  $name is already published; leaving it alone."
@@ -185,7 +199,8 @@ jobs:
               --generate-notes \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
-              build/dist/runners/bot-runner-win-x64.exe
+              build/dist/runners/bot-runner-win-x64.exe \
+              build/dist/assets/bot-runner-viewer-win-x64.tgz
           fi
 
       # Pins what the release actually serves, which on a rerun is not what this run just built.
