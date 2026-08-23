@@ -352,8 +352,7 @@ final class SessionTools {
             // Gamemode belongs in the answer to "what did I just spawn". It changes how every
             // later observation reads — creative masks a full-inventory failure, and item grants
             // behave differently — and it used to be reachable only by inferring it from the
-            // 'view' field of an inventory query, which is documented as being about menus
-            // (dogfood/JOURNAL.md, 2026-08-23).
+            // 'view' field of an inventory query, which is documented as being about menus.
             try {
                 ObjectNode query = AgentClient.arguments();
                 query.put("kind", "player");
@@ -433,8 +432,8 @@ final class SessionTools {
             // Null rather than an empty array when nothing is open. 'items' has only ever meant
             // the open menu's contents, but an empty array next to a player holding a full
             // inventory reads as "this player has nothing" — a dogfooding round drew exactly that
-            // conclusion about its own control subject and nearly went hunting for the wrong bug
-            // (dogfood/JOURNAL.md, 2026-08-23).
+            // conclusion about its own control subject and nearly went hunting for the wrong
+            // bug.
             if (view.menu() == null) {
                 result.putNull("items");
                 result.put("itemsNote", "No menu is open, so there is nothing here. This field is "

@@ -15,9 +15,9 @@ val allowedProjectDependencies: Map<String, Set<String>> = mapOf(
     ":testkit" to setOf(":bot-core", ":orchestrator", ":contract"),
     ":mcp-server" to setOf(":testkit", ":bot-core", ":orchestrator", ":contract"),
 
-    // The dogfooding fixture depends on nothing of ours on purpose: it is a plugin like
-    // any other plugin a user would point VitaminMCP at, and a dependency here would make
-    // it a privileged one.
+    // The dogfooding fixture, on the machines that have it, depends on nothing of ours on
+    // purpose: it is a plugin like any other plugin a user would point VitaminMCP at, and a
+    // dependency here would make it a privileged one.
     ":dogfood" to emptySet(),
 )
 

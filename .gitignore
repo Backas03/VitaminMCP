@@ -148,3 +148,6 @@ npm/runner/
 
 # Node dependencies, for the mineflayer bot runner
 node_modules/
+
+# Dogfooding apparatus: local testing scaffolding, not part of the distribution.
+/dogfood/

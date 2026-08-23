@@ -11,8 +11,7 @@ import java.util.Objects;
  * Two dogfooding rounds ran into the same wall from opposite sides: one could not find out which
  * permission gates a command — {@code state_query}'s permission list can only be tested, never
  * enumerated, so the node had to be known already — and both had to fall back on the fixture
- * happening to log its own configuration at startup, which no real plugin does
- * (dogfood/JOURNAL.md, 2026-08-23).
+ * happening to log its own configuration at startup, which no real plugin does.
  *
  * <p>"Works for admins only" is the commonest bug report a server owner writes down. Answering it
  * means knowing the node, and the node is here.

@@ -20,7 +20,7 @@ public final class LogCapture {
      * asked to do — but not in the buffer people search. Left in, a `logs_query` for a plugin's
      * output comes back mostly as the caller's own reflection: their tool calls, and full echoes
      * of results they had just read. One dogfooding round had roughly twenty of its twenty-five
-     * hits be exactly that (dogfood/JOURNAL.md, 2026-08-23).
+     * hits be exactly that.
      */
     private static final String OWN_ACTIVITY_PREFIX = "MCP ";
 

@@ -120,7 +120,7 @@ public final class WaitForService {
 
         // Scoped to whoever was being waited for, when the condition names one. The tail of
         // everything is bounded but not relevant: a round waiting on one bot got forty events of
-        // ambient mob churn to find the two that mattered (dogfood/JOURNAL.md, 2026-08-23).
+        // ambient mob churn to find the two that mattered.
         String subject = subjectOf(condition);
 
         return new WaitResult(
