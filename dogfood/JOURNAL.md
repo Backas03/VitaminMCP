@@ -10,6 +10,70 @@ Newest first.
 
 ---
 
+## 2026-08-24 — `unenforced-permission`
+
+**Diagnosis:** right. The player was not op and `state_query kind='player' permissions=["dogfood.shop"]`
+reported `granted: false`, but `/shop` still opened a `Shop` menu with diamond and emerald slots.
+The manifest declares `dogfood.shop` with `default: op`, while the command only checks that node in
+the separate `silent-refusal` branch.
+
+**Calls, in order:**
+
+1. `session_start` — Paper 1.21.8 build 60, both VitaminMCP and DogfoodFixture enabled.
+2. `server_info` — clean capture, no exceptions, no players online.
+3. `state_query kind='plugin' target='DogfoodFixture'` — the live config and the declared
+   `dogfood.shop` permission were visible; the `shop` command's own `permission` field was null.
+4. `bot_spawn RoundPermission` — creative, online, non-op.
+5. `state_query kind='player' permissions=["dogfood.shop"]` — explicitly confirmed the node was
+   denied.
+6. `bot_run_scenario` with `/shop` then `wait_for inventory_open` — both steps passed.
+7. `bot_inspect` — the client had the `Shop` menu and its diamond/emerald contents.
+
+**Friction:** small but real — a reader who looked only at the command's null `permission` field
+could conclude it was intentionally ungated. The separate `permissions` list and the player test
+were what settled it. The existing description now says to read both.
+
+**Worked:** `state_query` supplied exactly the two halves that matter: what the plugin declares and
+what this player is allowed to do. `bot_inspect` closed the loop from a successful command to what
+the player actually saw.
+
+**Changed** — no product schema change; the scenario and its answer were added so this declared-but-
+unenforced permission remains a deliberate regression probe.
+
+---
+
+## 2026-08-24 — `decorated-config`
+
+**Diagnosis:** right. The live config held `shop.enabled: false`, and the plugin logged that the
+shop was disabled, but `/shop` still opened. The key is decoration in this scenario: the command
+does not read it.
+
+**Calls, in order:**
+
+1. `session_start` — Paper 1.21.8 build 60, with DogfoodFixture enabled.
+2. `server_info` — capture was healthy and the fixture was present.
+3. `state_query kind='plugin' target='DogfoodFixture'` — live config showed `shop.enabled: false`;
+   the `shop` command had no direct permission field.
+4. `bot_spawn RoundConfig` — the bot connected in creative and was non-op.
+5. `logs_query pattern="shop\\.enabled"` — empty, despite the startup line; the agent had attached
+   after the line was emitted.
+6. `bot_run_scenario` with `/shop` then `wait_for inventory_open` — both steps passed.
+7. `bot_inspect` — the client had the `Shop` menu and its diamond/emerald contents.
+
+**Friction:** the runtime tools could show the loaded value and the repeated claim, but not whether
+the plugin's code wired the key to behavior. More concretely, the startup search was empty because
+that log line predated the agent capture buffer, and the logs description did not say that could
+happen.
+
+**Worked:** `state_query` made the live value visible, and `bot_inspect` proved the behavior instead
+of trusting the config or the command's empty synchronous output.
+
+**Changed** — `agent-mcp`: `logs_query` now says startup lines before agent attachment may be absent;
+`state_query kind='plugin'` now says a loaded config value is not proof that the plugin reads that
+key. The fixture scenario and its answer are now planted deliberately.
+
+---
+
 ## 2026-08-23 — `none` (the control)
 
 **Result: correct.** It said plainly that nothing is wrong, having checked, and ruled out all five

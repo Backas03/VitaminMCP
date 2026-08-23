@@ -27,7 +27,13 @@ public enum Scenario {
     SILENT_LISTENER,
 
     /** {@code /kit} is switched off, and said so once. */
-    DISABLED_FEATURE;
+    DISABLED_FEATURE,
+
+    /** A config key is printed at startup but never reaches the command it claims to control. */
+    DECORATED_CONFIG,
+
+    /** {@code plugin.yml} declares the shop permission, but the command forgets to check it. */
+    UNENFORCED_PERMISSION;
 
     static Scenario parse(String name) {
         if (name == null || name.isBlank()) {

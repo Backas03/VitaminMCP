@@ -78,7 +78,9 @@ final class AgentTools {
 
         tools.add(tool("logs_query",
                 "Searches captured server logs by severity and regular expression. There is no "
-                        + "'last N lines' tool; search for what you are looking for.",
+                        + "'last N lines' tool; search for what you are looking for. The buffer "
+                        + "starts when the agent attaches, so a startup line written before that "
+                        + "may be absent even when the server logged it.",
                 properties -> {
                     enumProperty(properties, "level", "Minimum severity.",
                             List.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR"));
@@ -119,7 +121,10 @@ final class AgentTools {
                         + "permission node gating each one, the permissions it declares with "
                         + "their defaults, and its LIVE config — what the running server "
                         + "actually loaded, which answers 'is this switched on, and to what' and "
-                        + "is regularly not what the config file in a repository says. Also start "
+                        + "is regularly not what the config file in a repository says. "
+                        + "Start here when a setting and the behavior disagree, but remember that a "
+                        + "loaded config value does not prove the plugin reads that key — source "
+                        + "inspection may still be needed to detect a decorative setting. Also start "
                         + "here for 'it works for admins but not for players' — it is the only way to learn which node "
                         + "to test, since kind='player' can test a node but never list one. A "
                         + "command's 'permission' is null when its plugin.yml does not declare "

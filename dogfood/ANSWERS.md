@@ -90,3 +90,32 @@ startup: `kit.enabled is false in config.yml`.
 and whether a debugger who does not know the wording can find it. `logs_query` takes a regex
 against the message and there is no "show me startup" — deliberately. This scenario is the test of
 whether that is the right call.
+
+---
+
+## `decorated-config`
+
+**Planted:** `shop.enabled` is `false` in config.yml and the startup log repeats that value, but
+the `DECORATED_CONFIG` branch never reads the key in `shop()`. The command opens the shop anyway.
+
+**The short path:** `state_query kind='plugin'` → the live config says `shop.enabled: false` →
+`logs_query pattern="shop.enabled"` repeats the same claim → `bot_inspect` after `/shop` shows the
+menu. The source is required to answer the final question: whether a config key is wired to code.
+
+**What it probes:** whether the tools can distinguish a live setting from a setting that is merely
+decoration. They cannot prove that wiring from runtime state alone; the important friction is the
+confidently wrong startup line.
+
+---
+
+## `unenforced-permission`
+
+**Planted:** `plugin.yml` declares `dogfood.shop` with `default: op`, but `shop()` checks that
+permission only in the `SILENT_REFUSAL` branch. In this scenario a non-op opens the menu.
+
+**The short path:** `state_query kind='player'` with `permissions=["dogfood.shop"]` confirms the
+bot is not allowed → `/shop` still opens → `bot_inspect` shows the menu. Comparing that result with
+`plugin.yml` and the command source reveals the permission declaration was never enforced.
+
+**What it probes:** whether a declared permission is discoverable as an effective runtime rule, and
+whether a debugger checks the player state instead of trusting the manifest.

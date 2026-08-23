@@ -11,10 +11,15 @@
 #   join-lockout      breaking a block just after joining
 #   silent-listener   the join kit
 #   disabled-feature  /kit
+#   decorated-config  /shop.enabled
+#   unenforced-permission /shop
 scenario: none
 
 kit:
   enabled: true
+
+shop:
+  enabled: false
 
 # The roster. Every player is on a team.
 teams:

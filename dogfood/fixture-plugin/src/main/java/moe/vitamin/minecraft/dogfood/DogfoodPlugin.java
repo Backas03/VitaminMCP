@@ -48,6 +48,9 @@ public final class DogfoodPlugin extends JavaPlugin implements Listener {
         if (scenario == Scenario.DISABLED_FEATURE) {
             getLogger().info("kit.enabled is false in config.yml; /kit will not hand anything out.");
         }
+        if (scenario == Scenario.DECORATED_CONFIG) {
+            getLogger().info("shop.enabled is false in config.yml; /shop will not open.");
+        }
     }
 
     @Override

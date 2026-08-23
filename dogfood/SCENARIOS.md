@@ -55,6 +55,19 @@ having checked. If it invents a fault, that is worth knowing about the tools too
 
 ---
 
+## `decorated-config`
+
+> I set `shop.enabled` to false and restarted. The startup log says the shop is disabled, but
+> `/shop` still opens for players.
+
+---
+
+## `unenforced-permission`
+
+> `/shop` opens for everyone. I removed op from a test player and they can still open the shop.
+
+---
+
 ## Worth planting, not yet planted
 
 **A config key that is decoration.** The fixture had one by accident: `kit.enabled` sat in the
