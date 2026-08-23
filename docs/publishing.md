@@ -2,8 +2,9 @@
 
 Three things are published per release, in this order, and **none of them can be unpublished**:
 
-1. the **GitHub release** — the agent jar, MCP server jar and the Windows x64 Node runner asset
-2. the **npm package** `vitaminmcp` — the launcher, pinning the sha256 of those jars
+1. the **GitHub release** — the agent jar, MCP server jar, five native Node runner assets and the
+   optional Windows x64 viewer asset
+2. the **npm package** `vitaminmcp` — the launcher, pinning the sha256 of those jars and assets
 3. the **MCP registry** entry — `server.json`, pointing at that npm version
 
 The order is forced. A package cannot pin bytes that are not downloadable yet, and the registry
@@ -117,7 +118,8 @@ git tag 2.0.0
 git push origin 2.0.0
 ```
 
-The workflow builds `dist`, creates the release with the agent/server jars and the Windows x64 runner asset, stamps the checksums from the
+The workflow builds `dist`, creates the release with the agent/server jars, five native runner
+assets and the optional Windows x64 viewer asset, then stamps the checksums from the
 jars it just built, publishes to npm, and publishes `server.json`. Watch it — the first two steps
 are irreversible before the third runs.
 
@@ -141,7 +143,12 @@ From a clean checkout at the commit you want released:
 ```bash
 gh release create 2.0.0 --title 2.0.0 --generate-notes \
   build/dist/VitaminMCP.jar build/dist/mcp-server.jar \
-  build/dist/runners/bot-runner-win-x64.exe
+  build/dist/runners/bot-runner-win-x64.exe \
+  build/dist/runners/bot-runner-linux-x64 \
+  build/dist/runners/bot-runner-linux-arm64 \
+  build/dist/runners/bot-runner-darwin-x64 \
+  build/dist/runners/bot-runner-darwin-arm64 \
+  build/dist/assets/bot-runner-viewer-win-x64.tgz
 ```
 
 ```bash

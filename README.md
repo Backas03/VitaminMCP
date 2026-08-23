@@ -56,7 +56,7 @@ Three jars, in three different places. Only the first is a Minecraft plugin.
 |---|---|---|
 | `VitaminMCP.jar` | **in the server, as a plugin** | Listens to every event, taps the log, and serves an authenticated MCP endpoint. The only piece with a view of server internals |
 | `mcp-server.jar` | on your machine, as a child of your MCP client | Speaks stdio to the client and HTTP to the plugin, and owns the bots |
-| `runner.mjs` or `bot-runner-win-x64.exe` | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
+| `runner.mjs` or a platform `bot-runner-*` asset | on your machine, as a child of `mcp-server` | Connects real clients over the real protocol — login, packets, GUIs and all |
 
 The plugin sees server-side events, logs, permissions and state; the Node runner sees what a real
 client receives. Read-only mode is the default, and bots are optional.
@@ -208,8 +208,8 @@ These are the requirements for using a prebuilt release:
 | Operating system | Node source runner | Native runner asset | Meaning |
 |---|:---:|:---:|---|
 | **Windows x64** | 🟢 | 🟢 | Current supported distribution |
-| **Linux x64 / arm64** | 🟢 | 🔴 | Node required; native asset planned |
-| **macOS Intel / Apple Silicon** | 🟢 | 🔴 | Node required; native asset planned |
+| **Linux x64 / arm64** | 🟢 | 🟢 | Native asset available |
+| **macOS Intel / Apple Silicon** | 🟢 | 🟢 | Native asset available; ad-hoc signed |
 
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
@@ -228,8 +228,8 @@ Most users do not need this section. Contributors need JDK 21 and Node/npm:
 cd bot/bot-runner-node && npm ci && npm test
 ```
 
-The Windows native runner is built with `npm run build:sea -- win32-x64`. Linux and macOS native
-assets are planned.
+Native runners are built with `npm run build:sea -- win32-x64`, `linux-x64`, `linux-arm64`,
+`darwin-x64` or `darwin-arm64`. macOS assets receive an ad-hoc signature in the release workflow.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
 to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.
@@ -284,8 +284,8 @@ run, into `~/.vitaminmcp/jars/<version>/`, each checked against a SHA-256 pinned
 when it was published.
 
 `mcp-server.jar` is two megabytes and is waited for. With Node installed, the source runner is used
-directly and no runner asset is downloaded. The Windows SEA runner is the fallback when Node is
-not available. Linux and macOS native runners are planned.
+directly and no runner asset is downloaded. Without Node, the launcher selects the native runner
+asset for the current platform.
 
 `mcp-server` speaks stdio. It has no port and no token: it is a child process of the client, so the
 trust relationship already exists. Only the agent side crosses a network, which is why only the
@@ -428,7 +428,8 @@ address — the same failure whichever detail was missing.
 
 ### Installing from the jars instead
 
-`npx` is a convenience, not a requirement. **Two artifacts**, plus the optional Windows runner,
+`npx` is a convenience, not a requirement. **Two artifacts**, plus the optional platform runner
+assets,
 are attached to every
 [release](https://github.com/Backas03/VitaminMCP-minecraft/releases/latest), and **each goes
 somewhere different:**
@@ -437,7 +438,7 @@ somewhere different:**
 |---|---|---|
 | `VitaminMCP.jar` | the server's `plugins/` | the agent — an ordinary Bukkit/Paper plugin |
 | `mcp-server.jar` | anywhere (remember the path) | your MCP client launches it |
-| `runner.mjs` or `bot-runner-win-x64.exe` | beside `mcp-server.jar` | `mcp-server` launches it as a child process |
+| `runner.mjs` or a platform `bot-runner-*` asset | beside `mcp-server.jar` | `mcp-server` launches it as a child process |
 
 To build them yourself instead:
 

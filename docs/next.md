@@ -86,7 +86,12 @@ checksum — is the same work from the other end, and `npm/lib/jars.mjs` already
 
 ## 3. Linux and macOS runner assets
 
-2.2.0 ships Windows x64 only. `scripts/build-sea.mjs` already has the targets defined and refuses
+**Implemented 2026-08-24.** The release matrix now builds real Node SEA binaries for Linux x64,
+Linux arm64, macOS Intel and Apple Silicon, signs both macOS binaries ad hoc, uploads all five
+runner assets, and stamps all five hashes. The workflow must run on GitHub-hosted target runners;
+this Windows workstation intentionally does not fake those binaries.
+
+Before this change, 2.2.0 shipped Windows x64 only. `scripts/build-sea.mjs` already has the targets defined and refuses
 to fake a cross-built binary — it needs a real Node executable for the target platform, named by
 an environment variable per `mineflayer-roadmap.md` Stage 8.
 

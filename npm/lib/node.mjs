@@ -33,12 +33,10 @@ export function checkNode(node) {
 /** The release asset name for the current SEA target. */
 export function runnerAssetName(platform = process.platform, arch = process.arch) {
   if (platform === 'win32' && arch === 'x64') return 'bot-runner-win-x64.exe';
-  if (platform === 'linux' || platform === 'darwin') {
-    throw new Error(
-      `Native runner assets for ${platform}-${arch} are planned but not released yet. `
-        + 'Install Node 18.17 or later to use the source runner.',
-    );
-  }
+  if (platform === 'linux' && arch === 'x64') return 'bot-runner-linux-x64';
+  if (platform === 'linux' && arch === 'arm64') return 'bot-runner-linux-arm64';
+  if (platform === 'darwin' && arch === 'x64') return 'bot-runner-darwin-x64';
+  if (platform === 'darwin' && arch === 'arm64') return 'bot-runner-darwin-arm64';
   throw new Error(`No VitaminMCP runner asset exists for ${platform}-${arch}.`);
 }
 

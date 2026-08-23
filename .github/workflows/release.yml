@@ -40,6 +40,18 @@ jobs:
           - target: win32-x64
             asset: bot-runner-win-x64.exe
             os: windows-latest
+          - target: linux-x64
+            asset: bot-runner-linux-x64
+            os: ubuntu-latest
+          - target: linux-arm64
+            asset: bot-runner-linux-arm64
+            os: ubuntu-24.04-arm
+          - target: darwin-x64
+            asset: bot-runner-darwin-x64
+            os: macos-13
+          - target: darwin-arm64
+            asset: bot-runner-darwin-arm64
+            os: macos-14
 
     steps:
       # The released source, for the same reason the release job below checks it out: a dispatch
@@ -62,15 +74,22 @@ jobs:
         run: npm run build:sea -- ${{ matrix.target }}
 
       - name: Install viewer dependencies
+        if: matrix.target == 'win32-x64'
         working-directory: bot/bot-runner-viewer
         run: npm ci
 
       - name: Ensure the native canvas binary is present
+        if: matrix.target == 'win32-x64'
         working-directory: bot/bot-runner-viewer
         run: npm rebuild canvas --foreground-scripts
 
       - name: Build trimmed viewer asset
+        if: matrix.target == 'win32-x64'
         run: node bot/bot-runner-viewer/scripts/build-viewer-asset.mjs build/dist/assets/bot-runner-viewer-win-x64.tgz
+
+      - name: Ad-hoc sign macOS runner
+        if: startsWith(matrix.target, 'darwin-')
+        run: codesign --force --sign - build/dist/runners/${{ matrix.asset }}
 
       # Runs the built exe with no arguments and expects the entry point's own refusal: exit 2 and
       # the usage line. That is the cheapest proof that postject actually injected the bundle —
@@ -97,12 +116,32 @@ jobs:
           # $LASTEXITCODE is still 2, and pwsh -command hands the step whatever it holds.
           exit 0
 
+      - name: Smoke test Unix SEA runner
+        if: startsWith(matrix.target, 'linux-') || startsWith(matrix.target, 'darwin-')
+        shell: bash
+        run: |
+          set +e
+          output=$(build/dist/runners/${{ matrix.asset }} 2>&1)
+          code=$?
+          set -e
+          if [ "$code" -ne 2 ] || ! grep -q 'usage: runner.mjs' <<<"$output"; then
+            echo "SEA runner did not execute its entry point. exit=$code output=$output"
+            exit 1
+          fi
+          echo "SEA runner runs its entry point. exit=$code"
+
       - uses: actions/upload-artifact@v4
         with:
           name: runner-${{ matrix.target }}
           path: |
             build/dist/runners/${{ matrix.asset }}
-            build/dist/assets/bot-runner-viewer-win-x64.tgz
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.target == 'win32-x64'
+        with:
+          name: viewer-${{ matrix.target }}
+          path: build/dist/assets/bot-runner-viewer-win-x64.tgz
           if-no-files-found: error
 
   release:
@@ -162,6 +201,13 @@ jobs:
           path: build/dist
           merge-multiple: true
 
+      - name: Collect optional viewer asset
+        uses: actions/download-artifact@v4
+        with:
+          pattern: viewer-*
+          path: build/dist
+          merge-multiple: true
+
       # Each publish step checks whether it has already happened. Creating a release with the gh
       # CLI pushes the tag, which triggers this workflow — so a release cut by hand arrives here
       # anyway, and "already done" has to mean carry on rather than fail. It also makes a rerun
@@ -184,6 +230,10 @@ jobs:
             for asset in \
               VitaminMCP.jar \
               mcp-server.jar \
+              runners/bot-runner-linux-x64 \
+              runners/bot-runner-linux-arm64 \
+              runners/bot-runner-darwin-x64 \
+              runners/bot-runner-darwin-arm64 \
               runners/bot-runner-win-x64.exe \
               assets/bot-runner-viewer-win-x64.tgz; do
               name="${asset##*/}"
@@ -199,6 +249,10 @@ jobs:
               --generate-notes \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
+              build/dist/runners/bot-runner-linux-x64 \
+              build/dist/runners/bot-runner-linux-arm64 \
+              build/dist/runners/bot-runner-darwin-x64 \
+              build/dist/runners/bot-runner-darwin-arm64 \
               build/dist/runners/bot-runner-win-x64.exe \
               build/dist/assets/bot-runner-viewer-win-x64.tgz
           fi

@@ -10,6 +10,10 @@ import { assetCacheDirectory, verifyFileHash, VIEWER_ASSET } from '../lib/jars.m
 
 test('maps every supported platform to its release asset', () => {
   assert.equal(runnerAssetName('win32', 'x64'), 'bot-runner-win-x64.exe');
+  assert.equal(runnerAssetName('linux', 'x64'), 'bot-runner-linux-x64');
+  assert.equal(runnerAssetName('linux', 'arm64'), 'bot-runner-linux-arm64');
+  assert.equal(runnerAssetName('darwin', 'x64'), 'bot-runner-darwin-x64');
+  assert.equal(runnerAssetName('darwin', 'arm64'), 'bot-runner-darwin-arm64');
 });
 
 test('keeps the viewer as a separate versioned optional asset', () => {
@@ -20,11 +24,6 @@ test('keeps the viewer as a separate versioned optional asset', () => {
 test('does not pretend a native viewer exists on an unreleased platform', () => {
   assert.throws(() => viewerAssetName('linux', 'x64'), /planned but not released/);
   assert.throws(() => viewerAssetName('darwin', 'arm64'), /planned but not released/);
-});
-
-test('explains that Linux and macOS assets are planned', () => {
-  assert.throws(() => runnerAssetName('linux', 'x64'), /planned but not released/);
-  assert.throws(() => runnerAssetName('darwin', 'arm64'), /planned but not released/);
 });
 
 test('rejects an unknown platform instead of guessing an asset', () => {
