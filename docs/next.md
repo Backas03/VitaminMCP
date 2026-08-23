@@ -22,7 +22,7 @@ a release is a version bump plus a tag push, and the version lives in exactly on
 `node npm/scripts/stamp-checksums.mjs --sync` copying it to the other four.
 
 Everything in both roadmaps is implemented and has been run against real servers. The
-compatibility matrix (`versions.yaml`, 1.21.1 through 1.21.8) passes end to end.
+compatibility matrix (`versions.yaml`, 1.21.1 through 1.21.11) passes end to end.
 
 **The dogfooding apparatus in `dogfood/` is the most useful thing here for deciding what to build
 next.** Six blind rounds ran on 2026-08-23: a fixture plugin with one planted fault, a symptom in
@@ -123,9 +123,14 @@ strangers", and strangers are who this is for.
 
 ## 6. Versions above 1.21.8
 
-`versions.yaml` stops there and says a compatibility run comes first. This is a matrix run rather
-than new code — the runner asks the server its protocol and picks the matching minecraft-data
-entry. **Note the interaction with item 2**: the runner now bundles only the floor's version line,
+**Completed 2026-08-24.** Paper 1.21.11 build 132 was added as one matrix block; the runner selected
+protocol 774 and the full 20-check compatibility gate passed with no linkage errors. The bundled
+1.21.x data line already covered it, so no runner code change was needed.
+
+Before this change, `versions.yaml` stopped there and required a compatibility run first. This is
+a matrix run rather than new code — the runner asks the server its protocol and picks the matching
+`minecraft-data` entry. **Note the interaction with item 2**: the runner now bundles only the floor's
+version line,
 so a version above it is refused with a clear message rather than half-working. Adding a version
 means the compat run *and* checking the bundle still covers it.
 

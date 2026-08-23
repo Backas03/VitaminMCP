@@ -27,7 +27,7 @@ without opening the game.
 - Read live server state: events, logs, exceptions, permissions
 - Drive **several servers at once** — one session per backend of a BungeeCord network, bots staying
   connected across all of them
-- Paper / Purpur **1.21 through 1.21.8**, from one install — the runner works out which protocol the
+- Paper / Purpur **1.21 through 1.21.11**, from one install — the runner works out which protocol the
   server speaks and adapts
 
 Full usage is in `docs/usage.md`. Contribution rules are in `CONTRIBUTING.md`, and release steps
@@ -200,8 +200,8 @@ These are the requirements for using a prebuilt release:
 | Minecraft version | Windows | Linux | macOS | Status |
 |---|:---:|:---:|:---:|---|
 | 1.18 – 1.20.6 | 🔴 | 🔴 | 🔴 | Below the Paper agent floor |
-| **1.21 – 1.21.8** | **🟢** | **🟡** | **🟡** | **Supported and live-tested** |
-| 1.21.9 and later | 🟡 | 🟡 | 🟡 | Planned; requires a compatibility run |
+| **1.21 – 1.21.11** | **🟢** | **🟡** | **🟡** | **Supported and live-tested** |
+| 1.21.12 and later | 🟡 | 🟡 | 🟡 | Planned; requires a compatibility run |
 
 #### Runner support by operating system
 
@@ -213,7 +213,7 @@ These are the requirements for using a prebuilt release:
 
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
-**1.21 through 1.21.8 are supported today**, and every one of them runs in the matrix
+**1.21 through 1.21.11 are supported today**, and every one of them runs in the matrix
 (`versions.yaml`). The other rows are on the roadmap without a date attached.
 
 **You install one Node runner whatever the version.** It asks the server what it speaks and
@@ -455,7 +455,7 @@ claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar
 `VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
 **One Node runner, every supported version.** It pings the server before any bot connects and
-selects the matching mineflayer data, so the same source runner works on 1.21 through 1.21.8.
+selects the matching mineflayer data, so the same source runner works on 1.21 through 1.21.11.
 
 ---
 
@@ -518,7 +518,7 @@ no extra translation layer).
 and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
 to download.
 
-Versions beyond 1.21.8 are planned and require a compatibility run before they are added.
+Versions beyond 1.21.11 are planned and require a compatibility run before they are added.
 The runner selects the matching data version from the server handshake.
 
 ---

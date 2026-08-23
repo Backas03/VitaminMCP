@@ -36,4 +36,8 @@ versions:
   - id: "1.21.8"
     paper: { version: "1.21.8", build: 60 }
 
-# Not listed: versions beyond 1.21.8 need a compatibility run before they are added to the matrix.
+  # First version above the original matrix floor; the runner selects protocol 774 from its ping.
+  - id: "1.21.11"
+    paper: { version: "1.21.11", build: 132 }
+
+# Not listed: versions beyond 1.21.11 need a compatibility run before they are added to the matrix.
