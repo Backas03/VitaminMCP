@@ -49,6 +49,11 @@ jobs:
           # macOS 13 was retired and macOS 14 is deprecated, so both are named by their current
           # images. Intel is only offered as macos-*-intel now, and a SEA runner has to be built on
           # the architecture it will run on — there is no cross-build that produces a working one.
+          #
+          # macos-15-intel is a standard runner, not one of the -large images, so it stays free on
+          # this public repository. It is also the last x86_64 image Actions will offer: GitHub has
+          # it available until August 2027, after which this row has to go and Intel Macs are on
+          # the Node source runner.
           - target: darwin-x64
             asset: bot-runner-darwin-x64
             os: macos-15-intel
