@@ -1,5 +1,11 @@
 # Historical VitaminMCP implementation roadmap
 
+> **The checkboxes here are stale.** This was written as a plan and never maintained
+> as a tracker: nearly everything unticked below is done and shipped. Read it for the
+> design rationale, which is what it is good for, and see [next.md](next.md) for what
+> is actually left.
+
+
 > This is the pre-mineflayer roadmap and is retained for historical context only. The current
 > implementation order is `docs/mineflayer-roadmap.md`; references below to MCProtocolLib,
 > backends and the Java runner describe the superseded design.

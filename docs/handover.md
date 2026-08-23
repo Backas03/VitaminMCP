@@ -1,5 +1,10 @@
 # Handover — the mineflayer migration
 
+> **Start with [next.md](next.md) instead.** This file is the migration's handover and its "where
+> things stand" section is a snapshot from 2026-08-22, before 2.1.0, 2.1.1, 2.2.0 and the
+> dogfooding work. Section 2 onward — the tools, the commands, the traps — is still accurate and
+> is why this file is kept.
+
 Written 2026-08-22 for whoever picks this up next. It assumes you have the repository and nothing
 else. Read `mineflayer-roadmap.md` for *what* to build and in what order; this is *how to work
 here* — the tools, the commands, and the traps that have already cost time.

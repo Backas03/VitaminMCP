@@ -1,5 +1,11 @@
 # mineflayer migration roadmap
 
+> **The checkboxes here are stale.** This was written as a plan and never maintained
+> as a tracker: nearly everything unticked below is done and shipped. Read it for the
+> design rationale, which is what it is good for, and see [next.md](next.md) for what
+> is actually left.
+
+
 Replacing the Java bot runner with one built on [mineflayer](https://github.com/PrismarineJS/mineflayer).
 The decision, and the options rejected on the way to it, belong in `design.md` §2's revision note;
 this is the order the work happens in.
