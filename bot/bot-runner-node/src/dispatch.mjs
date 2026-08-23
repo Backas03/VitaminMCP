@@ -86,7 +86,7 @@ export class Dispatch {
       }
 
       case protocol.USE: {
-        actions.useBlock(
+        await actions.useBlock(
           this.#bots.require(command[1]),
           command[1],
           Number(command[2]),

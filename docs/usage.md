@@ -426,7 +426,7 @@ state the scenario never described makes those failures meaningless.
 | `despawn` | `bot` | |
 | `move_to` | `bot`, `x`, `y`, `z` | `mode`: `path` (default) or `teleport`; `timeoutMillis` (or `timeout`) for path movement |
 | `break_block` | `bot`, `x`, `y`, `z` | |
-| `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Right-click — opens chests and menus |
+| `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Waits for the target block to reach the client, then right-clicks it |
 | `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Right-click the nearest entity — an NPC, a villager |
 | `attack_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType` |
 | `hold_item` | `bot`, `slot` | hotbar slot 0..8 |
@@ -558,6 +558,10 @@ That distinguishes wrong coordinates from a radius too tight from an NPC that wa
 ## Opening a chest directly
 
 To open a container GUI without a plugin, right-click it with `use_block`.
+
+The runner waits until the target block is present in the bot's client world before sending the
+interaction packet. This matters when a preceding console command just placed or changed the
+block; the server can answer that command before its block update reaches the client.
 
 ```json
 {"action": "console",   "command": "setblock 10 64 20 chest"},

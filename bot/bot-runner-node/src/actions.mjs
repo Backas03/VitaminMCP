@@ -51,6 +51,12 @@ const DIG_ACK_TIMEOUT_MILLIS = 1500;
 /** How long the resulting block change gets to come back after the confirmation. */
 const DIG_SETTLE_MILLIS = 300;
 
+/** How long a client gets to receive the block before an interaction is sent. */
+const BLOCK_KNOWN_TIMEOUT_MILLIS = 15_000;
+
+/** One client tick for a block update already queued by a preceding server command. */
+const BLOCK_UPDATE_SETTLE_MILLIS = 50;
+
 /**
  * Breaks a block, and says what became of the attempt.
  *
@@ -158,7 +164,7 @@ export function chat(bot, name, message) {
 }
 
 /** Right-clicks a block — which is how a container or a plugin menu gets opened. */
-export function useBlock(bot, name, x, y, z, face) {
+export async function useBlock(bot, name, x, y, z, face) {
   requireInWorld(bot, name);
 
   const direction = !face || !face.trim() ? FACES.up : FACES[face.trim().toLowerCase()];
@@ -167,6 +173,9 @@ export function useBlock(bot, name, x, y, z, face) {
       `Unknown face '${face}'. Use ${Object.keys(FACES).join(', ')}.`,
     );
   }
+
+  const location = new Vec3(x, y, z);
+  await blockKnown(bot, name, location);
 
   bot._client.write('block_place', {
     hand: MAIN_HAND,
@@ -179,6 +188,33 @@ export function useBlock(bot, name, x, y, z, face) {
     worldBorderHit: false,
     sequence: nextSequence(bot),
   });
+}
+
+/**
+ * Waits until the client has a block record for an interaction target.
+ *
+ * <p>A console command can change a block before its block update reaches the bot. Sending the
+ * interaction in that gap is legal at the protocol level, but the client has not loaded the target
+ * yet and Paper may drop the window-opening packet. This was the intermittent compatibility
+ * failure on the otherwise deterministic chest check.
+ */
+async function blockKnown(bot, name, location) {
+  const deadline = Date.now() + BLOCK_KNOWN_TIMEOUT_MILLIS;
+  while (Date.now() < deadline) {
+    if (bot.blockAt(location)) {
+      // A command_exec that changed this block has already completed on the server, but the
+      // corresponding packet may still be queued on the bot socket. Give that one client tick
+      // a chance to settle before sending the interaction packet.
+      await delay(BLOCK_UPDATE_SETTLE_MILLIS);
+      return;
+    }
+    await delay(50);
+  }
+
+  throw new Error(
+    `Bot ${name} was not told about the block at ${location.x} ${location.y} ${location.z} within `
+      + `${BLOCK_KNOWN_TIMEOUT_MILLIS}ms`,
+  );
 }
 
 /** Right-clicks the nearest entity to a point, and returns which one it was. */

@@ -140,11 +140,13 @@ means the compat run *and* checking the bundle still covers it.
   details and real agent tool definitions, but it now removes sessions whose child runner has
   exited before reporting the roster. The same pruning runs before session resolution, so a dead
   session cannot make an unnamed call ambiguous or leave a stale name behind.
-- **The `open a container` flake.** It failed once in about five live compatibility runs, on the
-  client-side window opening. It passed on the unmodified branch and on reruns, so it is not a
-  regression — but it is the gate for adding a version, and a gate you cannot trust is not a gate.
-- **World template isolation.** `ManagedServer.restoreWorld` is implemented and has never run with
-  an actual template.
+- **The `open a container` flake — completed 2026-08-24.** `use_block` now waits for the target
+  block to be known by the client and lets a queued block update settle before sending the
+  interaction. The async path is awaited by the line dispatcher. The 1.21.8 compatibility gate
+  passed three cache-bypassing reruns, including the container check each time.
+- **World template isolation — completed 2026-08-24.** The live orchestrator test now generates a
+  real Paper world, uses it as a template, changes a block in a second server, restores the
+  template, and verifies after the next boot that the changed block is gone.
 
 ---
 
