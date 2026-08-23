@@ -7,8 +7,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientMessage;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
+import moe.vitamin.minecraft.mcp.contract.Cursor;
 import moe.vitamin.minecraft.mcp.contract.LocalHandshake;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioResult;
@@ -123,9 +125,19 @@ final class SessionTools {
                         + "and never the player's own inventory, which is state_query "
                         + "kind='inventory' which='player'. Items are named the way the registry "
                         + "names them — 'minecraft:diamond_sword' — so they read the same as "
-                        + "state_query's. 'messages' also covers action "
-                        + "bar, title and subtitle text, each prefixed with where it appeared, "
-                        + "since a plugin is as likely to refuse above the hotbar as in chat. "
+                        + "state_query's. 'messages' contains sequence, timestamp and text "
+                        + "records. Chat text is returned as received; action bar, title and "
+                        + "subtitle text is prefixed with where it appeared. Timestamp is when "
+                        + "the text reached the client, in epoch milliseconds. At most 100 "
+                        + "messages are retained per bot. To "
+                        + "isolate one action's reply, call this before the command, save "
+                        + "'messageCursor', then pass it back as 'cursor'. 'messageCursor' is "
+                        + "always returned and is opaque: it belongs to this bot connection, so "
+                        + "a cursor from another session, runner, or same-named replacement is "
+                        + "rejected. 'messagesDropped' counts requested messages that fell out "
+                        + "of the retained window, so a nonzero value means the answer is "
+                        + "incomplete. Cursor filtering affects only messages; every other field "
+                        + "is still the current client state. "
                         + "Also reports health, food, experience and active effects. "
                         + "'bossBars' and 'scoreboard' are on-screen state rather than messages: "
                         + "they persist, and a server's live view of a player — timers, money, "
@@ -134,6 +146,10 @@ final class SessionTools {
                 properties -> {
                     session(properties);
                     string(properties, "name", "Bot name.");
+                    string(properties, "cursor",
+                            "A messageCursor from an earlier bot_inspect call for this same bot "
+                                    + "connection. Only messages at or after that position are "
+                                    + "returned.");
                 }));
 
         tools.add(tool("bot_view",
@@ -382,9 +398,11 @@ final class SessionTools {
         if (name.isBlank()) {
             throw new IllegalArgumentException("bot_inspect needs 'name'.");
         }
+        String rawCursor = args.path("cursor").asText("");
         try {
             ClientView view = new BotRunner.BotHandle(
                     require(args).bots(), name, 0, 0, 0).inspect();
+            long cursor = parseMessageCursor(rawCursor, view.messageStreamId());
 
             ObjectNode result = MAPPER.createObjectNode();
             if (view.menu() == null) {
@@ -418,8 +436,7 @@ final class SessionTools {
                 }
             }
 
-            ArrayNode messages = result.putArray("messages");
-            view.messages().forEach(messages::add);
+            putMessages(result, view, name, cursor);
 
             ArrayNode bossBars = result.putArray("bossBars");
             for (BossBar bar : view.bossBars()) {
@@ -468,6 +485,49 @@ final class SessionTools {
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not inspect " + name + ": " + e.getMessage(), e);
         }
+    }
+
+    /** Parses a cursor for the current opaque message stream; an omitted cursor starts at zero. */
+    static long parseMessageCursor(String token, String streamId) {
+        if (token == null || token.isBlank()) {
+            return 0L;
+        }
+        return Cursor.parse(token, messageStream(streamId)).sequence();
+    }
+
+    /** Adds the bounded, cursor-filtered message stream and its completeness metadata. */
+    static void putMessages(ObjectNode result, ClientView view, String name, long cursor) {
+        long next = view.nextMessageSequence();
+        if (cursor > next) {
+            throw new IllegalArgumentException(
+                    "Message cursor " + cursor + " is ahead of the next message sequence " + next
+                            + " for bot '" + name + "'. Use messageCursor from this bot's current "
+                            + "connection.");
+        }
+
+        long oldestRetained = view.messages().isEmpty()
+                ? next
+                : view.messages().get(0).sequence();
+        long firstAvailable = Math.max(cursor, oldestRetained);
+
+        ArrayNode messages = result.putArray("messages");
+        for (ClientMessage message : view.messages()) {
+            if (message.sequence() < firstAvailable) {
+                continue;
+            }
+            ObjectNode entry = messages.addObject();
+            entry.put("sequence", message.sequence());
+            entry.put("timestamp", message.timestamp());
+            entry.put("text", message.text());
+        }
+
+        result.put("messageCursor",
+                new Cursor(messageStream(view.messageStreamId()), next).encode());
+        result.put("messagesDropped", Math.max(0L, oldestRetained - cursor));
+    }
+
+    private static String messageStream(String streamId) {
+        return "messages/" + streamId;
     }
 
     private JsonNode botView(JsonNode args) {

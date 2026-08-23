@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { menu } from './actions.mjs';
 import { plainText, stripLegacyCodes, untag } from './text.mjs';
 
@@ -21,26 +23,49 @@ const MAX_MESSAGES = 100;
 const state = new WeakMap();
 
 /**
+ * The active message stream for each bot name.
+ *
+ * Each client connection gets a random id, so a cursor cannot be mistaken for one from another
+ * session, runner process or same-named replacement bot.
+ */
+const messageStreamsByName = new Map();
+
+/**
  * Starts collecting what the server tells this bot.
  *
  * Must be called as soon as the bot exists: this is all events, so anything said before the
  * listeners attach is gone, and a plugin greets or refuses within a tick of the bot arriving.
  */
-export function collect(bot) {
+export function collect(bot, name) {
+  const previous = messageStreamsByName.get(name);
+  if (previous) previous.activeCollector = null;
+
+  const stream = { id: randomUUID(), nextSequence: 0, activeCollector: null };
+
   const own = {
     messages: [],
     bossBars: new Map(),
     objectiveTitles: new Map(),
     objectiveScores: new Map(),
     sidebar: null,
+    messageStream: stream,
   };
+  stream.activeCollector = own;
+  messageStreamsByName.set(name, stream);
   state.set(bot, own);
 
   const remember = (text) => {
+    // Closing a replaced bot is asynchronous. Ignore anything its socket delivers after the new
+    // bot took over, otherwise an invisible message would consume a sequence and look like loss.
+    if (stream.activeCollector !== own) {
+      return;
+    }
     if (text == null || String(text).trim() === '') {
       return;
     }
-    own.messages.push(String(text));
+    const sequence = stream.nextSequence;
+    stream.nextSequence += 1;
+    own.messages.push({ sequence, timestamp: Date.now(), text: String(text) });
     while (own.messages.length > MAX_MESSAGES) {
       own.messages.shift();
     }
@@ -90,10 +115,13 @@ export function collect(bot) {
 /** Everything the client was told, in the shape `RunnerDispatch` writes. */
 export function inspect(bot, name) {
   const own = state.get(bot) ?? { messages: [], bossBars: new Map() };
+  const stream = own.messageStream ?? messageStreamsByName.get(name);
   return {
     menu: menu(bot, name),
     items: menuItems(bot),
     messages: [...own.messages],
+    nextMessageSequence: stream?.nextSequence ?? 0,
+    messageStreamId: stream?.id ?? '',
     bossBars: [...own.bossBars.values()],
     scoreboard: sidebarOf(own),
     health: Number.isFinite(bot.health) ? bot.health : null,

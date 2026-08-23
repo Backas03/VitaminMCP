@@ -208,7 +208,7 @@ export class Dispatch {
           String(open === null ? -1 : open.containerId),
           open === null ? '' : protocol.sanitize(open.title),
           items(view.items),
-          recordList(view.messages),
+          messageList(view.messages),
           bossBarList(view.bossBars),
           board === null ? '' : protocol.sanitize(board.title),
           board === null ? '' : recordList(board.lines),
@@ -218,6 +218,8 @@ export class Dispatch {
           view.totalExperience == null ? '' : String(view.totalExperience),
           view.experienceProgress == null ? '' : protocol.javaFloat(view.experienceProgress),
           recordList(view.effects),
+          String(view.nextMessageSequence),
+          protocol.sanitize(view.messageStreamId),
         );
       }
 
@@ -260,6 +262,17 @@ function items(list) {
       protocol.sanitize(item.name),
       protocol.sanitize(item.customModelData),
       protocol.sanitize(item.lore),
+    ].join(protocol.UNIT_SEPARATOR))
+    .join(protocol.RECORD_SEPARATOR);
+}
+
+/** `sequence ␟ timestamp ␟ text`, oldest first, joined by ␞. */
+function messageList(messages) {
+  return messages
+    .map((message) => [
+      message.sequence,
+      message.timestamp,
+      protocol.sanitize(message.text),
     ].join(protocol.UNIT_SEPARATOR))
     .join(protocol.RECORD_SEPARATOR);
 }

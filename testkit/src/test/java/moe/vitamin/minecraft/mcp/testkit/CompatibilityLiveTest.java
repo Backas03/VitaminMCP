@@ -14,6 +14,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientMessage;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import moe.vitamin.minecraft.mcp.orchestrator.ManagedServer;
 import moe.vitamin.minecraft.mcp.orchestrator.PaperDownloader;
@@ -207,10 +208,27 @@ class CompatibilityLiveTest {
 
         check("command", () -> {
             String marker = "compat-cmd-" + System.nanoTime();
-            bot.command("/tellraw @s {\"text\":\"" + marker + "\"}");
-            require(await(() -> messages(bot).stream().anyMatch(line -> line.contains(marker))),
+            long messageCursor = bot.inspect().nextMessageSequence();
+            long sentAt = System.currentTimeMillis();
+            ScenarioResult assertion = new ScenarioRunner(bots, agent).run("""
+                    [
+                      {"action":"command","bot":"Tester1","command":"/say %s"},
+                      {"action":"assert_message","bot":"Tester1","contains":"%s"}
+                    ]
+                    """.formatted(marker, marker));
+            require(assertion.passed(),
+                    "assert_message did not find the timestamped reply: " + assertion.describe());
+
+            ClientMessage observed = message(bot, messageCursor, marker);
+            require(observed != null,
                     "the bot's own command produced nothing it could see. Messages: "
                             + messages(bot));
+            require(observed.sequence() >= messageCursor,
+                    "the command reply preceded its cursor: " + observed);
+            require(observed.timestamp() >= sentAt,
+                    "the command reply was timestamped before it was sent: " + observed);
+            System.out.println("[compat] command reply latency "
+                    + (observed.timestamp() - sentAt) + "ms");
         });
 
         int cx = bx + 4;
@@ -382,7 +400,16 @@ class CompatibilityLiveTest {
     }
 
     private static List<String> messages(BotRunner.BotHandle bot) {
-        return view(bot).messages();
+        return view(bot).messages().stream().map(ClientMessage::text).toList();
+    }
+
+    /** One retained message at or beyond a cursor, or {@code null} while it has not arrived. */
+    private static ClientMessage message(BotRunner.BotHandle bot, long cursor, String contains) {
+        return view(bot).messages().stream()
+                .filter(candidate -> candidate.sequence() >= cursor)
+                .filter(candidate -> candidate.text().contains(contains))
+                .findFirst()
+                .orElse(null);
     }
 
     /** The client's view, or an empty one. */

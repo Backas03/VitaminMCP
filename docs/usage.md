@@ -164,7 +164,12 @@ the real player →  a full menu      ← only the client received it
     {"slot": 7, "itemId": 983, "amount": 1, "name": "Test",
      "customModelData": "1.0", "lore": "line one | line two"}
   ],
-  "messages": ["multiplayer.player.joined", "[action bar] You lack permission"],
+  "messages": [
+    {"sequence": 7, "timestamp": 1787540400123, "text": "multiplayer.player.joined"},
+    {"sequence": 8, "timestamp": 1787540400523, "text": "[action bar] You lack permission"}
+  ],
+  "messageCursor": "messages/7b46f73d:9",
+  "messagesDropped": 0,
   "bossBars": [{"title": "Event ends in 4:12", "progress": 0.7, "color": "PURPLE"}],
   "scoreboard": {"title": "Server", "lines": ["Money: 1,200", "Region: spawn"]},
   "health": 20.0, "food": 20,
@@ -198,7 +203,8 @@ Everything a server draws on a player that never reaches the server's own view i
 
 | Field | What |
 |---|---|
-| `messages` | chat, plus action bar, title and subtitle — each prefixed with where it appeared |
+| `messages` | timestamped chat as received, plus action bar, title and subtitle with a location prefix |
+| `messageCursor` / `messagesDropped` | where this bot's message stream stands, and records permanently lost from the requested window |
 | `bossBars` | boss bars on screen now, with `progress` (0..1) and `color` |
 | `scoreboard` | the sidebar: `title` and `lines`, highest score first — the order the client draws |
 | `health` / `food` | current client-side health and hunger values |
@@ -210,7 +216,8 @@ that are showing.** A refusal is a message and is gone a moment later; a scorebo
 player's live state — money, region, quest progress — for as long as they are online, and asking
 "what does it say now" is a different question from "what was I told".
 
-Prefixes matter for the same reason: "above the hotbar, briefly" and "in chat, persistently" are
+Chat is returned as received, with no location prefix. The `[action bar]`, `[title]` and
+`[subtitle]` prefixes matter because "above the hotbar, briefly" and "in chat, persistently" are
 different claims about what a person would actually notice, and a test asserting on a refusal
 usually cares which.
 
@@ -236,6 +243,29 @@ Check `bot_inspect`'s `messages`, or use the scenario step:
 ```json
 {"action": "assert_message", "bot": "Tester1", "contains": "permission"}
 ```
+
+Each message has a monotonically increasing `sequence`, the `timestamp` when it reached the bot's
+client in epoch milliseconds, and its `text`. At most 100 messages are retained per bot. To isolate
+the reply to one action, call `bot_inspect` immediately before it and save `messageCursor`, then
+pass that value as `cursor` on the next call. The second call returns messages from that position
+onward while the menu, boss bars, scoreboard and other fields still describe the current screen.
+
+```text
+bot_inspect({"name":"Tester1"})
+→ save "messageCursor":"messages/7b46f73d:9"
+
+run the command or interaction
+
+bot_inspect({"name":"Tester1","cursor":"messages/7b46f73d:9"})
+→ "messages":[{"sequence":9,"timestamp":1787540400923,"text":"reply"}]
+```
+
+`messageCursor` is opaque and always returned, including when no message matched. Do not construct
+it from the bot name or interpret its stream id. It belongs to this live bot stream: another
+session or runner, a runner restart, and even a replacement bot with the same name all have a
+different id and reject the stale cursor. `messagesDropped` counts messages requested by the cursor
+that have already fallen out of the 100-message window; a nonzero value means the answer is
+incomplete and paging cannot recover those records.
 
 ## Response budget
 

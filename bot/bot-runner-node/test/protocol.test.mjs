@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { offlineUuid } from '../src/identity.mjs';
-import { decode, encode, fields, javaDouble, records, sanitize } from '../src/protocol.mjs';
+import {
+  decode,
+  encode,
+  fields,
+  javaDouble,
+  RECORD_SEPARATOR,
+  records,
+  sanitize,
+  UNIT_SEPARATOR,
+} from '../src/protocol.mjs';
 
 /**
  * Every expectation here was produced by a JDK 21 run, not by reading the specification. The Java
@@ -66,15 +75,23 @@ test('encode and decode round-trip, keeping empty trailing fields', () => {
 });
 
 test('records and fields split on the control characters, not on anything visible', () => {
-  const record = ['0', '1', '2'].join('');
-  const field = [record, record].join('');
+  const record = ['0', '1', '2'].join(UNIT_SEPARATOR);
+  const field = [record, record].join(RECORD_SEPARATOR);
 
   assert.deepEqual(records(field), [record, record]);
   assert.deepEqual(fields(record), ['0', '1', '2']);
   assert.deepEqual(records(''), []);
 });
 
+test('record separators stay on their assigned protocol bytes', () => {
+  assert.equal(RECORD_SEPARATOR.codePointAt(0), 0x1e);
+  assert.equal(UNIT_SEPARATOR.codePointAt(0), 0x1f);
+  assert.deepEqual([...Buffer.from(RECORD_SEPARATOR)], [0x1e]);
+  assert.deepEqual([...Buffer.from(UNIT_SEPARATOR)], [0x1f]);
+});
+
 test('sanitize strips every character the protocol gives meaning to', () => {
-  assert.equal(sanitize('a\tb\nc\rd'), 'a b c d');
+  const value = `a\tb\nc\rd${RECORD_SEPARATOR}e${UNIT_SEPARATOR}f`;
+  assert.equal(sanitize(value), 'a b c d e f');
   assert.equal(sanitize(null), '');
 });

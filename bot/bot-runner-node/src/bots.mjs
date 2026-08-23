@@ -58,7 +58,7 @@ export class BotRegistry {
     // Before waiting to join, not after: messages are events, and a plugin that greets or refuses
     // on join says so within a tick of the bot arriving. Attaching afterwards loses exactly the
     // messages most worth having.
-    collect(bot);
+    collect(bot, name);
 
     try {
       await joined(bot, name);

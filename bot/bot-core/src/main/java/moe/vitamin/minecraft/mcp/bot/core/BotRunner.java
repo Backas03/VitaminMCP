@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import moe.vitamin.minecraft.mcp.bot.spi.BossBar;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientMessage;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import moe.vitamin.minecraft.mcp.bot.spi.MenuItem;
 import moe.vitamin.minecraft.mcp.bot.spi.OpenMenu;
@@ -87,6 +88,48 @@ public final class BotRunner implements AutoCloseable {
         command.add(host);
         command.add(String.valueOf(port));
         return command;
+    }
+
+    /** Decodes one {@code inspect} reply from the runner line protocol. */
+    static ClientView parseInspect(String[] reply) {
+        int containerId = Integer.parseInt(reply[2]);
+
+        List<MenuItem> items = new ArrayList<>();
+        for (String record : RunnerProtocol.records(reply[4])) {
+            String[] parts = RunnerProtocol.fields(record);
+            items.add(new MenuItem(
+                    Integer.parseInt(parts[0]), parts[1],
+                    Integer.parseInt(parts[2]), parts[3], parts[4], parts[5]));
+        }
+
+        List<ClientMessage> messages = new ArrayList<>();
+        for (String record : RunnerProtocol.records(reply[5])) {
+            String[] parts = RunnerProtocol.fields(record);
+            messages.add(new ClientMessage(
+                    Long.parseLong(parts[0]), Long.parseLong(parts[1]), parts[2]));
+        }
+
+        List<BossBar> bossBars = new ArrayList<>();
+        for (String record : RunnerProtocol.records(reply[6])) {
+            String[] parts = RunnerProtocol.fields(record);
+            bossBars.add(new BossBar(parts[0], Float.parseFloat(parts[1]), parts[2]));
+        }
+
+        return new ClientView(
+                containerId < 0 ? null : new OpenMenu(containerId, reply[3]),
+                List.copyOf(items),
+                List.copyOf(messages),
+                Long.parseLong(reply[15]),
+                reply[16],
+                List.copyOf(bossBars),
+                reply[7].isEmpty() ? null : new Scoreboard(
+                        reply[7], List.of(RunnerProtocol.records(reply[8]))),
+                reply.length > 9 && !reply[9].isEmpty() ? Float.parseFloat(reply[9]) : null,
+                reply.length > 10 && !reply[10].isEmpty() ? Integer.parseInt(reply[10]) : null,
+                reply.length > 11 && !reply[11].isEmpty() ? Integer.parseInt(reply[11]) : null,
+                reply.length > 12 && !reply[12].isEmpty() ? Integer.parseInt(reply[12]) : null,
+                reply.length > 13 && !reply[13].isEmpty() ? Float.parseFloat(reply[13]) : null,
+                reply.length > 14 ? List.of(RunnerProtocol.records(reply[14])) : List.of());
     }
 
     private static boolean isScript(Path runner) {
@@ -354,36 +397,7 @@ public final class BotRunner implements AutoCloseable {
 
         /** What the client was told, which the server cannot always be asked. */
         public ClientView inspect() throws IOException {
-            String[] reply = runner.send(RunnerProtocol.INSPECT, name);
-            int containerId = Integer.parseInt(reply[2]);
-
-            List<MenuItem> items = new ArrayList<>();
-            for (String record : RunnerProtocol.records(reply[4])) {
-                String[] parts = RunnerProtocol.fields(record);
-                items.add(new MenuItem(
-                        Integer.parseInt(parts[0]), parts[1],
-                        Integer.parseInt(parts[2]), parts[3], parts[4], parts[5]));
-            }
-            List<BossBar> bossBars = new ArrayList<>();
-            for (String record : RunnerProtocol.records(reply[6])) {
-                String[] parts = RunnerProtocol.fields(record);
-                bossBars.add(new BossBar(
-                        parts[0], Float.parseFloat(parts[1]), parts[2]));
-            }
-
-            return new ClientView(
-                    containerId < 0 ? null : new OpenMenu(containerId, reply[3]),
-                    List.copyOf(items),
-                    List.of(RunnerProtocol.records(reply[5])),
-                    List.copyOf(bossBars),
-                    reply[7].isEmpty() ? null : new Scoreboard(
-                            reply[7], List.of(RunnerProtocol.records(reply[8]))),
-                    reply.length > 9 && !reply[9].isEmpty() ? Float.parseFloat(reply[9]) : null,
-                    reply.length > 10 && !reply[10].isEmpty() ? Integer.parseInt(reply[10]) : null,
-                    reply.length > 11 && !reply[11].isEmpty() ? Integer.parseInt(reply[11]) : null,
-                    reply.length > 12 && !reply[12].isEmpty() ? Integer.parseInt(reply[12]) : null,
-                    reply.length > 13 && !reply[13].isEmpty() ? Float.parseFloat(reply[13]) : null,
-                    reply.length > 14 ? List.of(RunnerProtocol.records(reply[14])) : List.of());
+            return parseInspect(runner.send(RunnerProtocol.INSPECT, name));
         }
 
         /** The bot's position now, which may differ from where it spawned. */

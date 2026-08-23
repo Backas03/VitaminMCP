@@ -207,7 +207,7 @@ Recognised properties: `vitaminmcp.liveServer`, `host`, `port`, `mcpPort`, `toke
 > summary — check that the test actually ran.
 
 Adding a version to `versions.yaml` means starting a server on that version and confirming it, not
-just editing the file. `CompatibilityLiveTest` is the gate — seventeen features against a server it
+just editing the file. `CompatibilityLiveTest` is the gate — twenty features against a server it
 starts itself — and it collects failures rather than stopping at the first, so one run tells you
 which parts of a new version work.
 

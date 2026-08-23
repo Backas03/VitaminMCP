@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
+import moe.vitamin.minecraft.mcp.bot.spi.ClientMessage;
 
 /** Runs a declarative scenario against a server. */
 public final class ScenarioRunner {
@@ -324,13 +325,14 @@ public final class ScenarioRunner {
                         ? step.path("timeoutMillis").asLong()
                         : DEFAULT_WAIT.toMillis();
 
-                List<String> received = List.of();
+                List<ClientMessage> received = List.of();
                 long deadline = System.nanoTime()
                         + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeout);
                 try {
                     do {
                         received = new BotRunner.BotHandle(bots, bot, 0, 0, 0).inspect().messages();
-                        if (received.stream().anyMatch(line -> line.contains(wanted))) {
+                        if (received.stream()
+                                .anyMatch(message -> message.text().contains(wanted))) {
                             yield ScenarioResult.StepResult.ok(index, action, "said to " + bot);
                         }
                         Thread.sleep(MESSAGE_POLL_MILLIS);
@@ -344,7 +346,7 @@ public final class ScenarioRunner {
                 yield ScenarioResult.StepResult.failed(index, action,
                         "nothing said to " + bot + " contained '" + wanted + "' within "
                                 + timeout + "ms",
-                        String.join(" | ", received));
+                        String.join(" | ", received.stream().map(ClientMessage::text).toList()));
             }
 
             case "assert_event" -> {

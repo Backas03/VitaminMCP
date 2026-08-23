@@ -96,7 +96,10 @@ for (const record of split(view[4])) {
   console.log(`  slot ${slot.padStart(2)}  ${itemId}  x${amount}  name=${JSON.stringify(name)}  model=${JSON.stringify(model)}  lore=${JSON.stringify(lore)}`);
 }
 console.log('messages');
-for (const message of split(view[5])) console.log(`  ${JSON.stringify(message)}`);
+for (const record of split(view[5])) {
+  const [sequence, timestamp, message] = record.split(UNIT_SEPARATOR);
+  console.log(`  #${sequence}  ${new Date(Number(timestamp)).toISOString()}  ${JSON.stringify(message)}`);
+}
 console.log('bossBars');
 for (const record of split(view[6])) {
   const [title, progress, color] = record.split(UNIT_SEPARATOR);
@@ -104,9 +107,11 @@ for (const record of split(view[6])) {
 }
 console.log(`scoreboard   ${JSON.stringify(view[7])}`);
 for (const line of split(view[8])) console.log(`  ${JSON.stringify(line)}`);
+console.log(`next message sequence  ${view[15]}`);
+console.log(`message stream id      ${view[16]}`);
 
 console.log('');
-console.log(`raw field count ${view.length} (java writes 9)`);
+console.log(`raw field count ${view.length} (expected 17)`);
 
 child.stdin.write('shutdown\n');
 await new Promise((resolve) => child.once('exit', resolve));
