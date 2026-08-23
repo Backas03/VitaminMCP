@@ -98,8 +98,8 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 | | |
 |---|---|
 | `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
-| `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle), boss bars, sidebar scoreboard, health, food, experience and active effects |
-| `bot_view` | Open a localhost-only live world or inventory view for a bot; the optional viewer asset is fetched only when requested |
+| `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle) with the millisecond each arrived and a cursor to read only what came after an action, boss bars, sidebar scoreboard, health, food, experience and active effects |
+| `bot_view` | Open a localhost-only live world or inventory view for a bot. The inventory view needs nothing extra; the world view downloads an optional asset the first time it is asked for, published for Windows x64 |
 | `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
 
 ### Server
@@ -200,21 +200,31 @@ These are the requirements for using a prebuilt release:
 | Minecraft version | Windows | Linux | macOS | Status |
 |---|:---:|:---:|:---:|---|
 | 1.18 – 1.20.6 | 🔴 | 🔴 | 🔴 | Below the Paper agent floor |
-| **1.21 – 1.21.11** | **🟢** | **🟡** | **🟡** | **Supported and live-tested** |
-| 1.21.12 and later | 🟡 | 🟡 | 🟡 | Planned; requires a compatibility run |
+| **1.21 – 1.21.11** | **🟢** | **🟢** | **🟢** | **Supported and live-tested** |
+| 26.1, 26.2 and later | 🟡 | 🟡 | 🟡 | Released; each needs a compatibility run before it is added |
 
 #### Runner support by operating system
 
 | Operating system | Node source runner | Native runner asset | Meaning |
 |---|:---:|:---:|---|
-| **Windows x64** | 🟢 | 🟢 | Current supported distribution |
-| **Linux x64 / arm64** | 🟢 | 🟡 | Built by the release workflow; first published with the next release |
-| **macOS Intel / Apple Silicon** | 🟢 | 🟡 | The same, and ad-hoc signed |
+| **Windows x64** | 🟢 | 🟢 | Published, and the platform the matrix is run on |
+| **Linux x64 / arm64** | 🟢 | 🟢 | Published since 3.0.0 |
+| **macOS Intel / Apple Silicon** | 🟢 | 🟢 | Published since 3.0.0, ad-hoc signed |
 
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
 **1.21 through 1.21.11 are supported today**, and every one of them runs in the matrix
-(`versions.yaml`). The other rows are on the roadmap without a date attached.
+(`versions.yaml`). **1.21.11 is where that line ends** — Minecraft moved to calendar versions after
+it, so what follows 1.21.11 is 26.1 and 26.2 rather than a 1.21.12. Those are released and are not
+in the matrix yet: adding one is a compatibility run against a real server plus a check that the
+runner's bundled data still covers it, never an edit to `versions.yaml` alone.
+
+**Where each platform's claim comes from.** The matrix is run on Windows, against Paper builds it
+downloads itself — so what it proves is the same on any host, because the server it talks to is the
+same server. Each release builds its native runner on the operating system that runner is for,
+never cross-built, and every one of them is started in CI and has to refuse its own entry point
+with the expected exit code before it is uploaded. The world view is the one piece that is still
+Windows-only, and it says so where it is offered.
 
 **You install one Node runner whatever the version.** It asks the server what it speaks and
 selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
@@ -285,8 +295,7 @@ when it was published.
 
 `mcp-server.jar` is two megabytes and is waited for. With Node installed, the source runner is used
 directly and no runner asset is downloaded. Without Node, the launcher selects the native runner
-asset for the current platform — Windows x64 in the current release, every supported platform from
-the next one.
+asset for the current platform, and every supported platform has one.
 
 `mcp-server` speaks stdio. It has no port and no token: it is a child process of the client, so the
 trust relationship already exists. Only the agent side crosses a network, which is why only the
@@ -520,8 +529,10 @@ no extra translation layer).
 and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
 to download.
 
-Versions beyond 1.21.11 are planned and require a compatibility run before they are added.
-The runner selects the matching data version from the server handshake.
+Versions beyond 1.21.11 — which now means 26.1 and up, since the 1.21 line ended there — require a
+compatibility run before they are added, and a check that the runner's trimmed data still covers
+them. The runner selects the matching data version from the server handshake, and refuses clearly
+rather than half-working when it has no entry.
 
 ---
 
