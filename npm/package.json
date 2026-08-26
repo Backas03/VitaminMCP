@@ -13,11 +13,11 @@
     "plugin-testing",
     "end-to-end-testing"
   ],
-  "homepage": "https://github.com/Backas03/VitaminMCP-minecraft#readme",
-  "bugs": "https://github.com/Backas03/VitaminMCP-minecraft/issues",
+  "homepage": "https://github.com/Backas03/VitaminMCP#readme",
+  "bugs": "https://github.com/Backas03/VitaminMCP/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Backas03/VitaminMCP-minecraft.git",
+    "url": "git+https://github.com/Backas03/VitaminMCP.git",
     "directory": "npm"
   },
   "license": "MIT",
