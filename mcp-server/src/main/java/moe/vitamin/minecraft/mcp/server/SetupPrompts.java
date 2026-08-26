@@ -104,15 +104,15 @@ final class SetupPrompts {
         if (bots) {
             text.append("""
 
-                    4. Bots need three settings, so ask me first whether this server should \
-                    accept them. They are a test-harness configuration and must never be applied \
-                    to a server reachable from the internet, because anyone who can open a socket \
-                    to it can then impersonate anyone:
+                    4. Bots need one setting, so ask me first whether this server should accept \
+                    them. It is a test-harness configuration and must never be applied to a \
+                    server reachable from the internet, because anyone who can open a socket to \
+                    it can then impersonate anyone:
 
                        - server.properties: online-mode=false
 
-                    Say plainly what each one does before I decide, and restart the server after \
-                    changing them. Skip this step for a server that only needs inspecting — \
+                    Say plainly what it does before I decide, and restart the server after \
+                    changing it. Skip this step for a server that only needs inspecting — \
                     events, logs, exceptions and live state all work without bots.
 
                     5. Call session_start with no arguments. On this machine it finds the host, \
