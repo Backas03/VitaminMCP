@@ -5,6 +5,7 @@ import { stopAllViews, stopView as stopBotView, view as startView } from './view
 
 import { collect, forget } from './clientview.mjs';
 import { addressField, identity } from './identity.mjs';
+import { answerResourcePacks, describeProgress, traceProgress } from './join.mjs';
 
 /** How long a bot has to get from a socket to standing in the world. */
 const LOGIN_TIMEOUT_MILLIS = 30_000;
@@ -55,13 +56,19 @@ export class BotRegistry {
     );
     loadPathfinder(bot);
 
+    // Both before anything is awaited. A server can push a resource pack the moment login
+    // succeeds, and a request that arrives before its listener does is a connection that
+    // hangs in configuration until the timeout below gives up on it.
+    answerResourcePacks(bot);
+    const progress = traceProgress(bot);
+
     // Before waiting to join, not after: messages are events, and a plugin that greets or refuses
     // on join says so within a tick of the bot arriving. Attaching afterwards loses exactly the
     // messages most worth having.
     collect(bot, name);
 
     try {
-      await joined(bot, name);
+      await joined(bot, name, progress);
     } catch (failure) {
       quietly(() => bot.end());
       throw failure;
@@ -223,7 +230,7 @@ async function worldKnown(bot, name) {
 }
 
 /** Resolves when the bot is in the world; rejects on a kick, an error, or the timeout. */
-function joined(bot, name) {
+function joined(bot, name, progress) {
   return new Promise((resolve, reject) => {
     const finish = (settleFn, value) => {
       clearTimeout(timer);
@@ -238,7 +245,10 @@ function joined(bot, name) {
     const onError = (error) => finish(reject, error);
 
     const timer = setTimeout(
-      () => finish(reject, new Error(`Bot ${name} did not join within ${LOGIN_TIMEOUT_MILLIS}ms`)),
+      () => finish(reject, new Error(
+        `Bot ${name} did not join within ${LOGIN_TIMEOUT_MILLIS}ms `
+          + `(${describeProgress(bot, progress)})`,
+      )),
       LOGIN_TIMEOUT_MILLIS,
     );
 

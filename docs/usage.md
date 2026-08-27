@@ -398,6 +398,12 @@ Omit `clientIp` for an ordinary login. If the test needs the server to attribute
 a chosen address — IP bans, per-IP connection limits or geo logic — pass `clientIp` and set the test
 server's `spigot.yml` `settings.bungeecord` to `true`; that opts into the forwarding handshake.
 
+A bot accepts every resource pack the server pushes and downloads none of them: it reports the pack
+as loaded and moves on. That is not politeness. A plugin that sends a pack while the connection is
+still in the configuration phase holds it there until the client answers, so a silent bot never
+joins at all, and a declining one gets kicked by anything that forces its pack. Nothing about a
+pack is therefore observable from a bot — checking what is *in* one needs a real client.
+
 After that, use the proxied agent tools directly. `wait_for`, `state_query` and `events_query` all
 go to the session's server — the only one open, or the one `session` names.
 
@@ -699,6 +705,7 @@ When the cause is not visible there, dig in this order:
 | A chest will not open | An opaque block sits directly above it (a game rule) |
 | `use_entity` reports no entity there | Either the coordinates are off, or the bot is too far away to have been sent the entity at all. The failure lists what is nearby — `move_to` first if the list is empty |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
+| `did not join within 30000ms (last state: configuration, ...)` | The server is still waiting for something the connection owes it. The packet named alongside is the last one it sent |
 | The bot connected but nothing works | It has not landed. `bot_spawn` waits for that, but when driving manually the ground under it may still be air |
 | It breaks from the second run onward | State from the previous run survived. Use `session_reset`, and if the scenario depends on the world, have it create that state |
 
