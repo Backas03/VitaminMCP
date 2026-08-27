@@ -706,6 +706,7 @@ When the cause is not visible there, dig in this order:
 | `use_entity` reports no entity there | Either the coordinates are off, or the bot is too far away to have been sent the entity at all. The failure lists what is nearby — `move_to` first if the list is empty |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
 | `did not join within 30000ms (last state: configuration, ...)` | The server is still waiting for something the connection owes it. The packet named alongside is the last one it sent |
+| `is a jar, but this version's bot runner is not one` | A `runnerJar` path left over from before the native runner. Pass the runner that ships with this version |
 | The bot connected but nothing works | It has not landed. `bot_spawn` waits for that, but when driving manually the ground under it may still be air |
 | It breaks from the second run onward | State from the previous run survived. Use `session_reset`, and if the scenario depends on the world, have it create that state |
 

@@ -74,8 +74,10 @@ public final class BotRunner implements AutoCloseable {
      * the same way and answer the same protocol, so which one is in use is a path and nothing
      * more — which is what lets the two be run against the same server on the same afternoon.
      */
-    static List<String> commandFor(Path runner, String host, int port) {
+    static List<String> commandFor(Path runner, String host, int port) throws IOException {
         String path = runner.toAbsolutePath().toString();
+        rejectJarRunner(runner, path);
+
         List<String> command = new ArrayList<>();
 
         if (isScript(runner)) {
@@ -143,6 +145,24 @@ public final class BotRunner implements AutoCloseable {
                 reply.length > 12 && !reply[12].isEmpty() ? Integer.parseInt(reply[12]) : null,
                 reply.length > 13 && !reply[13].isEmpty() ? Float.parseFloat(reply[13]) : null,
                 reply.length > 14 ? List.of(RunnerProtocol.records(reply[14])) : List.of());
+    }
+
+    /**
+     * Refuses a jar path before the operating system does it less helpfully.
+     *
+     * <p>The option is still called {@code runnerJar}, and older notes, docs and shell history
+     * still name {@code bot-runner.jar}, so a path left over from those gets passed in long after
+     * the jar runner stopped existing. Handed to {@code ProcessBuilder} it comes back as
+     * {@code CreateProcess error=193}, which says nothing about runners at all.
+     */
+    private static void rejectJarRunner(Path runner, String path) throws IOException {
+        if (!runner.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+            return;
+        }
+        throw new IOException(path + " is a jar, but this version's bot runner is not one. Bots "
+                + "run on a native runner (bot-runner-win-x64.exe and its per-platform siblings) "
+                + "or on runner.mjs through Node. The setting kept the name 'runnerJar'; the file "
+                + "it names has to be one of those.");
     }
 
     private static boolean isScript(Path runner) {
