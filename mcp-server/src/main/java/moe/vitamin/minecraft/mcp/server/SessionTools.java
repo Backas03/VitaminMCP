@@ -728,16 +728,25 @@ final class SessionTools {
     }
 
     /**
-     * Whether a filename is a supported Node runner.
+     * Every filename a runner can arrive under.
      *
-     * <p>Both spellings, because 'gradlew dist' stamps the version into the name and the release
-     * artifact the npm package downloads does not.
+     * <p>The script spellings because 'gradlew dist' stamps the version into the name and the
+     * release artifact the npm package downloads does not; the native ones because a release
+     * carries a self-contained runner per platform, and a manual install drops the one it needs
+     * beside this jar under exactly that name.
      */
-    private static boolean isRunnerFile(String name) {
-        String lower = name.toLowerCase(java.util.Locale.ROOT);
-        return lower.equals("runner.mjs")
-                || lower.equals("runner.js")
-                || lower.equals("bot-runner-win-x64.exe");
+    private static final List<String> RUNNER_NAMES = List.of(
+            "runner.mjs",
+            "runner.js",
+            "bot-runner-win-x64.exe",
+            "bot-runner-linux-x64",
+            "bot-runner-linux-arm64",
+            "bot-runner-darwin-x64",
+            "bot-runner-darwin-arm64");
+
+    /** Whether a filename is a supported Node runner. */
+    static boolean isRunnerFile(String name) {
+        return RUNNER_NAMES.contains(name.toLowerCase(java.util.Locale.ROOT));
     }
 
     /**

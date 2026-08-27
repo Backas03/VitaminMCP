@@ -1,6 +1,7 @@
 package moe.vitamin.minecraft.mcp.server;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
+import java.util.stream.Stream;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientMessage;
 import moe.vitamin.minecraft.mcp.bot.spi.ClientView;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,29 @@ class SessionToolsTest {
         assertTrue(description.contains("real agent tool definitions"));
         assertTrue(description.contains("runner process has exited"));
         assertTrue(description.contains("current session roster"));
+    }
+
+    @Test
+    void aRunnerIsFoundUnderEveryNameAReleasePublishes() {
+        assertTrue(SessionTools.isRunnerFile("runner.mjs"));
+        assertTrue(SessionTools.isRunnerFile("runner.js"));
+        assertTrue(SessionTools.isRunnerFile("bot-runner-win-x64.exe"));
+        assertTrue(SessionTools.isRunnerFile("bot-runner-linux-x64"));
+        assertTrue(SessionTools.isRunnerFile("bot-runner-linux-arm64"));
+        assertTrue(SessionTools.isRunnerFile("bot-runner-darwin-x64"));
+        assertTrue(SessionTools.isRunnerFile("bot-runner-darwin-arm64"));
+        assertTrue(SessionTools.isRunnerFile("BOT-RUNNER-DARWIN-ARM64"));
+    }
+
+    @Test
+    void onlyRunnersCountTowardsTheRefusalToGuessBetweenSeveral() {
+        assertFalse(SessionTools.isRunnerFile("mcp-server.jar"));
+        assertFalse(SessionTools.isRunnerFile("bot-runner-viewer-win-x64.tgz"));
+        assertFalse(SessionTools.isRunnerFile("bot-runner-linux-x64.part"));
+
+        assertEquals(1L, runnersAmong(
+                "mcp-server.jar", "bot-runner-linux-x64", "server.properties"));
+        assertEquals(2L, runnersAmong("mcp-server.jar", "bot-runner-linux-x64", "runner.mjs"));
     }
 
     @Test
@@ -120,6 +145,10 @@ class SessionToolsTest {
                         MAPPER.createObjectNode(), view, "Tester1", 14L));
         assertTrue(future.getMessage().contains("ahead"));
         assertTrue(future.getMessage().contains("Tester1"));
+    }
+
+    private static long runnersAmong(String... names) {
+        return Stream.of(names).filter(SessionTools::isRunnerFile).count();
     }
 
     private static ClientView view(long nextSequence, List<ClientMessage> messages) {
