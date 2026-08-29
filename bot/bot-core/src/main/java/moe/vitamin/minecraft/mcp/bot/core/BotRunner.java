@@ -177,7 +177,7 @@ public final class BotRunner implements AutoCloseable {
      * machine with several runtimes usually means one of them was chosen deliberately, and PATH is
      * the one nobody remembers setting.
      */
-    private static String node() {
+    static String node() {
         String configured = System.getenv("VITAMINMCP_NODE");
         if (configured != null && !configured.isBlank()) {
             return configured;
