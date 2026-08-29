@@ -40,8 +40,9 @@ Pass only what differs:
 - `tls: "true"` when the remote agent serves HTTPS, plus `tlsFingerprint` if its certificate is
   self-signed. The agent prints both at startup
 
-**If nothing answers, the server has not got the plugin.** The `setup` prompt — in Claude Code,
-`/mcp__vitaminmcp__setup` — installs it.
+**If nothing answers, the server has not got the plugin.** The `setup` prompt installs it — with
+this skill's plugin install that is `/mcp__plugin_vitaminmcp_vitaminmcp__setup` (with a plain
+`claude mcp add vitaminmcp`, `/mcp__vitaminmcp__setup`), or the user can simply ask for setup.
 
 **`session_start`'s own response carries `agentTools`** — the real parameters of the proxied tools,
 which depend on the agent. Read it: a read-only install (`read-only: true` is the default) exposes

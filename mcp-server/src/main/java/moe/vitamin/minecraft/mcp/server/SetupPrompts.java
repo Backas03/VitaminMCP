@@ -9,9 +9,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * The prompts this server offers, which a client surfaces as commands.
  *
  * <p>Installing the agent is the one part of this that a tool cannot do: it happens on the server,
- * before anything here can connect to it. So it is written down as a prompt instead — in Claude
- * Code that is {@code /mcp__vitaminmcp__setup} — and the client's own agent does the work, with
- * this server's tools to check it afterwards.
+ * before anything here can connect to it. So it is written down as a prompt instead — surfaced by
+ * the client under the server's registered name, e.g. {@code /mcp__vitaminmcp__setup} or, via the
+ * Claude Code plugin, {@code /mcp__plugin_vitaminmcp_vitaminmcp__setup} — and the client's own
+ * agent does the work, with this server's tools to check it afterwards.
  */
 final class SetupPrompts {
 

@@ -40,7 +40,7 @@ are in `docs/publishing.md`.
 Three jars, in three different places. Only the first is a Minecraft plugin.
 
 ```text
-  your MCP client (Claude Code, ...)
+  your MCP client (Claude Code, Cursor, Codex, Gemini CLI, ...)
         |
         |  stdio
         v
@@ -199,7 +199,7 @@ These are the requirements for using a prebuilt release:
 
 | Minecraft version | Windows | Linux | macOS | Status |
 |---|:---:|:---:|:---:|---|
-| 1.18 – 1.20.6 | 🔴 | 🔴 | 🔴 | Below the Paper agent floor |
+| 1.18 – 1.20.6 | 🟡 | 🟡 | 🟡 | Planned; below the current agent floor (1.21) |
 | **1.21 – 1.21.11** | **🟢** | **🟢** | **🟢** | **Supported and live-tested** |
 | 26.1, 26.2 and later | 🟡 | 🟡 | 🟡 | Released; each needs a compatibility run before it is added |
 
@@ -258,24 +258,9 @@ about happens.
 
 ### 1. Connect your MCP client
 
-**In Claude Code**, install the plugin — it brings the MCP server and the working knowledge of how
-to drive it, as a skill that loads itself when a question calls for it:
-
-```bash
-/plugin marketplace add Backas03/VitaminMCP
-```
-
-```bash
-/plugin install vitaminmcp@vitaminmcp
-```
-
-**Any other MCP client**, or Claude Code without the skill:
-
-```bash
-claude mcp add vitaminmcp -- npx -y vitaminmcp
-```
-
-Or directly in `.mcp.json`:
+The MCP server is plain stdio: **any client that can launch `npx -y vitaminmcp` works** — Claude
+Code, Cursor, Codex, Gemini CLI, Windsurf, Claude Desktop, VS Code. This is the one configuration
+every client expresses in its own file:
 
 ```json
 {
@@ -287,6 +272,33 @@ Or directly in `.mcp.json`:
   }
 }
 ```
+
+**Claude Code** has a shortcut: the plugin brings the MCP server *and* the working knowledge of how
+to drive it, as a skill that loads itself when a question calls for it. Type these into the Claude
+Code prompt (they are Claude Code commands, not shell commands):
+
+```text
+/plugin marketplace add Backas03/VitaminMCP
+/plugin install vitaminmcp@vitaminmcp
+```
+
+Everywhere else, register the server where that client keeps its MCP configuration:
+
+| Client | Where |
+|---|---|
+| **Claude Code** (without the plugin) | `claude mcp add vitaminmcp -- npx -y vitaminmcp` in a shell, or the JSON above in the project's `.mcp.json` |
+| **Cursor** | the JSON above in `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global) |
+| **Codex CLI** | `codex mcp add vitaminmcp -- npx -y vitaminmcp`, or in `~/.codex/config.toml`: `[mcp_servers.vitaminmcp]` with `command = "npx"`, `args = ["-y", "vitaminmcp"]` |
+| **Gemini CLI** | `gemini mcp add vitaminmcp npx -y vitaminmcp`, or the JSON above in `~/.gemini/settings.json` |
+| **Windsurf** | the JSON above in `~/.codeium/windsurf/mcp_config.json` |
+| **Claude Desktop** | the JSON above in `claude_desktop_config.json` |
+| **VS Code** | `.vscode/mcp.json`, under a `"servers"` key instead of `"mcpServers"` |
+| anything else | wherever that client takes a stdio MCP server; the command is always `npx -y vitaminmcp` |
+
+Every tool works the same in every client. What only Claude Code gets is the plugin's *skill* — the
+written testing playbook. Other clients still receive the operating knowledge that matters at call
+time: `session_start` returns the agent's full tool definitions, and the tool descriptions carry
+their own warnings.
 
 That is the whole client side. Nothing to download by hand and no path to get right: the
 [`vitaminmcp`](https://www.npmjs.com/package/vitaminmcp) package fetches the jars it needs on first
@@ -306,14 +318,22 @@ agent side authenticates.
 
 ### 2. Install the plugin on the server
 
-Ask, and the agent does it — this is a command your client offers once step 1 is done:
+Ask, and the agent does it. The MCP server publishes a `setup` prompt that walks the agent through
+this step — it checks the server is Paper 1.21+, puts the jar in `plugins/`, restarts, and
+connects. Clients surface MCP prompts under their own names, built from the name the *server* was
+registered under. In Claude Code:
 
 ```text
-/mcp__vitaminmcp__setup
+/mcp__plugin_vitaminmcp_vitaminmcp__setup    # installed as the plugin
+/mcp__vitaminmcp__setup                      # added with claude mcp add vitaminmcp
 ```
 
-It checks the server is Paper 1.21+, puts the jar in `plugins/`, restarts, and connects. By hand
-instead:
+`/mcp` lists what yours is actually called. In a client that lists prompts elsewhere (or not at
+all), just ask in plain words:
+
+> **Prompt:** Set up VitaminMCP on my Minecraft server at ~/servers/test and connect to it.
+
+By hand instead:
 
 **Download `VitaminMCP.jar`** from
 [Releases](https://github.com/Backas03/VitaminMCP/releases/latest) into the server's
@@ -376,6 +396,45 @@ ordinary traversal so a test wall remains a test wall.
 
 ### 4. Connect
 
+Just ask. These are prompts — copy one and fill in your own values.
+
+**A server on this machine**
+
+> **Prompt:** Connect to the Minecraft server on this machine, then tell me the server version and
+> which plugins are loaded.
+
+**Behind an SSH tunnel** — say which local ports the tunnel forwards
+
+> **Prompt:** The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent
+> on localhost:25685. Token is `kQ8s…`. Connect and confirm it is alive.
+
+Or keep the token out of the conversation and point at a file instead — the agent reads it and
+passes it to `session_start`:
+
+> **Prompt:** The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent
+> on localhost:25685. The token is in `~/.secrets/vitaminmcp-token`. Connect and confirm it is
+> alive.
+
+For a token that never appears in a prompt at all, set `VITAMINMCP_TOKEN` in the MCP server's
+environment (an `"env"` block next to `"command"` in the client configuration) — `session_start`
+falls back to it whenever no `token` argument is given.
+
+**Remote, over TLS** — paste the block the agent printed at startup
+
+> **Prompt:** Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`,
+> fingerprint `sha256:ffb61d8f…f163`. Minecraft is on 25565.
+
+Or with the token in a file rather than in the conversation:
+
+> **Prompt:** Connect using this: host 203.0.113.10, mcpPort 25585, tls true, fingerprint
+> `sha256:ffb61d8f…f163`, token in `~/.secrets/vitaminmcp-token`. Minecraft is on 25565.
+
+**For anything not on this machine, include the port numbers and the token.** Without them the
+agent has to guess at defaults, and a wrong guess surfaces as a rejected token rather than a wrong
+address — the same failure whichever detail was missing.
+
+#### What the agent calls: `session_start`
+
 ```text
 session_start
 ```
@@ -414,29 +473,6 @@ Every other tool takes `session`. Omit it and it resolves only while one session
 several it is an error naming them, rather than a guess about which server you meant. The full
 walkthrough is in [docs/usage.md](docs/usage.md).
 
-#### Or just ask
-
-These are prompts — copy one and fill in your own values.
-
-**A server on this machine**
-
-> **Prompt:** Connect to the Minecraft server on this machine, then tell me the server version and
-> which plugins are loaded.
-
-**Behind an SSH tunnel** — say which local ports the tunnel forwards
-
-> **Prompt:** The test server is tunnelled to this machine — Minecraft on localhost:10000, the agent
-> on localhost:25685. Token is `kQ8s…`. Connect and confirm it is alive.
-
-**Remote, over TLS** — paste the block the agent printed at startup
-
-> **Prompt:** Connect using this: host 203.0.113.10, mcpPort 25585, tls true, token `YLwNyFij…`,
-> fingerprint `sha256:ffb61d8f…f163`. Minecraft is on 25565.
-
-**For anything not on this machine, include the port numbers and the token.** Without them the
-agent has to guess at defaults, and a wrong guess surfaces as a rejected token rather than a wrong
-address — the same failure whichever detail was missing.
-
 ### Installing from the jars instead
 
 `npx` is a convenience, not a requirement. **Two artifacts**, plus the optional platform runner
@@ -457,11 +493,21 @@ To build them yourself instead:
 ./gradlew dist
 ```
 
-Either way, point the client at the jar rather than at the package:
+Either way, point the client at the jar rather than at the package — same registration as step 1,
+different command:
 
-```bash
-claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar
+```json
+{
+  "mcpServers": {
+    "vitaminmcp": {
+      "command": "java",
+      "args": ["-jar", "/absolute/path/mcp-server.jar"]
+    }
+  }
+}
 ```
+
+Or in Claude Code: `claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-server.jar`.
 
 `VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
