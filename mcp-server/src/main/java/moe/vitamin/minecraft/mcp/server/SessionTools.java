@@ -33,157 +33,124 @@ final class SessionTools {
 
         tools.add(tool("session_start",
                 "Connect to a Minecraft server and its VitaminMCP agent. Call this first — "
-                        + "every other tool needs it. Several sessions can be open at once, which "
-                        + "is what a BungeeCord network needs: one per backend server, each with "
-                        + "its own agent. Starting one never disturbs the others, so bots stay "
-                        + "connected. Starting one that names the same server and agent as an open "
-                        + "session replaces it. The response includes the server details, the real "
-                        + "agent tool definitions and the current session roster; sessions whose "
-                        + "runner process has exited are removed from that roster.",
+                        + "every other tool needs it. Several sessions can be open at once (one "
+                        + "per backend of a proxied network); starting one never disturbs the "
+                        + "others, and naming an open session's server and agent replaces it. "
+                        + "The response includes the server details, the real agent tool "
+                        + "definitions and the current session roster; sessions whose runner "
+                        + "process has exited are removed from that roster.",
                 properties -> {
                     string(properties, "session",
-                            "Name for this session, used by every other tool to say which server "
-                                    + "it means — 'lobby', 'survival'. Defaults to "
-                                    + "host:port@mcpPort.");
+                            "Name for this session — 'lobby', 'survival'. Every other tool uses "
+                                    + "it to say which server. Defaults to host:port@mcpPort.");
                     string(properties, "host",
                             "Server host. Omit for a server on this machine — the agent leaves "
                                     + "its host, ports and token where this tool reads them.");
                     number(properties, "port",
-                            "Minecraft port bots connect to. On a proxied network this is the "
-                                    + "proxy's port, since that is where a real player connects. "
-                                    + "Omit for a server on this machine; 25565 otherwise.");
+                            "Minecraft port bots connect to — on a proxied network, the proxy's "
+                                    + "port. Omit for a server on this machine; 25565 otherwise.");
                     number(properties, "mcpPort",
-                            "Agent's MCP port. Each backend server runs its own agent on its own "
-                                    + "port, and that is what makes one session different from "
-                                    + "another. Omit when only one agent runs on this machine; "
-                                    + "name it to pick between several.");
+                            "Agent's MCP port; what tells one backend's session from another. "
+                                    + "Omit when only one agent runs on this machine.");
                     string(properties, "token",
                             "The agent's auth-token from its config.yml. Omit for a server on "
-                                    + "this machine — it is read from the agent's handshake, or "
-                                    + "from VITAMINMCP_TOKEN. Required for a server anywhere "
-                                    + "else, since nothing local can vouch for it.");
+                                    + "this machine (read from the handshake or VITAMINMCP_TOKEN); "
+                                    + "required for a server anywhere else.");
                     string(properties, "runnerJar",
-                            "Path to a bot runner (Node script or platform executable). Optional: defaults to "
-                            + "VITAMINMCP_RUNNER_JAR, or to the Node runner sitting "
-                                    + "beside this server's own jar, which is where both "
-                                    + "'gradlew dist' and the npm package put it.");
+                            "Path to a bot runner. Optional: defaults to VITAMINMCP_RUNNER_JAR, "
+                                    + "or the runner beside this server's own jar.");
                     string(properties, "tls",
-                            "'true' if the agent serves HTTPS. Required for any server that is "
-                                    + "not on this machine — a remotely reachable agent refuses "
-                                    + "to start without transport security.");
+                            "'true' if the agent serves HTTPS. Required for any server not on "
+                                    + "this machine.");
                     string(properties, "tlsFingerprint",
                             "SHA-256 of the agent's certificate, printed in its startup log. "
-                                    + "Needed when the agent uses a self-signed certificate; "
-                                    + "pins that exact certificate so nothing has to be "
-                                    + "installed on this machine. Omit for a certificate signed "
-                                    + "by a public authority.");
+                                    + "Pins a self-signed certificate; omit for one signed by a "
+                                    + "public authority.");
                 }));
 
         tools.add(tool("session_reset",
                 "Disconnect every bot, keeping the connection. Use between independent tests so "
                         + "one does not inherit the other's players. Pass close:true to end the "
-                        + "session instead, which is the only way to release one you are done "
-                        + "with.",
+                        + "session instead — the only way to release one.",
                 properties -> {
                     session(properties);
                     string(properties, "close",
-                            "'true' to close the session rather than reset it. Its bots "
-                                    + "disconnect and the name becomes free again.");
+                            "'true' to close the session rather than reset it.");
                 }));
 
         tools.add(tool("bot_spawn",
-                "Connect a bot and wait until it is standing in the world with the ground "
-                        + "beneath it loaded. Its UUID is derived from its name, so the same name "
-                        + "is the same player every run and permission-dependent behaviour is "
-                        + "reproducible — which also means THE SERVER REMEMBERS THEM. Inventory, "
-                        + "position, advancements and anything a plugin stored against that UUID "
-                        + "survive from earlier runs, so a bot you have used before is not a "
-                        + "fresh player and 'it has the item' may be left over rather than just "
-                        + "granted. Use an unused name when a first join is what is being tested, "
-                        + "and clear what you left behind ('clear <name>' through command_exec). This means the CLIENT is ready, not that the SERVER will "
-                        + "act on what the bot does: Paper drops a joining player's interactions "
-                        + "for a few seconds, and plugins commonly hold them longer while they "
-                        + "load that player's data. An action in that window is refused rather "
-                        + "than lost — break_block says which — so check what it answered instead "
-                        + "of assuming a spawn means ready.",
+                "Connect a bot and wait until it is standing in the world. Its UUID derives "
+                        + "from its name, so the same name is the same player every run — which "
+                        + "means THE SERVER REMEMBERS IT: inventory, position and plugin data "
+                        + "survive from earlier runs, so 'it has the item' may be left over "
+                        + "rather than just granted. Use an unused name to test a first join, "
+                        + "and clear what you leave behind. A successful spawn means the CLIENT "
+                        + "is ready, not that the server will act yet — Paper and plugins drop "
+                        + "or refuse a joining player's interactions for a few seconds, and a "
+                        + "refused action says so in its answer, so read what an action "
+                        + "answered rather than assuming spawn means ready.",
                 properties -> {
                     session(properties);
                     string(properties, "name", "Bot name, at most 16 characters.");
                     string(properties, "clientIp",
-                            "Optional spoofed address for the BungeeCord forwarding handshake. "
-                                    + "Omit for a normal login; pass it only when the server has "
-                                    + "bungeecord=true and the test needs an attributed IP.");
+                            "Optional spoofed address for the BungeeCord forwarding handshake; "
+                                    + "only for a server with bungeecord=true.");
                 }));
 
         tools.add(tool("bot_inspect",
-                "What the bot's client was told, which the server cannot always be asked. Use "
-                        + "when state_query reports an empty menu but a player would see a full "
-                        + "one — a plugin drawing its GUI with packets leaves the server-side "
-                        + "inventory empty. Also returns the messages the server sent this bot, "
-                        + "which is where a refusal like 'you lack permission' appears; those "
-                        + "never reach the console, so a declined command and one that did "
-                        + "nothing look identical from the agent's side. 'items' IS THE OPEN "
-                        + "MENU'S CONTENTS AND NOTHING ELSE — it is null when no menu is open, "
-                        + "and never the player's own inventory, which is state_query "
-                        + "kind='inventory' which='player'. Items are named the way the registry "
-                        + "names them — 'minecraft:diamond_sword' — so they read the same as "
-                        + "state_query's. 'messages' contains sequence, timestamp and text "
-                        + "records. Chat text is returned as received; action bar, title and "
-                        + "subtitle text is prefixed with where it appeared. Timestamp is when "
-                        + "the text reached the client, in epoch milliseconds. At most 100 "
-                        + "messages are retained per bot. To "
-                        + "isolate one action's reply, call this before the command, save "
-                        + "'messageCursor', then pass it back as 'cursor'. 'messageCursor' is "
-                        + "always returned and is opaque: it belongs to this bot connection, so "
-                        + "a cursor from another session, runner, or same-named replacement is "
-                        + "rejected. 'messagesDropped' counts requested messages that fell out "
-                        + "of the retained window, so a nonzero value means the answer is "
-                        + "incomplete. Cursor filtering affects only messages; every other field "
-                        + "is still the current client state. "
-                        + "Also reports health, food, experience and active effects. "
-                        + "'bossBars' and 'scoreboard' are on-screen state rather than messages: "
-                        + "they persist, and a server's live view of a player — timers, money, "
-                        + "region, quest progress — is usually drawn there and nowhere the agent "
-                        + "can see.",
+                "What the bot's client was told, which the server cannot always be asked: a "
+                        + "plugin drawing its GUI with packets leaves the server-side inventory "
+                        + "empty, and a refusal like 'you lack permission' goes to the player "
+                        + "and never reaches the console. 'items' IS THE OPEN MENU'S CONTENTS "
+                        + "AND NOTHING ELSE — null when no menu is open, never the player's own "
+                        + "inventory (that is state_query kind='inventory' which='player'). "
+                        + "'messages' records carry sequence, timestamp (epoch milliseconds of "
+                        + "arrival) and text; Chat text is returned as received, and action "
+                        + "bar / title / subtitle text is prefixed with where it appeared. At "
+                        + "most 100 messages are retained per bot. To isolate one action's "
+                        + "reply, call this before the command, save 'messageCursor', and pass "
+                        + "it back as 'cursor'; the cursor is opaque, belongs to this bot "
+                        + "connection, and is rejected from another session, runner, or "
+                        + "same-named replacement. A nonzero 'messagesDropped' means the answer "
+                        + "is incomplete. Also reports health, food, experience, effects, and "
+                        + "'bossBars' and 'scoreboard' — persistent on-screen state, where a "
+                        + "server's live view of a player (timers, money, quest progress) is "
+                        + "usually drawn.",
                 properties -> {
                     session(properties);
                     string(properties, "name", "Bot name.");
                     string(properties, "cursor",
                             "A messageCursor from an earlier bot_inspect call for this same bot "
-                                    + "connection. Only messages at or after that position are "
-                                    + "returned.");
+                                    + "connection. Only messages at or after it are returned.");
                 }));
 
         tools.add(tool("bot_view",
-                "Start or reuse a localhost-only live view for one bot. what='world' uses the "
-                        + "optional prismarine viewer in first_person or third_person mode; "
-                        + "what='inventory' shows the open client menu as a live page. The same "
-                        + "bot always reuses its URL. Pass stop:true to close it. The viewer is "
-                        + "optional and is not downloaded until this tool is first used.",
+                "Start or reuse a localhost-only live view for one bot; the same bot always "
+                        + "reuses its URL. Pass stop:true to close it. The world viewer is an "
+                        + "optional download, fetched on first use.",
                 properties -> {
                     session(properties);
                     string(properties, "name", "Bot name.");
-                    string(properties, "what", "world (default) or inventory.");
-                    string(properties, "mode", "first_person or third_person (world only).");
-                    string(properties, "stop", "true to close the viewer for this bot.");
+                    enumChoice(properties, "what", "What to show. Default world.",
+                            List.of("world", "inventory"));
+                    enumChoice(properties, "mode", "Camera, for what='world'.",
+                            List.of("first_person", "third_person"));
+                    string(properties, "stop", "'true' to close the viewer for this bot.");
                 }));
 
         tools.add(tool("bot_run_scenario",
                 "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
                         + "attack_entity, use_block, use_entity, hold_item, drop_item, "
                         + "place_block, jump, sneak, sprint, look_at, assert_reachable, "
-                        + "command, chat, console, click_slot, "
-                        + "close_menu, wait_for, assert_block, assert_player, assert_event, "
-                        + "assert_inventory, assert_message. There is no sleep step — use "
-                        + "wait_for and name what you are waiting for. move_to walks by default; "
-                        + "use mode 'teleport' for setup placement, and timeoutMillis to bound a "
-                        + "walk. To test a menu GUI: "
-                        + "command, then wait_for inventory_open, then assert_inventory with the "
-                        + "slots you expect. use_entity right-clicks an NPC or villager, named by "
-                        + "the coordinates it stands at rather than by an entity id, since the id "
-                        + "is the server's own and never visible here. On failure the response "
-                        + "says which step failed, why, and what the server was doing at that "
-                        + "moment.",
+                        + "command, chat, console, click_slot, close_menu, wait_for, "
+                        + "assert_block, assert_player, assert_event, assert_inventory, "
+                        + "assert_message. There is no sleep step — use wait_for and name what "
+                        + "you are waiting for. move_to walks by default (mode 'teleport' for "
+                        + "setup placement). To test a menu GUI: command, then wait_for "
+                        + "inventory_open, then assert_inventory. use_entity right-clicks an "
+                        + "NPC or villager named by the coordinates it stands at. On failure "
+                        + "the response says which step failed, why, and what the server was "
+                        + "doing at that moment.",
                 properties -> {
                     session(properties);
                     string(properties, "scenario",
@@ -194,9 +161,8 @@ final class SessionTools {
         for (String name : PROXIED) {
             tools.add(passthroughTool(name,
                     "Forwarded to the agent on the connected server. Call session_start first — "
-                            + "its response lists this tool's parameters, as the agent defines "
-                            + "them. Pass them as top-level properties, not wrapped. Add "
-                            + "'session' to say which server, when more than one is open."));
+                            + "its response lists this tool's parameters. Pass them as top-level "
+                            + "properties, plus 'session' when more than one is open."));
         }
         return tools;
     }
@@ -859,5 +825,15 @@ final class SessionTools {
         ObjectNode property = properties.putObject(name);
         property.put("type", "integer");
         property.put("description", description);
+    }
+
+    /** A string property that only admits the named values. */
+    private static void enumChoice(
+            ObjectNode properties, String name, String description, List<String> values) {
+        ObjectNode property = properties.putObject(name);
+        property.put("type", "string");
+        property.put("description", description);
+        ArrayNode allowed = property.putArray("enum");
+        values.forEach(allowed::add);
     }
 }
