@@ -2,6 +2,8 @@
 
 **Minecraft automation testing MCP server plugin for AI agents.**
 
+![VitaminMCP demo — an AI agent driving a real Minecraft server](docs/demo.gif)
+
 VitaminMCP is a **Paper/Purpur server plugin.** Drop `VitaminMCP.jar` into `plugins/`, start the
 server, and it opens an MCP endpoint from inside the running server — so an AI agent can drive that
 server and read back what happened, while real bot clients connect to it over the Minecraft
