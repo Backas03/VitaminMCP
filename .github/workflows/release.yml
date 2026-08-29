@@ -337,7 +337,10 @@ jobs:
             exit 0
           fi
 
-          published=$(curl -fsSL "https://api.modrinth.com/v2/project/${MODRINTH_SLUG}/version" \
+          # Authorized reads, because a project still in review is invisible to the public API —
+          # the token therefore needs the read-projects and read-versions scopes too.
+          published=$(curl -fsSL -H "Authorization: ${MODRINTH_TOKEN}" \
+            "https://api.modrinth.com/v2/project/${MODRINTH_SLUG}/version" \
             | node -p "JSON.parse(require('fs').readFileSync(0)).some((v) => v.version_number === process.env.VERSION)")
           if [ "$published" = "true" ]; then
             echo "Modrinth already has ${VERSION}; nothing to publish."
@@ -345,7 +348,8 @@ jobs:
           fi
 
           # Version creation wants the project id, not the slug.
-          project_id=$(curl -fsSL "https://api.modrinth.com/v2/project/${MODRINTH_SLUG}" \
+          project_id=$(curl -fsSL -H "Authorization: ${MODRINTH_TOKEN}" \
+            "https://api.modrinth.com/v2/project/${MODRINTH_SLUG}" \
             | node -p "JSON.parse(require('fs').readFileSync(0)).id")
 
           # The same notes the GitHub release shows, which on a rerun are the published notes
