@@ -270,8 +270,8 @@ revert is the single `vitaminmcp.server-jvm-target`.
 
 - The `agent-legacy` adapter module is unnecessary in its entirety
 - A single jar works across the whole supported range on the Bukkit/Paper API alone
-- `io.papermc.paper:paper-api` compiles against the floor (1.21.8) — API added later is simply not
-  on the classpath, so it cannot be used by accident
+- `io.papermc.paper:paper-api` compiles against the floor (1.21 since §5.6) — API added later is
+  simply not on the classpath, so it cannot be used by accident
 - Servers below 1.21.7 are out of scope
 - `agent-*` and `contract` state `--release 21` **explicitly**. It currently equals the toolchain
   value but means something different: the toolchain is what we compile with, `release` is what the
@@ -285,7 +285,7 @@ Everything floor-related derives from **one place — `FLOOR` in
 and the `--release` value all come from it.
 
 ```kotlin
-const val FLOOR = "1.21.8"   // the only line to change
+const val FLOOR = "1.21"   // the only line to change
 ```
 
 The MC↔Java table is encoded, so **an impossible combination is rejected by the build.** Set
@@ -431,15 +431,10 @@ The full stack trace is returned only on explicit request.
 
 ## 10. The MCP tool list
 
-```
-server_info()                              version, plugins, TPS, players online
-events_summary(since, until)               counts by type ← always start here
-events_query(types[], player?, cursor)     detail
-logs_query(level, pattern, since, cursor)  regex search
-exceptions_recent(limit)                   grouped exceptions ← most used in practice
-state_query(kind, target)                  scoreboard / permissions / inventory
-command_exec(cmd, as)                      console or player command (off by default)
-```
+The current tools and their parameters live where they cannot drift: the code
+(`AgentTools.listTools()`, `SessionTools.listTools()`) and [usage.md](usage.md). An earlier
+revision of this section duplicated the signatures here and they went stale immediately — this
+document keeps only the rules that shaped them.
 
 ### Design rules
 
