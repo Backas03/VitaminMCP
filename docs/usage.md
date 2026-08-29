@@ -271,7 +271,7 @@ incomplete and paging cannot recover those records.
 
 ## Response budget
 
-Every query tool has a cap (200 records / 50KB by default). The exact value is stated in each tool's
+Every query tool has a cap (200 records / 25KB by default, configurable in config.yml). The exact value is stated in each tool's
 description. When output is cut, the response says so:
 
 - `truncated: true` — cut for budget

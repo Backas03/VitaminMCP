@@ -396,7 +396,7 @@ the LLM useless.**
    requested
 2. **Give the aggregate first.** Show counts by type via `events_summary`, then steer toward
    querying only the types that matter. This two-step structure is the core of it
-3. **Nail a response token budget into the tool itself.** 200 records / 50KB by default, plus cursor
+3. **Nail a response token budget into the tool itself.** 200 records / 25KB by default (configurable), plus cursor
    pagination
 4. **Ring buffer plus asynchronous serialization.** The MONITOR listener builds only a lightweight
    record and pushes it onto a lock-free queue; a separate thread serializes. Building JSON on the
@@ -524,7 +524,7 @@ response** (how long it took, what came back). Two, because `wait_for` can hold 
 a minute — log only on completion and the console is silent while it runs, leaving a stuck call
 indistinguishable from no call at all.
 
-Arguments and responses are truncated. The response budget is 50KB and the console is not where you
+Arguments and responses are truncated. The response budget is 25KB and the console is not where you
 read it; the client already has the full payload.
 
 Controlled by `activity-log: full | summary | off`. **Even at `off`, refused tokens and
