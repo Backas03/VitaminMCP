@@ -45,8 +45,7 @@ one-to-one, while the `agent/` and `bot/` grouping is kept on disk.
 | `agent-core` | Capture engine and state queries, on the Bukkit API |
 | `agent-mcp` | The agent's MCP server, on the JDK's `HttpServer` |
 | `bot-core` | Runner handle, line protocol, handshake injection, server ping, and the `bot.spi` contract. No protocol library |
-| `bot/bot-runner-node` | The Node runner source and optional SEA build. Runs as a child process |
-| `bot-runner-node` | Node runner source, protocol selection and optional native SEA build |
+| `bot-runner-node` | The Node runner source, protocol selection and optional native SEA build. Runs as a child process |
 | `orchestrator` | Native server startup, world reset, version matrix |
 | `testkit` | Scenario runner, `wait_for`, assertions |
 | `mcp-server` | Tool exposure and assembly. The entry point |
@@ -109,8 +108,9 @@ numbering is part of the contract.
 
 - **Aggregate first.** A detail tool needs its summary counterpart to exist first
   (`events_summary` before `events_query`).
-- **Budget every response.** 200 records / 50KB by default. If output was cut, say so with
-  `truncated` and the drop counters.
+- **Budget every response.** 200 records / 25KB by default, tunable via `max-response-items` /
+  `max-response-bytes` in config.yml. If output was cut, say so with `truncated` and the drop
+  counters.
 - **High-frequency events stay out by default** — `PlayerMoveEvent`, `BlockPhysicsEvent`,
   `ChunkLoadEvent`, entity movement — and appear only when a query names them.
 - **Resist growing the tool count.** Extend an existing tool with a parameter before adding a new
