@@ -43,12 +43,13 @@ agent leaves its host, ports and token where this server reads them.
 - Open, read, click and assert on inventories and plugin GUIs
 - Wait for events and conditions instead of sleeping
 - Read live server state: events, logs, exceptions, permissions
-- Paper / Purpur 1.21 through 1.21.11, from one install
+- Paper / Purpur 1.21 through 26.1, from one install
 
 ## Requires
 
 - **Java 21 or later** on this machine — the jars run on the JVM. Point `JAVA_HOME` at it, or have
-  `java` on `PATH`
+  `java` on `PATH`. (The Paper server itself needs Java 25 from 26.1 on; that is Paper's
+  requirement, and the agent loads there unchanged)
 - **Node 18.17 or later** when using the source runner fallback. If Node is absent, the launcher
   selects a pinned platform runner asset instead.
 - **Paper 1.21 or later** on the Minecraft server, with `VitaminMCP.jar` in its `plugins/`

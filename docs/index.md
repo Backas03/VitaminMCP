@@ -30,4 +30,4 @@ the server.
 - [npm — `vitaminmcp`](https://www.npmjs.com/package/vitaminmcp)
 - MCP registry — `io.github.Backas03/vitaminmcp`
 
-Supports Paper and Purpur **1.21 through 1.21.11** from a single install. MIT licensed.
+Supports Paper and Purpur **1.21 through 26.1** from a single install. MIT licensed.

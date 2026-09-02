@@ -29,7 +29,7 @@ without opening the game.
 - Read live server state: events, logs, exceptions, permissions
 - Drive **several servers at once** — one session per backend of a BungeeCord network, bots staying
   connected across all of them
-- Paper / Purpur **1.21 through 1.21.11**, from one install — the runner works out which protocol the
+- Paper / Purpur **1.21 through 26.1**, from one install — the runner works out which protocol the
   server speaks and adapts
 
 Full usage is in `docs/usage.md`. Contribution rules are in `CONTRIBUTING.md`, and release steps
@@ -194,7 +194,7 @@ These are the requirements for using a prebuilt release:
 | | |
 |---|---|
 | Minecraft server | **Paper 1.21 or later** (Purpur and other Paper forks work) |
-| Java | 21, for the Paper server and local MCP server |
+| Java | 21 for the local MCP server. The Paper server has its own requirement: 21 for 1.21.x, 25 for 26.1 |
 | Node | 18.17 or later, for `npx` |
 
 ### Version support
@@ -203,7 +203,8 @@ These are the requirements for using a prebuilt release:
 |---|:---:|:---:|:---:|---|
 | 1.18 – 1.20.6 | 🟡 | 🟡 | 🟡 | Planned; below the current agent floor (1.21) |
 | **1.21 – 1.21.11** | **🟢** | **🟢** | **🟢** | **Supported and live-tested** |
-| 26.1, 26.2 and later | 🟡 | 🟡 | 🟡 | Released; each needs a compatibility run before it is added |
+| **26.1 – 26.1.2** | **🟢** | **🟢** | **🟢** | **Supported and live-tested**; the server needs Java 25 |
+| 26.2 and later | 🟡 | 🟡 | 🟡 | Released; each needs a compatibility run before it is added |
 
 #### Runner support by operating system
 
@@ -215,11 +216,17 @@ These are the requirements for using a prebuilt release:
 
 **Legend:** 🟢 supported · 🟡 planned or requires the stated runtime · 🔴 unsupported.
 
-**1.21 through 1.21.11 are supported today**, and every one of them runs in the matrix
-(`versions.yaml`). **1.21.11 is where that line ends** — Minecraft moved to calendar versions after
-it, so what follows 1.21.11 is 26.1 and 26.2 rather than a 1.21.12. Those are released and are not
-in the matrix yet: adding one is a compatibility run against a real server plus a check that the
-runner's bundled data still covers it, never an edit to `versions.yaml` alone.
+**1.21 through 26.1 are supported today**, and every one of them runs in the matrix
+(`versions.yaml`). **1.21.11 is where the 1.21 line ends** — Minecraft moved to calendar versions
+after it, so what follows 1.21.11 is 26.1 rather than a 1.21.12. 26.1, 26.1.1 and 26.1.2 share one
+protocol and are covered together. 26.2 is released and is not in the matrix yet: adding it is a
+compatibility run against a real server plus a check that the runner's bundled data covers it,
+never an edit to `versions.yaml` alone.
+
+**Paper 26.1 runs on Java 25**, where the 1.21 line ran on 21. That is Paper's requirement, not this
+project's: the jars here still need only Java 21, and the agent loads on either.
+
+The world view (`bot_view`) is not offered on 26.1 yet; everything else is.
 
 **Where each platform's claim comes from.** The matrix is run on Windows, against Paper builds it
 downloads itself — so what it proves is the same on any host, because the server it talks to is the
@@ -514,7 +521,7 @@ Or in Claude Code: `claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-se
 `VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
 **One Node runner, every supported version.** It pings the server before any bot connects and
-selects the matching mineflayer data, so the same source runner works on 1.21 through 1.21.11.
+selects the matching mineflayer data, so the same source runner works on 1.21 through 26.1.
 
 ---
 
@@ -577,10 +584,10 @@ no extra translation layer).
 and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
 to download.
 
-Versions beyond 1.21.11 — which now means 26.1 and up, since the 1.21 line ended there — require a
-compatibility run before they are added, and a check that the runner's trimmed data still covers
-them. The runner selects the matching data version from the server handshake, and refuses clearly
-rather than half-working when it has no entry.
+Versions beyond 26.1 — 26.2 and whatever follows — require a compatibility run before they are
+added, and a check that the runner's trimmed data covers them. The runner bundles every version
+minecraft-data ships from the floor up, selects the matching one from the server handshake, and
+refuses clearly rather than half-working when it has no entry.
 
 ---
 

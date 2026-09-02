@@ -356,11 +356,21 @@ jobs:
           # rather than whatever --generate-notes would produce today.
           gh release view "${VERSION}" --json body --jq .body > modrinth-changelog.md
 
+          # Every release between the floor and the ceiling, in Modrinth's own list of game
+          # versions: the range crosses from 1.21.11 into 26.1, so it cannot be spelled by counting.
           ceiling=$(sed -n 's/^  - id: "\(.*\)"$/\1/p' versions.yaml | tail -1)
+          curl -fsSL "https://api.modrinth.com/v2/tag/game_version" > modrinth-game-versions.json
           node -e "
             const fs = require('fs');
-            const patch = Number(process.argv[2].split('.')[2] ?? 0);
-            const gameVersions = ['1.21', ...Array.from({ length: patch }, (_, i) => '1.21.' + (i + 1))];
+            const releases = JSON.parse(fs.readFileSync('modrinth-game-versions.json', 'utf8'))
+              .filter((tag) => tag.version_type === 'release')
+              .map((tag) => tag.version);
+            const newest = releases.indexOf(process.argv[2]);
+            const oldest = releases.indexOf('1.21');
+            if (newest < 0 || oldest < 0 || newest > oldest) {
+              throw new Error('Modrinth does not list ' + process.argv[2] + ' as a release above 1.21.');
+            }
+            const gameVersions = releases.slice(newest, oldest + 1).reverse();
             fs.writeFileSync('modrinth-version.json', JSON.stringify({
               project_id: process.argv[1],
               name: process.env.VERSION,

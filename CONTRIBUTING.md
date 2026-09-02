@@ -197,7 +197,10 @@ Tests that need a real server are skipped unless asked for, so `./gradlew build`
 ```
 
 Recognised properties: `vitaminmcp.liveServer`, `host`, `port`, `mcpPort`, `token`, `agentJar`,
-`runnerJar`.
+`runnerJar`, `version`, `paperBuild`, `protocol`, `paperCache`, `repeat`, `serverJavaHome`.
+
+`serverJavaHome` is the JDK the tests start Paper with, when it must differ from the one running
+the tests: Paper 26.1 needs Java 25 and the build stays on 21. Absent, the test's own JVM is used.
 
 > **A property only reaches the test if the build script forwards it.** Gradle does not pass `-D`
 > through to the test JVM on its own; each key is listed explicitly in the module's `build.gradle.kts`.
