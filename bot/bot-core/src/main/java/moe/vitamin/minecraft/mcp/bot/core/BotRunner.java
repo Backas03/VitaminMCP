@@ -235,8 +235,12 @@ public final class BotRunner implements AutoCloseable {
 
         String line = readWithTimeout();
         String[] reply = RunnerProtocol.decode(line);
-        if (reply.length > 0 && RunnerProtocol.ERROR.equals(reply[0])) {
-
+        if (reply.length < 2 || !command[0].equals(reply[1])) {
+            // Not a reply but something else written to stdout; taking it as one desynchronises everything after.
+            throw new IOException("The bot runner answered '" + command[0] + "' with a line that "
+                    + "is not a reply to it: " + line);
+        }
+        if (RunnerProtocol.ERROR.equals(reply[0])) {
             throw new IOException(reply.length > 2 ? reply[2] : "the runner reported an error");
         }
         return reply;

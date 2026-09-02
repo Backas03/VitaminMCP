@@ -11,6 +11,7 @@ test('normal login does not require BungeeCord forwarding', () => {
 
   assert.equal(options.fakeHost, undefined);
   assert.equal(options.username, 'ReusableBot');
+  assert.equal(options.logErrors, false);
 });
 
 test('clientIp explicitly opts into BungeeCord forwarding', () => {

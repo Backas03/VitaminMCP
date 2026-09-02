@@ -30,7 +30,8 @@ export class Dispatch {
     try {
       return await this.#run(verb, command);
     } catch (error) {
-      return protocol.encode(protocol.ERROR, verb, String(error?.message ?? error));
+      // A newline in the message would become a second stdout line, read as the next reply.
+      return protocol.encode(protocol.ERROR, verb, protocol.sanitize(error?.message ?? error));
     }
   }
 

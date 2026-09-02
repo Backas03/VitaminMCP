@@ -153,6 +153,8 @@ export function connectionOptions(host, port, version, id, clientIp) {
     auth: 'offline',
     version,
     checkTimeoutInterval: LOGIN_TIMEOUT_MILLIS,
+    // mineflayer's default console.logs bot errors, and stdout is the protocol channel.
+    logErrors: false,
   };
   if (clientIp && clientIp.trim()) {
     options.fakeHost = addressField(host, clientIp.trim(), id);
