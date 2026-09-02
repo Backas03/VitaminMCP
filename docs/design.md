@@ -227,7 +227,8 @@ A plugin jar loads into whatever JVM the server chose. Required JVM per Minecraf
 | 1.13 – 1.16.5 | Java 8+ |
 | 1.17 | Java 16+ |
 | 1.18 – 1.20.4 | Java 17+ |
-| 1.20.5+ | Java 21+ |
+| 1.20.5 – 1.21.11 | Java 21+ |
+| 26.1+ | Java 25+ |
 
 Put an agent compiled with Java 21 into Paper 1.13.2 and it dies like this:
 
@@ -698,12 +699,19 @@ lazy getters: free at runtime, but esbuild resolves each one while bundling and 
 That is how the runner asset went from an 88MB jar to a 564MB executable when the bot side moved to
 mineflayer, and every user who has no Node installed downloads it.
 
-`scripts/slim-minecraft-data.mjs` replaces the versions outside the supported line with a module
-that throws, taking the asset to 134MB. The keep-set is **derived from `data.js`, not from
-directory names**, because a version entry borrows files from older ones — 1.21.x reads out of
-pc/1.16.1, pc/1.20, pc/1.20.2, pc/1.20.3 and pc/1.20.5 — so an obvious prune builds cleanly and
-then fails on a bot that asks for a recipe. The supported line comes from `SupportedVersions.FLOOR`
-rather than being written down a second time.
+`scripts/slim-minecraft-data.mjs` replaces the versions below the floor with a module that throws,
+taking the asset to 134MB (147MB once 26.1 joined). The keep-set is **derived from `data.js`, not
+from directory names**, because a version entry borrows files from older ones — 1.21.x reads out
+of pc/1.16.1, pc/1.20, pc/1.20.2, pc/1.20.3 and pc/1.20.5 — so an obvious prune builds cleanly and
+then fails on a bot that asks for a recipe. The floor comes from `SupportedVersions.FLOOR` rather
+than being written down a second time.
+
+The keep-set is **the floor and everything above it**, not the floor's own line. It was `1.21.*`
+at first, which was the same set until 1.21.11 was followed by 26.1 rather than 1.21.12: a runner
+built that way would have refused the newest server anyone runs while every other part of the
+project supported it. A unit test now checks the bundle against `versions.yaml` entry by entry,
+resolving each through its protocol the way the runner does, so the matrix cannot again promise a
+version the runner does not carry.
 
 The server-list ping names its version for the same reason. It happens before anything knows what
 the server speaks, so minecraft-protocol otherwise falls back to the newest version it has heard of
