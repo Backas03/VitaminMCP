@@ -19,7 +19,8 @@ the server.
 
 ## Documentation
 
-- [README](https://github.com/Backas03/VitaminMCP#readme) — what it is and how the pieces fit
+- [README](https://github.com/Backas03/VitaminMCP#readme) — what it is, the tools, and setup
+- [Reference](reference.md) — how the pieces fit, every tool and step, version support, building from source
 - [Usage](usage.md) — every tool, scenario runs, multi-server sessions
 - [Design](design.md) — why it is built the way it is
 - [Publishing](publishing.md) — release and registry process
