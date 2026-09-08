@@ -3,7 +3,7 @@
 Design decisions and their reasons, for an MCP server plus protocol-bot test harness aimed at
 Minecraft plugin automation.
 
-This document holds the **why**. Rules and invariants are in `CONTRIBUTING.md`.
+This document holds the **why**. How to build and test is in `CONTRIBUTING.md`.
 
 ---
 
