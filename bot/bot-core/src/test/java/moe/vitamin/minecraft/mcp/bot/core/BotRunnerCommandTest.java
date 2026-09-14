@@ -48,6 +48,22 @@ class BotRunnerCommandTest {
                         25565));
     }
 
+    @Test
+    void appendsAnExplicitMinecraftProtocol() {
+        assertEquals(
+                List.of(
+                        "node.exe",
+                        absolute("C:/runners/runner.mjs"),
+                        "127.0.0.1",
+                        "25577",
+                        "772"),
+                BotRunner.commandFor(
+                        Path.of("C:/runners/runner.mjs"),
+                        "127.0.0.1",
+                        25577,
+                        772));
+    }
+
     private static String absolute(String path) {
         return Path.of(path).toAbsolutePath().toString();
     }

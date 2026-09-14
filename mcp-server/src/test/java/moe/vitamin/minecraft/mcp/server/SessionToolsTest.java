@@ -47,6 +47,22 @@ class SessionToolsTest {
     }
 
     @Test
+    void sessionStartPublishesTheMinecraftProtocolOverride() {
+        JsonNode start = findTool(new SessionTools().listTools(), "session_start");
+        JsonNode protocol = start.path("inputSchema").path("properties")
+                .path("minecraftProtocol");
+
+        assertEquals("integer", protocol.path("type").asText());
+        assertTrue(protocol.path("description").asText().contains("proxy"));
+
+        ObjectNode arguments = MAPPER.createObjectNode().put("minecraftProtocol", 772);
+        assertEquals(772, SessionTools.minecraftProtocol(arguments));
+        arguments.put("minecraftProtocol", 0);
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionTools.minecraftProtocol(arguments));
+    }
+
+    @Test
     void botSpawnPublishesMicrosoftAuthenticationWithoutMakingItTheDefault() {
         JsonNode spawn = findTool(new SessionTools().listTools(), "bot_spawn");
 

@@ -228,6 +228,8 @@ Windows-only, and it says so where it is offered.
 
 **You install one Node runner whatever the version.** It asks the server what it speaks and
 selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
+When a proxy echoes the ping request's protocol instead of the backend version, pass the backend's
+numeric protocol as `session_start.minecraftProtocol`.
 
 ## Building from source
 
@@ -427,8 +429,8 @@ With more than one agent running locally that is also what picks between them, a
 an error naming them rather than a guess.
 
 ```jsonc
-session_start {"session": "lobby",    "mcpPort": 25585, "port": 25577}
-session_start {"session": "survival", "mcpPort": 25586, "port": 25577}
+session_start {"session": "lobby",    "mcpPort": 25585, "port": 25577, "minecraftProtocol": 772}
+session_start {"session": "survival", "mcpPort": 25586, "port": 25577, "minecraftProtocol": 772}
 bot_spawn     {"session": "lobby", "name": "Tester1"}
 ```
 

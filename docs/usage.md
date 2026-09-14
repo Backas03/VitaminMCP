@@ -299,7 +299,8 @@ Anything passed wins over the file, so a detail that differs is the only one wor
 ```jsonc
 {
   "port": 25577,          // a proxy in front of the Minecraft port the agent knows about
-  "mcpPort": 25585        // which agent, when several run here
+  "mcpPort": 25585,       // which agent, when several run here
+  "minecraftProtocol": 772 // optional: backend protocol when the proxy's ping advertises another
 }
 ```
 
@@ -308,9 +309,11 @@ A proxied network is several servers and there is no right guess between them.
 
 Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`, or wherever
 `VITAMINMCP_RUNNER_JAR` says. There is one, whatever versions are supported: it carries a backend
-per protocol and picks the right one by asking the server what it speaks, so there is nothing here
-to get wrong. Installed through npm, it may still be downloading — the call waits for it rather
-than failing, and only a call that needs bots waits at all.
+per protocol and normally picks the right one by asking the server what it speaks. A proxy may
+answer with the protocol used by the ping request rather than the backend's protocol; pass that
+backend protocol as `minecraftProtocol` in this case. Installed through npm, the runner may still
+be downloading — the call waits for it rather than failing, and only a call that needs bots waits
+at all.
 
 **For a server on another machine** none of that applies: a token minted here says nothing about a
 server elsewhere and is not sent there, so `host` and `token` are required. The agent prints a
@@ -359,8 +362,8 @@ they coexist; starting one never disturbs another, which matters because **closi
 disconnects its bots.**
 
 ```jsonc
-session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
-session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
+session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "minecraftProtocol": 772, "token": "..."}
+session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "minecraftProtocol": 772, "token": "..."}
 ```
 
 `port` is the **proxy's** port in both — that is where a real player connects, and bots are real

@@ -41,9 +41,15 @@ public final class BotRunner implements AutoCloseable {
     /** Launches the runner and waits until it is ready. */
     public static BotRunner launch(Path runnerPath, String host, int port)
             throws IOException {
+        return launch(runnerPath, host, port, null);
+    }
+
+    /** Launches the runner with an optional Minecraft protocol override. */
+    public static BotRunner launch(Path runnerPath, String host, int port, Integer protocol)
+            throws IOException {
         Objects.requireNonNull(runnerPath, "runnerPath");
 
-        Process process = new ProcessBuilder(commandFor(runnerPath, host, port))
+        Process process = new ProcessBuilder(commandFor(runnerPath, host, port, protocol))
 
                 .redirectError(ProcessBuilder.Redirect.INHERIT)
                 .start();
@@ -75,6 +81,10 @@ public final class BotRunner implements AutoCloseable {
      * more — which is what lets the two be run against the same server on the same afternoon.
      */
     static List<String> commandFor(Path runner, String host, int port) {
+        return commandFor(runner, host, port, null);
+    }
+
+    static List<String> commandFor(Path runner, String host, int port, Integer protocol) {
         String path = runner.toAbsolutePath().toString();
         List<String> command = new ArrayList<>();
 
@@ -87,6 +97,9 @@ public final class BotRunner implements AutoCloseable {
 
         command.add(host);
         command.add(String.valueOf(port));
+        if (protocol != null) {
+            command.add(String.valueOf(protocol));
+        }
         return command;
     }
 

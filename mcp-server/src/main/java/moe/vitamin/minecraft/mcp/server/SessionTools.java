@@ -52,6 +52,11 @@ final class SessionTools {
                             "Minecraft port bots connect to. On a proxied network this is the "
                                     + "proxy's port, since that is where a real player connects. "
                                     + "Omit for a server on this machine; 25565 otherwise.");
+                    number(properties, "minecraftProtocol",
+                            "Optional Minecraft protocol number for bots, such as 772 for "
+                                    + "Minecraft 1.21.8. Omit to detect it with a server-list "
+                                    + "ping. Set it when a proxy advertises the ping request's "
+                                    + "protocol instead of the backend server's protocol.");
                     number(properties, "mcpPort",
                             "Agent's MCP port. Each backend server runs its own agent on its own "
                                     + "port, and that is what makes one session different from "
@@ -249,6 +254,7 @@ final class SessionTools {
         String host = connection.host();
         int port = connection.port();
         int mcpPort = connection.mcpPort();
+        Integer minecraftProtocol = minecraftProtocol(args);
 
         String name = args.path("session").asText("");
         if (name.isBlank()) {
@@ -265,7 +271,7 @@ final class SessionTools {
             started = new Session(host, port, mcpPort, token,
                     args.path("tls").asBoolean(false),
                     args.path("tlsFingerprint").asText(null),
-                    runner);
+                    runner, minecraftProtocol);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
@@ -278,11 +284,24 @@ final class SessionTools {
         result.put("session", name);
         result.put("connected", started.describe());
         result.put("resolvedFrom", connection.source());
+        result.put("minecraftProtocol", started.bots().protocol());
         result.set("server", info);
 
         result.set("agentTools", started.agent().listTools());
         result.set("sessions", roster());
         return result;
+    }
+
+    static Integer minecraftProtocol(JsonNode args) {
+        JsonNode value = args.get("minecraftProtocol");
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.isIntegralNumber() || !value.canConvertToInt() || value.asInt() <= 0) {
+            throw new IllegalArgumentException(
+                    "minecraftProtocol must be a positive integer protocol number");
+        }
+        return value.asInt();
     }
 
     private JsonNode sessionReset(JsonNode args) {
