@@ -117,9 +117,11 @@ final class SetupPrompts {
                     reachable from the internet, because anyone who can open a socket can then \
                     impersonate anyone.
 
-                    6. Call session_start with no arguments. On this machine it finds the host, \
-                    both ports and the token by itself. Then report the server version, the TPS \
-                    and the plugins it found.
+                    6. For a direct server on this machine, call session_start with no arguments; \
+                    it finds the host, both ports and token. For a proxied network, pass the \
+                    proxy's Minecraft port and the backend agent's mcpPort. If the proxy echoes \
+                    the ping request's protocol, also pass the backend's minecraftProtocol. Then \
+                    report the server version, TPS and plugins it found.
 
                     7. Spawn one bot with the chosen auth mode to prove the path end to end, then \
                     disconnect it with session_reset.

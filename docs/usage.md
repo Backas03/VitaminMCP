@@ -446,7 +446,7 @@ state the scenario never described makes those failures meaningless.
 
 | action | Required | Optional |
 |---|---|---|
-| `spawn` | `bot` | `clientIp` |
+| `spawn` | `bot` | `auth` (`offline` by default, or `microsoft`), `account`; `clientIp` for offline auth only |
 | `despawn` | `bot` | |
 | `move_to` | `bot`, `x`, `y`, `z` | `mode`: `path` (default) or `teleport`; `timeoutMillis` (or `timeout`) for path movement |
 | `break_block` | `bot`, `x`, `y`, `z` | |

@@ -84,11 +84,13 @@ final class SessionTools {
                 }));
 
         tools.add(tool("bot_spawn",
-                "Connect a bot and wait until it is standing in the world. Its UUID derives "
-                        + "from its name, so the same name is the same player every run — which "
-                        + "means THE SERVER REMEMBERS IT: inventory, position and plugin data "
-                        + "survive from earlier runs, so 'it has the item' may be left over "
-                        + "rather than just granted. Use an unused name to test a first join, "
+                "Connect an offline or Microsoft-authenticated bot and wait until it is standing "
+                        + "in the world. Rejected while the connected agent is read-only. An "
+                        + "offline bot's UUID derives from its name, so the same name is the same "
+                        + "player every run — which means THE SERVER REMEMBERS IT: inventory, "
+                        + "position and plugin data survive from earlier runs, so 'it has the "
+                        + "item' may be left over rather than just granted. Use an unused offline "
+                        + "name to test a first join, "
                         + "and clear what you leave behind. A successful spawn means the CLIENT "
                         + "is ready, not that the server will act yet — Paper and plugins drop "
                         + "or refuse a joining player's interactions for a few seconds, and a "
@@ -100,10 +102,11 @@ final class SessionTools {
                     string(properties, "clientIp",
                             "Optional spoofed address for the BungeeCord forwarding handshake; "
                                     + "only for a server with bungeecord=true.");
-                    string(properties, "auth",
+                    enumChoice(properties, "auth",
                             "offline (default) or microsoft. Microsoft authentication works with "
                                     + "online-mode=true. The first call returns a device login URL "
-                                    + "and code; complete it and call bot_spawn again.");
+                                    + "and code; complete it and call bot_spawn again.",
+                            List.of("offline", "microsoft"));
                     string(properties, "account",
                             "Local cache key for a Microsoft account, defaulting to name. It may "
                                     + "be an email or a harmless alias and is never sent to the "
@@ -401,9 +404,8 @@ final class SessionTools {
 
         if (online) {
             throw new IllegalStateException("A player called " + name + " is already on the server,"
-                    + " so spawning one would disconnect them. A bot's UUID is derived from its"
-                    + " name, which makes two bots of the same name the same player — if another"
-                    + " session is driving this server, give each session its own bot names."
+                    + " so another login with that player identity would disconnect them. If "
+                    + "another session is driving this server, use a different test player there."
                     + " Otherwise use session_reset, or wait for that player to leave.");
         }
     }

@@ -94,6 +94,8 @@ class SessionToolsTest {
         JsonNode properties = spawn.path("inputSchema").path("properties");
         assertTrue(properties.path("auth").path("description").asText()
                 .contains("online-mode=true"));
+        assertEquals(MAPPER.createArrayNode().add("offline").add("microsoft"),
+                properties.path("auth").path("enum"));
         assertTrue(properties.path("account").path("description").asText()
                 .contains("cache key"));
         assertTrue(spawn.path("description").asText().contains("read-only"));

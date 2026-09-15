@@ -66,14 +66,14 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 
 | | |
 |---|---|
-| `session_start` | Connect to a server and its agent. Every other tool needs it. Several sessions can be open at once — one per backend of a proxied network |
+| `session_start` | Connect to a server and its agent. Every other tool needs it. Several sessions can be open at once — one per backend of a proxied network. A proxy that echoes the ping request's protocol may need the backend's `minecraftProtocol` |
 | `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests. World state is **not** rolled back. `close: true` ends the session instead |
 
 ### Players
 
 | | |
 |---|---|
-| `bot_spawn` | Connect a bot and wait until it is standing in the world. UUID derives from the name |
+| `bot_spawn` | Connect an offline or Microsoft-authenticated bot and wait until it is standing in the world. Offline UUIDs derive from the name |
 | `bot_inspect` | What the bot's client was actually sent: menu contents, messages (chat, action bar, title, subtitle) with the millisecond each arrived and a cursor to read only what came after an action, boss bars, sidebar scoreboard, health, food, experience and active effects |
 | `bot_view` | Open a localhost-only live world or inventory view for a bot. The inventory view needs nothing extra; the world view downloads an optional asset the first time it is asked for, published for Windows x64 |
 | `bot_run_scenario` | Run a whole scenario. Stops at the first failure with evidence attached |
@@ -210,8 +210,10 @@ never cross-built, and every one of them is started in CI and has to refuse its 
 with the expected exit code before it is uploaded. The world view is the one piece that is still
 Windows-only, and it says so where it is offered.
 
-**You install one Node runner whatever the version.** It asks the server what it speaks and
-selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
+**You install one Node runner whatever the version.** It normally asks the server what it speaks
+and selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
+If a proxy echoes the ping request's protocol instead of its backend's, pass the backend's numeric
+protocol as `session_start.minecraftProtocol`.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
 to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.

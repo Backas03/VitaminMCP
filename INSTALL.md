@@ -121,7 +121,11 @@ is. Three defaults to know before you change anything:
 
 Skip this section if you only need the agent.
 
-Bots use offline mode and reuse the same deterministic UUID when the bot name is reused:
+Bot joins and actions change server state, so first set `read-only: false` in
+`plugins/VitaminMCP/config.yml` and restart the server.
+
+Offline authentication is the default. It is convenient for an isolated test server and reuses
+the same deterministic UUID when the bot name is reused:
 
 ```properties
 # server.properties
@@ -132,6 +136,17 @@ online-mode=false
 
 Reusing a bot name reuses its deterministic offline UUID. Set BungeeCord forwarding explicitly only
 for a test that passes `clientIp` and needs a spoofed address or UUID.
+
+To keep `online-mode=true`, use a dedicated Microsoft account instead:
+
+```json
+bot_spawn {"name":"RealProfileName", "auth":"microsoft", "account":"qa-primary"}
+```
+
+The first call returns a Microsoft device-login URL and code. Complete the login, then repeat the
+same call. `account` is a local cache key and defaults to `name`; cached tokens live under
+`~/.vitaminmcp/accounts`, or `VITAMINMCP_ACCOUNTS_DIR` if set before the MCP server starts. The
+authenticated Java profile name must match `name`. `clientIp` forwarding is offline-only.
 
 `move_to` walks to its destination by default, using the same client-side physics loop that sends
 the movement packets between the two points. That means plugins listening for pressure plates and
@@ -215,10 +230,13 @@ With more than one agent running locally that is also what picks between them, a
 an error naming them rather than a guess.
 
 ```jsonc
-session_start {"session": "lobby",    "mcpPort": 25585, "port": 25577}
-session_start {"session": "survival", "mcpPort": 25586, "port": 25577}
+session_start {"session": "lobby",    "mcpPort": 25585, "port": 25577, "minecraftProtocol": 772}
+session_start {"session": "survival", "mcpPort": 25586, "port": 25577, "minecraftProtocol": 772}
 bot_spawn     {"session": "lobby", "name": "Tester1"}
 ```
+
+Normally omit `minecraftProtocol`. Set it to the backend's numeric protocol only when a proxy's
+server-list ping advertises the protocol from the request instead of the backend's protocol.
 
 Every other tool takes `session`. Omit it and it resolves only while one session is open; with
 several it is an error naming them, rather than a guess about which server you meant. The full
@@ -262,8 +280,10 @@ Or in Claude Code: `claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-se
 
 `VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
-**One Node runner, every supported version.** It pings the server before any bot connects and
-selects the matching mineflayer data, so the same source runner works on 1.21 through 26.1.
+**One Node runner, every supported version.** It normally pings the server before any bot connects
+and selects the matching mineflayer data, so the same source runner works on 1.21 through 26.1. A
+proxy that echoes the ping request's protocol needs `session_start.minecraftProtocol` set to the
+backend's actual numeric protocol.
 
 ---
 

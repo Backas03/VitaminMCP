@@ -41,7 +41,7 @@ lifecycle. That also means it works on plugins you did not write — anything in
 | `state_query` | Live server state — `player` (including permission checks), `block`, `inventory` (the only place a plugin GUI's contents exist), `plugin` (commands, permissions, live config) |
 | `command_exec` | Run a command as the console or as any player, permissions and all |
 | `wait_for` | Block until a condition holds — `ticks`, `block_is`, `block_is_not`, `event`, `player_online`, `player_offline`, `player_near`, `player_state`, `inventory_open`, `inventory_contains`, `log_matches` |
-| `bot_spawn` | Connect a real Minecraft protocol client as a test player |
+| `bot_spawn` | Connect an offline or Microsoft-authenticated Minecraft protocol client as a test player |
 | `bot_inspect` | Everything the bot's client was sent: chat, action bar, titles, boss bars, scoreboard, health, effects, open menu |
 | `bot_run_scenario` | Run a whole scripted test in one call; a failure reports the failing step and what the server was doing at that moment |
 | `bot_view` | Live localhost viewer for one bot — the world, or the menu it has open |
