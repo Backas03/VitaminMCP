@@ -1,6 +1,6 @@
 # Usage
 
-Installation is in [../README.md](../README.md). This document picks up after it.
+Installation is in [../INSTALL.md](../INSTALL.md). This document picks up after it.
 
 There are two ways to use this, and they need different things installed.
 
@@ -271,7 +271,7 @@ incomplete and paging cannot recover those records.
 
 ## Response budget
 
-Every query tool has a cap (200 records / 50KB by default). The exact value is stated in each tool's
+Every query tool has a cap (200 records / 25KB by default, configurable in config.yml). The exact value is stated in each tool's
 description. When output is cut, the response says so:
 
 - `truncated: true` — cut for budget
@@ -400,6 +400,12 @@ response is the handle name, actual player name, UUID and where it landed.
 Omit `clientIp` for an ordinary login. If the test needs the server to attribute the connection to
 a chosen address — IP bans, per-IP connection limits or geo logic — pass `clientIp` and set the test
 server's `spigot.yml` `settings.bungeecord` to `true`; that opts into the forwarding handshake.
+
+A bot accepts every resource pack the server pushes and downloads none of them: it reports the pack
+as loaded and moves on. That is not politeness. A plugin that sends a pack while the connection is
+still in the configuration phase holds it there until the client answers, so a silent bot never
+joins at all, and a declining one gets kicked by anything that forces its pack. Nothing about a
+pack is therefore observable from a bot — checking what is *in* one needs a real client.
 
 For an `online-mode=true` server, authenticate a dedicated Microsoft account instead:
 
@@ -704,7 +710,7 @@ When the cause is not visible there, dig in this order:
 
 | Symptom | Cause |
 |---|---|
-| Bot connection refused with `did you forget to enable BungeeCord in spigot.yml?` | The server is not `online-mode=false` + `bungeecord: true` ([README](../README.md) §2) |
+| Bot connection refused with `did you forget to enable BungeeCord in spigot.yml?` | The server is not `online-mode=false` + `bungeecord: true` ([INSTALL.md](../INSTALL.md) §3) |
 | `Microsoft login required` | Open the URL, enter the device code, finish login, then repeat the same `bot_spawn` call |
 | Microsoft login owns a different profile | `name` must be the authenticated Minecraft Java profile name; keep `account` as the cache alias |
 | Bot actions are unavailable in read-only mode | Set `read-only: false` in the agent config and restart; bot joins and actions change server state |
@@ -720,6 +726,8 @@ When the cause is not visible there, dig in this order:
 | A chest will not open | An opaque block sits directly above it (a game rule) |
 | `use_entity` reports no entity there | Either the coordinates are off, or the bot is too far away to have been sent the entity at all. The failure lists what is nearby — `move_to` first if the list is empty |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
+| `did not join within 30000ms (last state: configuration, ...)` | The server is still waiting for something the connection owes it. The packet named alongside is the last one it sent |
+| `is a jar, but this version's bot runner is not one` | A `runnerJar` path left over from before the native runner. Pass the runner that ships with this version |
 | The bot connected but nothing works | It has not landed. `bot_spawn` waits for that, but when driving manually the ground under it may still be air |
 | It breaks from the second run onward | State from the previous run survived. Use `session_reset`, and if the scenario depends on the world, have it create that state |
 
