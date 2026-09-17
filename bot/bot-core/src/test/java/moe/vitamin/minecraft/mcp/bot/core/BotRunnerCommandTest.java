@@ -55,7 +55,7 @@ class BotRunnerCommandTest {
     void appendsAnExplicitMinecraftProtocol() throws IOException {
         assertEquals(
                 List.of(
-                        "node.exe",
+                        BotRunner.node(),
                         absolute("C:/runners/runner.mjs"),
                         "127.0.0.1",
                         "25577",
