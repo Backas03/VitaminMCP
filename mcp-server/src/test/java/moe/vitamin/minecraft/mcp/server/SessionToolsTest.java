@@ -72,6 +72,45 @@ class SessionToolsTest {
     }
 
     @Test
+    void sessionStartPublishesTheMinecraftProtocolOverride() {
+        JsonNode start = findTool(new SessionTools().listTools(), "session_start");
+        JsonNode protocol = start.path("inputSchema").path("properties")
+                .path("minecraftProtocol");
+
+        assertEquals("integer", protocol.path("type").asText());
+        assertTrue(protocol.path("description").asText().contains("proxy"));
+
+        ObjectNode arguments = MAPPER.createObjectNode().put("minecraftProtocol", 772);
+        assertEquals(772, SessionTools.minecraftProtocol(arguments));
+        arguments.put("minecraftProtocol", 0);
+        assertThrows(IllegalArgumentException.class,
+                () -> SessionTools.minecraftProtocol(arguments));
+    }
+
+    @Test
+    void botSpawnPublishesMicrosoftAuthenticationWithoutMakingItTheDefault() {
+        JsonNode spawn = findTool(new SessionTools().listTools(), "bot_spawn");
+
+        JsonNode properties = spawn.path("inputSchema").path("properties");
+        assertTrue(properties.path("auth").path("description").asText()
+                .contains("online-mode=true"));
+        assertEquals(MAPPER.createArrayNode().add("offline").add("microsoft"),
+                properties.path("auth").path("enum"));
+        assertTrue(properties.path("account").path("description").asText()
+                .contains("cache key"));
+        assertTrue(spawn.path("description").asText().contains("read-only"));
+    }
+
+    @Test
+    void readOnlyModeRejectsBotMutationAtTheOuterServer() {
+        IllegalStateException rejected = assertThrows(
+                IllegalStateException.class, () -> SessionTools.requireWritable(true));
+
+        assertTrue(rejected.getMessage().contains("read-only"));
+        SessionTools.requireWritable(false);
+    }
+
+    @Test
     void aMessageCursorRejectsASameNamedBotWithAnotherStreamId() {
         ClientView first = view(43L, "opaque-stream-a", List.of(
                 new ClientMessage(42L, 1_000L, "first connection")));

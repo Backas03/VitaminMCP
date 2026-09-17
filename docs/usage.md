@@ -299,7 +299,8 @@ Anything passed wins over the file, so a detail that differs is the only one wor
 ```jsonc
 {
   "port": 25577,          // a proxy in front of the Minecraft port the agent knows about
-  "mcpPort": 25585        // which agent, when several run here
+  "mcpPort": 25585,       // which agent, when several run here
+  "minecraftProtocol": 772 // optional: backend protocol when the proxy's ping advertises another
 }
 ```
 
@@ -308,9 +309,11 @@ A proxied network is several servers and there is no right guess between them.
 
 Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`, or wherever
 `VITAMINMCP_RUNNER_JAR` says. There is one, whatever versions are supported: it carries a backend
-per protocol and picks the right one by asking the server what it speaks, so there is nothing here
-to get wrong. Installed through npm, it may still be downloading — the call waits for it rather
-than failing, and only a call that needs bots waits at all.
+per protocol and normally picks the right one by asking the server what it speaks. A proxy may
+answer with the protocol used by the ping request rather than the backend's protocol; pass that
+backend protocol as `minecraftProtocol` in this case. Installed through npm, the runner may still
+be downloading — the call waits for it rather than failing, and only a call that needs bots waits
+at all.
 
 **For a server on another machine** none of that applies: a token minted here says nothing about a
 server elsewhere and is not sent there, so `host` and `token` are required. The agent prints a
@@ -359,8 +362,8 @@ they coexist; starting one never disturbs another, which matters because **closi
 disconnects its bots.**
 
 ```jsonc
-session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
-session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
+session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "minecraftProtocol": 772, "token": "..."}
+session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "minecraftProtocol": 772, "token": "..."}
 ```
 
 `port` is the **proxy's** port in both — that is where a real player connects, and bots are real
@@ -390,9 +393,9 @@ each hold a bot runner process, so close the ones you are done with.
 bot_spawn {"name": "Tester1"}
 ```
 
-The name is the identity. The UUID derives from it, so `Tester1` is the same player today as
-yesterday and permission-dependent behaviour reproduces. The response is the UUID and where it
-landed.
+Offline authentication is the default. The name is the identity and the UUID derives from it, so
+`Tester1` is the same player today as yesterday and permission-dependent behaviour reproduces. The
+response is the handle name, actual player name, UUID and where it landed.
 
 Omit `clientIp` for an ordinary login. If the test needs the server to attribute the connection to
 a chosen address — IP bans, per-IP connection limits or geo logic — pass `clientIp` and set the test
@@ -403,6 +406,21 @@ as loaded and moves on. That is not politeness. A plugin that sends a pack while
 still in the configuration phase holds it there until the client answers, so a silent bot never
 joins at all, and a declining one gets kicked by anything that forces its pack. Nothing about a
 pack is therefore observable from a bot — checking what is *in* one needs a real client.
+
+For an `online-mode=true` server, authenticate a dedicated Microsoft account instead:
+
+```json
+bot_spawn {"name":"RealProfileName", "auth":"microsoft", "account":"qa-primary"}
+```
+
+On the first call, open the returned device-login URL and enter its code. Authentication continues
+in the runner; after completing it, repeat the same `bot_spawn` call. `account` is a local token
+cache key and defaults to `name`. Cached tokens live under `~/.vitaminmcp/accounts`, or the
+directory named by `VITAMINMCP_ACCOUNTS_DIR` when the MCP server started. No password or access
+token belongs in a tool call. `clientIp` forwarding is available only to offline bots.
+
+Both bot modes are rejected while the agent is `read-only: true`; enable writes and restart the
+server before spawning or running a scenario.
 
 After that, use the proxied agent tools directly. `wait_for`, `state_query` and `events_query` all
 go to the session's server — the only one open, or the one `session` names.
@@ -428,7 +446,7 @@ state the scenario never described makes those failures meaningless.
 
 | action | Required | Optional |
 |---|---|---|
-| `spawn` | `bot` | `clientIp` |
+| `spawn` | `bot` | `auth` (`offline` by default, or `microsoft`), `account`; `clientIp` for offline auth only |
 | `despawn` | `bot` | |
 | `move_to` | `bot`, `x`, `y`, `z` | `mode`: `path` (default) or `teleport`; `timeoutMillis` (or `timeout`) for path movement |
 | `break_block` | `bot`, `x`, `y`, `z` | |
@@ -693,6 +711,9 @@ When the cause is not visible there, dig in this order:
 | Symptom | Cause |
 |---|---|
 | Bot connection refused with `did you forget to enable BungeeCord in spigot.yml?` | The server is not `online-mode=false` + `bungeecord: true` ([INSTALL.md](../INSTALL.md) §3) |
+| `Microsoft login required` | Open the URL, enter the device code, finish login, then repeat the same `bot_spawn` call |
+| Microsoft login owns a different profile | `name` must be the authenticated Minecraft Java profile name; keep `account` as the cache alias |
+| Bot actions are unavailable in read-only mode | Set `read-only: false` in the agent config and restart; bot joins and actions change server state |
 | `err startup ... unsupported server version` | The Node runner has no minecraft-data entry for what this server speaks. Add the version to the compatibility matrix only after a live verification. |
 | Events are not captured | The type is on the high-frequency list. Name it in `types`, and enable `capture-high-frequency` if needed |
 | `command_exec` is missing | `read-only: true` (the default). `session_start`'s `agentTools` lists the tools that actually exist |

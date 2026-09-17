@@ -52,6 +52,22 @@ class BotRunnerCommandTest {
     }
 
     @Test
+    void appendsAnExplicitMinecraftProtocol() throws IOException {
+        assertEquals(
+                List.of(
+                        "node.exe",
+                        absolute("C:/runners/runner.mjs"),
+                        "127.0.0.1",
+                        "25577",
+                        "772"),
+                BotRunner.commandFor(
+                        Path.of("C:/runners/runner.mjs"),
+                        "127.0.0.1",
+                        25577,
+                        772));
+    }
+
+    @Test
     void refusesAJarWithoutLettingTheOperatingSystemExplainIt() {
         IOException refused = assertThrows(IOException.class, () -> BotRunner.commandFor(
                 Path.of("C:/vitaminmcp/bot-runner.jar"),

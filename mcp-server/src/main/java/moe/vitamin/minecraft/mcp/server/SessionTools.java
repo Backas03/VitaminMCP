@@ -49,6 +49,11 @@ final class SessionTools {
                     number(properties, "port",
                             "Minecraft port bots connect to — on a proxied network, the proxy's "
                                     + "port. Omit for a server on this machine; 25565 otherwise.");
+                    number(properties, "minecraftProtocol",
+                            "Optional Minecraft protocol number for bots, such as 772 for "
+                                    + "Minecraft 1.21.8. Omit to detect it with a server-list "
+                                    + "ping. Set it when a proxy advertises the ping request's "
+                                    + "protocol instead of the backend server's protocol.");
                     number(properties, "mcpPort",
                             "Agent's MCP port; what tells one backend's session from another. "
                                     + "Omit when only one agent runs on this machine.");
@@ -79,11 +84,13 @@ final class SessionTools {
                 }));
 
         tools.add(tool("bot_spawn",
-                "Connect a bot and wait until it is standing in the world. Its UUID derives "
-                        + "from its name, so the same name is the same player every run — which "
-                        + "means THE SERVER REMEMBERS IT: inventory, position and plugin data "
-                        + "survive from earlier runs, so 'it has the item' may be left over "
-                        + "rather than just granted. Use an unused name to test a first join, "
+                "Connect an offline or Microsoft-authenticated bot and wait until it is standing "
+                        + "in the world. Rejected while the connected agent is read-only. An "
+                        + "offline bot's UUID derives from its name, so the same name is the same "
+                        + "player every run — which means THE SERVER REMEMBERS IT: inventory, "
+                        + "position and plugin data survive from earlier runs, so 'it has the "
+                        + "item' may be left over rather than just granted. Use an unused offline "
+                        + "name to test a first join, "
                         + "and clear what you leave behind. A successful spawn means the CLIENT "
                         + "is ready, not that the server will act yet — Paper and plugins drop "
                         + "or refuse a joining player's interactions for a few seconds, and a "
@@ -95,6 +102,15 @@ final class SessionTools {
                     string(properties, "clientIp",
                             "Optional spoofed address for the BungeeCord forwarding handshake; "
                                     + "only for a server with bungeecord=true.");
+                    enumChoice(properties, "auth",
+                            "offline (default) or microsoft. Microsoft authentication works with "
+                                    + "online-mode=true. The first call returns a device login URL "
+                                    + "and code; complete it and call bot_spawn again.",
+                            List.of("offline", "microsoft"));
+                    string(properties, "account",
+                            "Local cache key for a Microsoft account, defaulting to name. It may "
+                                    + "be an email or a harmless alias and is never sent to the "
+                                    + "Minecraft server. Reuse it to reuse the cached login.");
                 }));
 
         tools.add(tool("bot_inspect",
@@ -139,7 +155,8 @@ final class SessionTools {
                 }));
 
         tools.add(tool("bot_run_scenario",
-                "Run a declarative scenario. Steps: spawn, despawn, move_to, break_block, "
+                "Run a declarative scenario. Rejected while the connected agent is read-only. "
+                        + "Steps: spawn, despawn, move_to, break_block, "
                         + "attack_entity, use_block, use_entity, hold_item, drop_item, "
                         + "place_block, jump, sneak, sprint, look_at, assert_reachable, "
                         + "command, chat, console, click_slot, close_menu, wait_for, "
@@ -205,6 +222,7 @@ final class SessionTools {
         String host = connection.host();
         int port = connection.port();
         int mcpPort = connection.mcpPort();
+        Integer minecraftProtocol = minecraftProtocol(args);
 
         String name = args.path("session").asText("");
         if (name.isBlank()) {
@@ -221,23 +239,37 @@ final class SessionTools {
             started = new Session(host, port, mcpPort, token,
                     args.path("tls").asBoolean(false),
                     args.path("tlsFingerprint").asText(null),
-                    runner);
+                    runner, minecraftProtocol);
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
         }
         sessions.put(name, started);
 
         JsonNode info = started.agent().call("server_info", AgentClient.arguments());
+        started.readOnly(info.path("readOnly").asBoolean(true));
 
         ObjectNode result = MAPPER.createObjectNode();
         result.put("session", name);
         result.put("connected", started.describe());
         result.put("resolvedFrom", connection.source());
+        result.put("minecraftProtocol", started.bots().protocol());
         result.set("server", info);
 
         result.set("agentTools", started.agent().listTools());
         result.set("sessions", roster());
         return result;
+    }
+
+    static Integer minecraftProtocol(JsonNode args) {
+        JsonNode value = args.get("minecraftProtocol");
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        if (!value.isIntegralNumber() || !value.canConvertToInt() || value.asInt() <= 0) {
+            throw new IllegalArgumentException(
+                    "minecraftProtocol must be a positive integer protocol number");
+        }
+        return value.asInt();
     }
 
     private JsonNode sessionReset(JsonNode args) {
@@ -301,16 +333,20 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_spawn needs 'name'.");
         }
         Session session = require(args);
+        requireWritable(session.readOnly());
         refuseIfAlreadyOnline(session, name);
 
         try {
             BotRunner.BotHandle bot = session.bots().spawn(
-                    name, args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null);
+                    name,
+                    args.hasNonNull("clientIp") ? args.get("clientIp").asText() : null,
+                    args.path("auth").asText("offline"),
+                    args.path("account").asText(null));
 
             ObjectNode result = MAPPER.createObjectNode();
             result.put("name", name);
-            result.put("uuid",
-                    moe.vitamin.minecraft.mcp.bot.core.BotIdentity.offlineUuid(name).toString());
+            result.put("playerName", bot.playerName());
+            result.put("uuid", bot.uuid());
             result.put("x", bot.blockX());
             result.put("y", bot.blockY());
             result.put("z", bot.blockZ());
@@ -322,7 +358,7 @@ final class SessionTools {
             try {
                 ObjectNode query = AgentClient.arguments();
                 query.put("kind", "player");
-                query.put("target", name);
+                query.put("target", bot.playerName());
                 JsonNode state = session.agent().call("state_query", query);
                 result.put("gameMode", state.path("gameMode").asText(null));
                 result.put("op", state.path("op").asBoolean(false));
@@ -368,9 +404,8 @@ final class SessionTools {
 
         if (online) {
             throw new IllegalStateException("A player called " + name + " is already on the server,"
-                    + " so spawning one would disconnect them. A bot's UUID is derived from its"
-                    + " name, which makes two bots of the same name the same player — if another"
-                    + " session is driving this server, give each session its own bot names."
+                    + " so another login with that player identity would disconnect them. If "
+                    + "another session is driving this server, use a different test player there."
                     + " Otherwise use session_reset, or wait for that player to leave.");
         }
     }
@@ -546,7 +581,9 @@ final class SessionTools {
             throw new IllegalArgumentException("bot_run_scenario needs 'scenario'.");
         }
 
-        ScenarioResult result = require(args).runner().run(scenario);
+        Session session = require(args);
+        requireWritable(session.readOnly());
+        ScenarioResult result = session.runner().run(scenario);
 
         ObjectNode response = MAPPER.createObjectNode();
         response.put("passed", result.passed());
@@ -565,6 +602,16 @@ final class SessionTools {
             }
         }
         return response;
+    }
+
+    /** The documented read-only boundary also covers player joins and bot actions. */
+    static void requireWritable(boolean readOnly) {
+        if (readOnly) {
+            throw new IllegalStateException(
+                    "Bot actions are unavailable: this agent is running read-only. Set "
+                            + "'read-only: false' in config.yml and restart the server to allow "
+                            + "players or scenarios to change it.");
+        }
     }
 
     /** Where a session is connecting, and how that was worked out. */
