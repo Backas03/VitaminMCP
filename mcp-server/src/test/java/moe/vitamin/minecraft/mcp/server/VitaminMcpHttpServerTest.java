@@ -7,6 +7,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,13 +21,16 @@ class VitaminMcpHttpServerTest {
               "clientInfo":{"name":"test","version":"1"}}}
             """;
 
+    private static final Duration IDLE_TIMEOUT = Duration.ofHours(1);
+
     private final HttpClient client = HttpClient.newHttpClient();
+    private final AtomicLong now = new AtomicLong();
     private VitaminMcpHttpServer server;
     private URI endpoint;
 
     @BeforeEach
     void start() throws Exception {
-        server = new VitaminMcpHttpServer(0);
+        server = new VitaminMcpHttpServer(0, IDLE_TIMEOUT, now::get);
         server.start();
         endpoint = URI.create("http://127.0.0.1:" + server.port() + "/mcp");
     }
@@ -66,6 +71,26 @@ class VitaminMcpHttpServerTest {
 
         assertEquals(403, response.statusCode());
         assertEquals(0, server.sessionCount());
+    }
+
+    @Test
+    void closesOnlySessionsLeftIdlePastTheTimeout() throws Exception {
+        String abandoned = post(INITIALIZE, null, null).headers()
+                .firstValue(VitaminMcpHttpServer.SESSION_HEADER).orElseThrow();
+        String active = post(INITIALIZE, null, null).headers()
+                .firstValue(VitaminMcpHttpServer.SESSION_HEADER).orElseThrow();
+
+        now.addAndGet(IDLE_TIMEOUT.toNanos() - 1);
+        server.expireIdleSessions();
+        assertEquals(2, server.sessionCount());
+
+        assertEquals(200, post(toolsList(), active, null).statusCode());
+        now.addAndGet(1);
+        server.expireIdleSessions();
+
+        assertEquals(1, server.sessionCount());
+        assertEquals(404, post(toolsList(), abandoned, null).statusCode());
+        assertEquals(200, post(toolsList(), active, null).statusCode());
     }
 
     private HttpResponse<String> post(String body, String session, String origin) throws Exception {

@@ -10,31 +10,48 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongSupplier;
 
 /** One loopback HTTP server shared by every local MCP client. */
 final class VitaminMcpHttpServer implements AutoCloseable {
 
     static final int DEFAULT_PORT = 25584;
     static final String SESSION_HEADER = "Mcp-Session-Id";
+    static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofHours(6);
 
     private static final int MAX_REQUEST_BYTES = 1024 * 1024;
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final int requestedPort;
-    private final Map<String, VitaminMcpServer> sessions = new ConcurrentHashMap<>();
+    private final long idleTimeoutNanos;
+    private final LongSupplier clock;
+    private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     private final CountDownLatch stopped = new CountDownLatch(1);
 
     private HttpServer server;
     private ExecutorService executor;
+    private ScheduledExecutorService sweeper;
 
     VitaminMcpHttpServer(int port) {
+        this(port, DEFAULT_IDLE_TIMEOUT, System::nanoTime);
+    }
+
+    VitaminMcpHttpServer(int port, Duration idleTimeout, LongSupplier clock) {
         this.requestedPort = port;
+        this.idleTimeoutNanos = idleTimeout.toNanos();
+        this.clock = clock;
     }
 
     void start() throws IOException {
@@ -44,6 +61,12 @@ final class VitaminMcpHttpServer implements AutoCloseable {
         executor = Executors.newVirtualThreadPerTaskExecutor();
         server.setExecutor(executor);
         server.start();
+        sweeper = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "VitaminMCP-http-idle-sessions");
+            thread.setDaemon(true);
+            return thread;
+        });
+        sweeper.scheduleWithFixedDelay(this::expireIdleSessionsQuietly, 1, 1, TimeUnit.MINUTES);
         System.err.println("VitaminMCP shared server ready on http://127.0.0.1:"
                 + port() + "/mcp");
     }
@@ -61,6 +84,29 @@ final class VitaminMcpHttpServer implements AutoCloseable {
             stopped.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    void expireIdleSessions() {
+        long now = clock.getAsLong();
+        List<Session> expired = new ArrayList<>();
+        for (String id : sessions.keySet()) {
+            sessions.computeIfPresent(id, (key, session) -> {
+                if (session.inFlight.get() > 0 || now - session.lastUsedNanos < idleTimeoutNanos) {
+                    return session;
+                }
+                expired.add(session);
+                return null;
+            });
+        }
+        expired.forEach(session -> session.client.close());
+    }
+
+    private void expireIdleSessionsQuietly() {
+        try {
+            expireIdleSessions();
+        } catch (RuntimeException e) {
+            System.err.println("VitaminMCP could not close an idle session: " + e);
         }
     }
 
@@ -102,7 +148,7 @@ final class VitaminMcpHttpServer implements AutoCloseable {
 
         String method = request.path("method").asText("");
         String sessionId = exchange.getRequestHeaders().getFirst(SESSION_HEADER);
-        VitaminMcpServer client;
+        Session session;
 
         if ("initialize".equals(method)) {
             if (sessionId != null || !request.hasNonNull("id")) {
@@ -111,18 +157,25 @@ final class VitaminMcpHttpServer implements AutoCloseable {
                 return;
             }
             sessionId = UUID.randomUUID().toString();
-            client = new VitaminMcpServer();
-            sessions.put(sessionId, client);
+            session = new Session(clock.getAsLong());
+            session.inFlight.incrementAndGet();
+            sessions.put(sessionId, session);
             exchange.getResponseHeaders().add(SESSION_HEADER, sessionId);
         } else {
-            client = sessionId == null ? null : sessions.get(sessionId);
-            if (client == null) {
+            session = sessionId == null ? null : acquire(sessionId);
+            if (session == null) {
                 respond(exchange, 404, "");
                 return;
             }
         }
 
-        ObjectNode response = client.handle(request);
+        ObjectNode response;
+        try {
+            response = session.client.handle(request);
+        } finally {
+            session.lastUsedNanos = clock.getAsLong();
+            session.inFlight.decrementAndGet();
+        }
         if (response == null) {
             respond(exchange, 202, "");
         } else {
@@ -130,14 +183,22 @@ final class VitaminMcpHttpServer implements AutoCloseable {
         }
     }
 
+    private Session acquire(String sessionId) {
+        return sessions.computeIfPresent(sessionId, (key, session) -> {
+            session.inFlight.incrementAndGet();
+            session.lastUsedNanos = clock.getAsLong();
+            return session;
+        });
+    }
+
     private void delete(HttpExchange exchange) throws IOException {
         String sessionId = exchange.getRequestHeaders().getFirst(SESSION_HEADER);
-        VitaminMcpServer removed = sessionId == null ? null : sessions.remove(sessionId);
+        Session removed = sessionId == null ? null : sessions.remove(sessionId);
         if (removed == null) {
             respond(exchange, 404, "");
             return;
         }
-        removed.close();
+        removed.client.close();
         respond(exchange, 204, "");
     }
 
@@ -178,12 +239,27 @@ final class VitaminMcpHttpServer implements AutoCloseable {
             server.stop(0);
             server = null;
         }
-        sessions.values().forEach(VitaminMcpServer::close);
+        if (sweeper != null) {
+            sweeper.shutdownNow();
+            sweeper = null;
+        }
+        sessions.values().forEach(session -> session.client.close());
         sessions.clear();
         if (executor != null) {
             executor.shutdownNow();
             executor = null;
         }
         stopped.countDown();
+    }
+
+    private static final class Session {
+
+        final VitaminMcpServer client = new VitaminMcpServer();
+        final AtomicInteger inFlight = new AtomicInteger();
+        volatile long lastUsedNanos;
+
+        Session(long now) {
+            this.lastUsedNanos = now;
+        }
     }
 }
