@@ -80,9 +80,14 @@ npx -y vitaminmcp service install
 ```
 
 Windows asks for administrator approval once. It does not ask for or store your account password.
-Re-running the command updates the installed package. Inspect or remove it with `service status`
-or `service uninstall`; uninstalling keeps Microsoft account and agent handshake data under
-`~/.vitaminmcp`.
+The installer works in the background after that approval and prints what it did, or why it
+stopped, in the terminal you started it from. Re-running the command updates the installed package.
+Inspect or remove it with `service status` or `service uninstall`; uninstalling keeps Microsoft
+account and agent handshake data under `~/.vitaminmcp`.
+
+`C:\ProgramData\VitaminMCP` is created for administrators and the service only, and the service
+logs under it need an elevated shell to read. If a folder of that name already exists and the
+installer did not create it, the install refuses rather than run a service out of it.
 
 Then point each client at the shared endpoint instead of giving it a command. For Codex:
 
@@ -105,6 +110,18 @@ npx -y vitaminmcp --http 25584
 The shared server binds only to `127.0.0.1`. Each MCP client receives an isolated session, so its
 Minecraft connections and bots cannot be addressed by another client. Bot runners still start
 only after `session_start`; merely loading another project adds no JVM or runner process.
+
+**The shared endpoint has no token of its own.** Stdio needs none because the server is a child of
+the client that started it; a loopback port has no such owner. Anything on the machine that can
+open `127.0.0.1:25584` — every program, under every Windows or Unix account — can call
+`session_start` with the agent handshakes in `~/.vitaminmcp` and spawn bots with the Microsoft
+accounts stored there. On a computer only you use that is the access your own programs already
+have. On one shared with other accounts it hands them your server's console, so keep to stdio
+there.
+
+A session nobody has called for six hours is closed and its bots disconnect, so a client that
+exited without ending its session does not hold them forever. A client that comes back after that
+starts a new session and calls `session_start` again.
 
 This mode is opt-in. The stdio configuration above remains the portable default for clients that
 already manage child-process lifetimes correctly.

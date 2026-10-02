@@ -695,13 +695,36 @@ The default transport is stdio because every MCP client supports it. `--http` is
 alternative for clients that eagerly launch one stdio process per loaded project. It binds only to
 loopback and gives each connection a separate `SessionTools` owner through `Mcp-Session-Id`; only
 the JVM and server code are shared. The HTTP process is owned by a service manager; the stdio path
-remains unchanged.
+remains unchanged, JVM defaults included — the small fixed heap is applied only to `--http`, where
+the process outlives every client.
+
+The endpoint carries no token, and that is a boundary rather than an oversight to paper over: the
+handshake token a stdio server reads from disk is protected by being the user's own child process,
+and a loopback port is reachable by every account on the machine. The shared mode is therefore for
+a single-user computer, and the install guide says so instead of the server pretending otherwise.
+Requests carrying `Origin` are refused, which is what keeps a web page from reaching it.
+
+A plain request-and-response endpoint cannot tell a client that has died from one that is quiet, so
+a session expires after six hours without a call and takes its bots with it. A request in flight
+keeps its session alive however long it runs.
 
 On Windows the durable owner is an opt-in service, installed with `vitaminmcp service install`.
 The installer copies the invoking npm package to a stable ProgramData path, verifies a pinned WinSW
 binary, and runs under the passwordless service-specific `NT SERVICE\VitaminMCP` identity. That
-identity receives access only to its installed runtime, logs and the user's `.vitaminmcp` cache.
+identity receives access only to its installed runtime, logs and the user's `.vitaminmcp` cache,
+plus read access to the Node executable and the JDK when those live somewhere the service could not
+otherwise read, such as a user profile.
 The client then needs only the loopback URL: no per-session hook owns or duplicates the JVM.
+
+`C:\ProgramData` lets every local account create files in the folders beneath it, and a service
+that loads code from such a folder runs whatever was planted there. The install directory is
+therefore created with inheritance cut and only SYSTEM, Administrators and the service identity on
+it, in one step so there is no moment it is writable; a directory of that name the installer did
+not create — wrong owner, inherited permissions, or a link — is refused, not adopted.
+
+The elevated half of the installer has no console anyone will see, so it writes what it did to a
+file the unelevated half prints. A failed start includes the tail of the service logs for the same
+reason.
 
 The handoff is a file rename. Partial downloads use `.part`; `mcp-server` waits for the rename
 rather than polling for a size, so it can never open a half-written asset.
