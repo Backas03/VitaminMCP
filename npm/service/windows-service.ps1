@@ -6,10 +6,11 @@ param(
     [string]$PackageRoot = '',
     [string]$NodePath = '',
     [string]$NpmCliPath = '',
-    [string]$JavaPath = '',
+    [string]$JavaHome = '',
     [string]$DataHome = '',
     [string]$Version = '',
-    [string]$ServerJar = ''
+    [string]$ServerJar = '',
+    [string]$OutputPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -24,6 +25,9 @@ $AppRoot = Join-Path $InstallRoot 'app'
 $Logs = Join-Path $InstallRoot 'logs'
 $WinSwUrl = 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe'
 $WinSwSha256 = 'b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f'
+$SystemSid = 'S-1-5-18'
+$AdministratorsSid = 'S-1-5-32-544'
+$WorldSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -36,30 +40,95 @@ function Quote-PowerShell([string]$Value) {
 }
 
 function Invoke-Elevated {
-    $values = @{
-        Action = $Action
-        PackageRoot = $PackageRoot
-        NodePath = $NodePath
-        NpmCliPath = $NpmCliPath
-        JavaPath = $JavaPath
-        DataHome = $DataHome
-        Version = $Version
-        ServerJar = $ServerJar
+    $output = [System.IO.Path]::GetTempFileName()
+    try {
+        $values = @{
+            Action = $Action
+            PackageRoot = $PackageRoot
+            NodePath = $NodePath
+            NpmCliPath = $NpmCliPath
+            JavaHome = $JavaHome
+            DataHome = $DataHome
+            Version = $Version
+            ServerJar = $ServerJar
+            OutputPath = $output
+        }
+        $command = '& ' + (Quote-PowerShell $PSCommandPath)
+        foreach ($entry in $values.GetEnumerator()) {
+            $command += ' -' + $entry.Key + ' ' + (Quote-PowerShell ([string]$entry.Value))
+        }
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        Write-Host 'Waiting for administrator approval, then for the service change to finish...'
+        try {
+            $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru `
+                -WindowStyle Hidden `
+                -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
+        } catch {
+            throw 'Administrator approval is required to change the VitaminMCP service.'
+        }
+        Get-Content -LiteralPath $output | Write-Host
+        $code = $process.ExitCode
+    } finally {
+        Remove-Item -LiteralPath $output -Force -ErrorAction SilentlyContinue
     }
-    $command = '& ' + (Quote-PowerShell $PSCommandPath)
-    foreach ($entry in $values.GetEnumerator()) {
-        $command += ' -' + $entry.Key + ' ' + (Quote-PowerShell ([string]$entry.Value))
-    }
-    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    $process = Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru `
-        -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded)
-    exit $process.ExitCode
+    exit $code
 }
 
 function Invoke-Native([string]$File, [string[]]$Arguments) {
-    & $File @Arguments
+    $ErrorActionPreference = 'Continue'
+    & $File @Arguments 2>&1 | ForEach-Object { "$_" }
     if ($LASTEXITCODE -ne 0) {
         throw "$File exited with code $LASTEXITCODE"
+    }
+}
+
+function Initialize-InstallRoot {
+    $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    $security = [Security.AccessControl.DirectorySecurity]::new()
+    $security.SetOwner([Security.Principal.SecurityIdentifier]::new($AdministratorsSid))
+    $security.SetAccessRuleProtection($true, $false)
+    foreach ($sid in @($SystemSid, $AdministratorsSid)) {
+        $security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]::new($sid), 'FullControl', $inherit, 'None', 'Allow'))
+    }
+    [System.IO.Directory]::CreateDirectory($InstallRoot, $security) | Out-Null
+
+    $directory = Get-Item -LiteralPath $InstallRoot -Force
+    $existing = Get-Acl -LiteralPath $InstallRoot
+    $owner = $existing.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $reparse = [bool]($directory.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    if ($reparse -or $owner -ne $AdministratorsSid -or -not $existing.AreAccessRulesProtected) {
+        throw "$InstallRoot already exists and was not created by this installer. " +
+            'Remove it as an administrator and run the install again.'
+    }
+}
+
+function Test-WorldReadable([string]$Path) {
+    $read = [Security.AccessControl.FileSystemRights]::ReadAndExecute
+    $rules = (Get-Acl -LiteralPath $Path).GetAccessRules(
+        $true, $true, [Security.Principal.SecurityIdentifier])
+    foreach ($rule in $rules) {
+        if ($rule.AccessControlType -eq 'Allow' -and `
+                $WorldSids -contains $rule.IdentityReference.Value -and `
+                ($rule.FileSystemRights -band $read) -eq $read) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Grant-ServiceRead([string]$Path, [string]$Rights) {
+    if (Test-WorldReadable $Path) {
+        return
+    }
+    Invoke-Native 'icacls.exe' @($Path, '/grant', "NT SERVICE\${ServiceId}:$Rights", '/T', '/C', '/Q')
+}
+
+function Get-LogTail {
+    $files = Get-ChildItem -LiteralPath $Logs -Filter '*.log' -File -ErrorAction SilentlyContinue
+    foreach ($file in $files) {
+        Write-Output "--- $($file.Name)"
+        Get-Content -LiteralPath $file.FullName -Tail 20
     }
 }
 
@@ -132,10 +201,11 @@ function Show-Status {
 
 function Install-Service {
     if (-not $PackageRoot -or -not $NodePath -or -not $NpmCliPath -or `
-            -not $JavaPath -or -not $DataHome -or -not $Version) {
+            -not $JavaHome -or -not $DataHome -or -not $Version) {
         throw 'The service installer did not receive complete runtime paths.'
     }
-    foreach ($required in @($PackageRoot, $NodePath, $NpmCliPath, $JavaPath)) {
+    $javaPath = Join-Path $JavaHome 'bin\java.exe'
+    foreach ($required in @($PackageRoot, $NodePath, $NpmCliPath, $javaPath)) {
         if (-not (Test-Path -LiteralPath $required)) {
             throw "Required path does not exist: $required"
         }
@@ -144,7 +214,8 @@ function Install-Service {
         throw "Local MCP server jar does not exist: $ServerJar"
     }
 
-    New-Item -ItemType Directory -Force -Path $InstallRoot, $DataHome, $Logs | Out-Null
+    Initialize-InstallRoot
+    New-Item -ItemType Directory -Force -Path $DataHome, $Logs | Out-Null
 
     $download = "$Wrapper.part"
     $validWrapper = (Test-Path -LiteralPath $Wrapper -PathType Leaf) -and `
@@ -199,7 +270,7 @@ function Install-Service {
         Copy-Item -LiteralPath $ServerJar -Destination $localJar -Force
     }
 
-    $javaDirectory = Split-Path -Parent $JavaPath
+    $javaDirectory = Split-Path -Parent $javaPath
     $accounts = Join-Path $DataHome 'accounts'
     $serverEnvironment = if ($localJar) {
         "  <env name=`"VITAMINMCP_SERVER_JAR`" value=`"$(Escape-Xml $localJar)`" />`r`n"
@@ -215,6 +286,7 @@ function Install-Service {
   <env name="VITAMINMCP_HOME" value="$(Escape-Xml $DataHome)" />
   <env name="VITAMINMCP_ACCOUNTS_DIR" value="$(Escape-Xml $accounts)" />
   <env name="VITAMINMCP_NODE" value="$(Escape-Xml $NodePath)" />
+  <env name="JAVA_HOME" value="$(Escape-Xml $JavaHome)" />
   <env name="PATH" value="$(Escape-Xml $javaDirectory);%PATH%" />
 $serverEnvironment  <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>
@@ -234,14 +306,14 @@ $serverEnvironment  <startmode>Automatic</startmode>
     Invoke-Native 'sc.exe' @('sidtype', $ServiceId, 'unrestricted')
 
     $principal = "NT SERVICE\$ServiceId"
-    Invoke-Native 'icacls.exe' @($InstallRoot, '/grant', "${principal}:(OI)(CI)RX", '/T', '/C')
-    Invoke-Native 'icacls.exe' @($Logs, '/grant', "${principal}:(OI)(CI)M", '/T', '/C')
-    Invoke-Native 'icacls.exe' @($DataHome, '/grant', "${principal}:(OI)(CI)M", '/T', '/C')
-    Invoke-Native 'icacls.exe' @($NodePath, '/grant', "${principal}:RX", '/C')
-    Invoke-Native 'icacls.exe' @($JavaPath, '/grant', "${principal}:RX", '/C')
+    Invoke-Native 'icacls.exe' @($InstallRoot, '/grant', "${principal}:(OI)(CI)RX", '/T', '/C', '/Q')
+    Invoke-Native 'icacls.exe' @($Logs, '/grant', "${principal}:(OI)(CI)M", '/T', '/C', '/Q')
+    Invoke-Native 'icacls.exe' @($DataHome, '/grant', "${principal}:(OI)(CI)M", '/T', '/C', '/Q')
+    Grant-ServiceRead $NodePath 'RX'
+    Grant-ServiceRead $JavaHome '(OI)(CI)RX'
 
     Start-Service -Name $ServiceId
-    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    $deadline = [DateTime]::UtcNow.AddSeconds(60)
     do {
         if (Test-Mcp) {
             Write-Output "VitaminMCP $Version is ready at http://127.0.0.1:25584/mcp"
@@ -254,7 +326,8 @@ $serverEnvironment  <startmode>Automatic</startmode>
         }
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $deadline)
-    throw "The service started but MCP did not become ready. Check $Logs"
+    Get-LogTail
+    throw "The service started but MCP did not become ready. The log tails above are from $Logs"
 }
 
 function Uninstall-Service {
@@ -288,8 +361,23 @@ if ($Action -eq 'status') {
 if (-not (Test-Administrator)) {
     Invoke-Elevated
 }
-if ($Action -eq 'install') {
-    Install-Service
-} else {
-    Uninstall-Service
+
+function Invoke-Action {
+    if ($Action -eq 'install') {
+        Install-Service
+    } else {
+        Uninstall-Service
+    }
 }
+
+if (-not $OutputPath) {
+    Invoke-Action
+    exit 0
+}
+try {
+    Invoke-Action *> $OutputPath
+} catch {
+    "ERROR: $($_.Exception.Message)" | Out-File -LiteralPath $OutputPath -Append
+    exit 1
+}
+exit 0

@@ -53,6 +53,11 @@ uninstall.
 Elsewhere, a platform service manager can own `npx -y vitaminmcp --http 25584` as a foreground
 process. The portable default remains stdio.
 
+The shared endpoint is loopback-only but has no token: every program and every account on the
+machine can use the agent handshakes and Microsoft accounts under `~/.vitaminmcp` through it. Use
+it on a computer only you use, and keep to stdio on a shared one. A session left idle for six
+hours is closed and its bots disconnect.
+
 ## What you get
 
 - Spawn and control test players — real protocol clients, not mock `Player` objects

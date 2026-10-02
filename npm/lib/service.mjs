@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { javaHome as findJavaHome } from './java.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ACTIONS = new Set(['install', 'uninstall', 'status']);
 
@@ -23,6 +25,7 @@ export function runServiceAction(
     platform = process.platform,
     node = process.execPath,
     java = null,
+    javaHome = java ? findJavaHome(java) : null,
     npmCli = npmCliPath(node),
     packageRoot = path.join(HERE, '..'),
     home = process.env.VITAMINMCP_HOME ?? path.join(os.homedir(), '.vitaminmcp'),
@@ -34,6 +37,9 @@ export function runServiceAction(
   }
   if (action === 'install' && !npmCli) {
     throw new Error('service install needs npm; run it through npx or install Node with npm');
+  }
+  if (action === 'install' && !javaHome) {
+    throw new Error(`service install could not find the Java home of ${java ?? 'java'}`);
   }
 
   const script = path.join(HERE, '..', 'service', 'windows-service.ps1');
@@ -48,7 +54,7 @@ export function runServiceAction(
     '-Version', release,
   ];
   if (npmCli) args.push('-NpmCliPath', npmCli);
-  if (java) args.push('-JavaPath', executablePath(java));
+  if (javaHome) args.push('-JavaHome', javaHome);
 
   const localJar = path.join(packageRoot, '..', 'build', 'dist', 'mcp-server.jar');
   if (!existsSync(path.join(packageRoot, 'checksums.json')) && existsSync(localJar)) {
@@ -60,13 +66,6 @@ export function runServiceAction(
     child.once('error', reject);
     child.once('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
   });
-}
-
-function executablePath(command) {
-  if (path.isAbsolute(command)) return command;
-  const found = spawnSync('where.exe', [command], { encoding: 'utf8' });
-  const resolved = found.status === 0 ? found.stdout.split(/\r?\n/, 1)[0]?.trim() : null;
-  return resolved || command;
 }
 
 function npmCliPath(node) {

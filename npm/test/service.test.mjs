@@ -17,6 +17,8 @@ test('passes stable runtime paths to the Windows installer', async () => {
   const result = runServiceAction('install', '3.1.1', {
     platform: 'win32',
     node: 'C:\\Node\\node.exe',
+    java: 'java.exe',
+    javaHome: 'C:\\Java\\jdk-21',
     npmCli: 'C:\\Node\\npm-cli.js',
     packageRoot: 'C:\\pkg',
     home: 'C:\\Users\\tester\\.vitaminmcp',
@@ -32,4 +34,19 @@ test('passes stable runtime paths to the Windows installer', async () => {
   assert.equal(invocation.options.stdio, 'inherit');
   assert.ok(invocation.args.includes('C:\\pkg'));
   assert.ok(invocation.args.includes('C:\\Users\\tester\\.vitaminmcp'));
+  assert.equal(invocation.args[invocation.args.indexOf('-JavaHome') + 1], 'C:\\Java\\jdk-21');
+});
+
+test('refuses to install a service without a Java home', () => {
+  assert.throws(
+    () => runServiceAction('install', '3.1.1', {
+      platform: 'win32',
+      node: 'C:\\Node\\node.exe',
+      java: 'java.exe',
+      javaHome: null,
+      npmCli: 'C:\\Node\\npm-cli.js',
+      spawnProcess: () => assert.fail('the installer must not start'),
+    }),
+    /Java home/,
+  );
 });

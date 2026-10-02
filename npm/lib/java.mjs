@@ -5,9 +5,22 @@ import path from 'node:path';
 /** The floor the jars are compiled against. Below it they will not load at all. */
 export const REQUIRED_JAVA = 21;
 
-/** Keeps every launcher-started JVM small, including the optional shared HTTP server. */
+const SHARED_SERVER_JVM_FLAGS = ['-Xms16m', '-Xmx128m', '-XX:+UseSerialGC'];
+
 export function mcpServerArgs(server, args = []) {
-  return ['-Xms16m', '-Xmx128m', '-XX:+UseSerialGC', '-jar', server, ...args];
+  const flags = args.includes('--http') ? SHARED_SERVER_JVM_FLAGS : [];
+  return [...flags, '-jar', server, ...args];
+}
+
+export function javaHome(java, run = spawnSync) {
+  const probe = run(
+    java,
+    ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-XshowSettings:properties', '-version'],
+    { encoding: 'utf8' },
+  );
+  const output = `${probe.stderr || ''}${probe.stdout || ''}`;
+  const match = output.match(/^\s*java\.home = (.+?)\s*$/m);
+  return match ? match[1] : null;
 }
 
 /**
