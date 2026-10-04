@@ -60,7 +60,8 @@ hours is closed and its bots disconnect.
 
 ## What you get
 
-- Spawn and control test players — real protocol clients, not mock `Player` objects
+- Spawn and control test players — real protocol clients, not mock `Player` objects. Offline by
+  default, or a dedicated Microsoft account on an `online-mode=true` server
 - Execute commands as the console or as a player
 - Open, read, click and assert on inventories and plugin GUIs
 - Wait for events and conditions instead of sleeping
@@ -72,42 +73,47 @@ hours is closed and its bots disconnect.
 - **Java 21 or later** on this machine — the jars run on the JVM. Point `JAVA_HOME` at it, or have
   `java` on `PATH`. (The Paper server itself needs Java 25 from 26.1 on; that is Paper's
   requirement, and the agent loads there unchanged)
-- **Node 18.17 or later** when using the source runner fallback. If Node is absent, the launcher
-  selects a pinned platform runner asset instead.
+- **Node 18.17 or later** — `npx` needs it anyway, and the bot runner bundled in this package runs
+  on it. If the `node` the launcher finds is missing or older, it downloads a self-contained
+  platform runner instead.
 - **Paper 1.21 or later** on the Minecraft server, with `VitaminMCP.jar` in its `plugins/`
 
 ## Environment
 
 | | |
 |---|---|
-| `JAVA_HOME` | the JDK to run the jars with |
-| `VITAMINMCP_HOME` | where jars and agent handshakes are kept. Default `~/.vitaminmcp` |
-| `VITAMINMCP_TOKEN` | an agent token, for a server that leaves no local handshake |
+| `JAVA_HOME` | the JDK to run the jars with; Java 21 or later |
+| `VITAMINMCP_HOME` | where downloaded jars and runner assets are kept, and where the agent leaves its handshake. Default `~/.vitaminmcp` |
+| `VITAMINMCP_ACCOUNTS_DIR` | where Microsoft account tokens for online-mode bots are cached. Default `~/.vitaminmcp/accounts`; `VITAMINMCP_HOME` does not move it |
+| `VITAMINMCP_TOKEN` | an agent token, for a server that leaves no local handshake. `session_start` falls back to it when no `token` argument is given |
 | `VITAMINMCP_SERVER_JAR` | run this `mcp-server.jar` instead of a downloaded one |
-| `VITAMINMCP_RUNNER_JAR` | use this runner path instead of automatic selection |
-| `VITAMINMCP_NODE` | Node executable for the source runner fallback |
-| `VITAMINMCP_NODE_RUNNER` | bundled `runner.mjs` path when Node is available |
-| `VITAMINMCP_VIEWER_PATH` | local viewer module to use instead of the pinned optional asset |
+| `VITAMINMCP_RUNNER_JAR` | use this runner — a `runner.mjs` or a native runner binary — instead of the one the launcher selects |
+| `VITAMINMCP_NODE` | the Node executable that runs the bundled runner. Default: `node` on `PATH` |
+| `VITAMINMCP_NODE_RUNNER` | the `runner.mjs` to run instead of the one bundled in this package |
+| `VITAMINMCP_VIEWER_PATH` | a local `prismarine-viewer` module for `bot_view` world views, instead of the pinned optional asset |
 
 ## What it downloads
 
 On first run, from [the GitHub release](https://github.com/Backas03/VitaminMCP/releases)
-matching this package's version, into `~/.vitaminmcp/jars/<version>/`:
+matching this package's version:
 
-- `mcp-server.jar` (~2 MB) — waited for, since nothing works without it
-- a source Node runner when Node and the bundled runner are available — no runner asset download
-- otherwise one platform runner asset (`win-x64`, `linux-x64`, `linux-arm64`, `darwin-x64` or
-  `darwin-arm64`), checked against a SHA-256 pinned into this package
+- `mcp-server.jar` (~2 MB), into `~/.vitaminmcp/jars/<version>/` — waited for, since nothing
+  works without it
+- usually nothing else: the bot runner is Node source bundled in this package, and runs on the
+  Node that `npx` already found
+- only when that Node is missing or too old, one self-contained platform runner
+  (`bot-runner-win-x64.exe`, `bot-runner-linux-x64`, `bot-runner-linux-arm64`,
+  `bot-runner-darwin-x64` or `bot-runner-darwin-arm64`), into `~/.vitaminmcp/assets/<version>/`.
+  It is over 100 MB and is downloaded before the server starts
 
 The trimmed `bot-runner-viewer-win-x64.tgz` is separate and is downloaded into
-`~/.vitaminmcp/assets/<version>/` only when `bot_view` asks for a world view. It is checked against
-the SHA-256 pinned into this package at publish time, extracted on first use, and never fetched by
-an installation that only spawns bots or uses the inventory viewer. The current native viewer asset
-is Windows x64; on Linux and macOS, set `VITAMINMCP_VIEWER_PATH` to a local sidecar until those
-assets are released.
+`~/.vitaminmcp/assets/<version>/` only when `bot_view` asks for a world view. It is extracted
+there on first use, and never fetched by an installation that only spawns bots or uses the
+inventory viewer. The current native viewer asset is Windows x64; on Linux and macOS, set
+`VITAMINMCP_VIEWER_PATH` to a local sidecar until those assets are released.
 
-Every downloaded file is checked against its pinned SHA-256. A file that does not match is deleted
-rather than run.
+Every downloaded file is checked against a SHA-256 pinned into this package when it was published.
+A file that does not match is deleted rather than run.
 
 Full documentation, design notes and the plugin itself:
 **[github.com/Backas03/VitaminMCP](https://github.com/Backas03/VitaminMCP)**

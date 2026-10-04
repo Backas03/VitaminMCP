@@ -51,13 +51,20 @@ Options
                 manage one shared Windows service (install also updates it)
 
 Environment
-  JAVA_HOME               the JDK to run the jars with; Java 21 or later
-  VITAMINMCP_HOME         where jars and agent handshakes are kept (default ~/.vitaminmcp)
-  VITAMINMCP_TOKEN        an agent token, for a server that leaves no local handshake
-  VITAMINMCP_SERVER_JAR   run this mcp-server jar instead of a downloaded one
-  VITAMINMCP_RUNNER_JAR   use this runner path instead of selecting one automatically
-  VITAMINMCP_NODE         Node executable for the source runner fallback
-  VITAMINMCP_NODE_RUNNER  path to a bundled runner.mjs when Node is available
+  JAVA_HOME                the JDK to run the jars with; Java 21 or later
+  VITAMINMCP_HOME          where downloaded jars and runner assets are kept, and where the agent
+                           leaves its handshake (default ~/.vitaminmcp)
+  VITAMINMCP_ACCOUNTS_DIR  where Microsoft account tokens for online-mode bots are cached
+                           (default ~/.vitaminmcp/accounts; VITAMINMCP_HOME does not move it)
+  VITAMINMCP_TOKEN         an agent token, for a server that leaves no local handshake;
+                           session_start falls back to it when no token argument is given
+  VITAMINMCP_SERVER_JAR    run this mcp-server.jar instead of a downloaded one
+  VITAMINMCP_RUNNER_JAR    use this runner, a runner.mjs or a native runner binary, instead of
+                           the one the launcher selects
+  VITAMINMCP_NODE          the Node executable that runs the bundled runner (default: node on PATH)
+  VITAMINMCP_NODE_RUNNER   the runner.mjs to run instead of the one bundled in this package
+  VITAMINMCP_VIEWER_PATH   a local prismarine-viewer module for bot_view world views, instead of
+                           the pinned optional asset
 `;
 
 async function main() {
