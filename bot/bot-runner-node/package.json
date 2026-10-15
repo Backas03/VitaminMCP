@@ -18,6 +18,7 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:live": "node test/lifecycle.live.mjs",
+    "test:26.2": "node test/26.2.live.mjs",
     "test:parity": "node test/parity.live.mjs",
     "test:actions": "node test/actions.live.mjs",
     "build:sea": "node scripts/build-sea.mjs"
