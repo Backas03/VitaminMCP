@@ -1,6 +1,8 @@
 package moe.vitamin.minecraft.mcp.server;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import moe.vitamin.minecraft.mcp.bot.core.BotRunner;
 import moe.vitamin.minecraft.mcp.testkit.AgentClient;
 import moe.vitamin.minecraft.mcp.testkit.ScenarioRunner;
@@ -26,6 +28,12 @@ final class Session {
      */
     private BotRunner bots;
     private String botsUnavailable;
+
+    /** "(MC: 26.3)", which Paper and its forks append to {@code Bukkit.getVersion()}. */
+    private static final Pattern MC_SUFFIX = Pattern.compile("\\(MC: ([0-9][^)\\s]*)\\)");
+
+    /** The "1.21.8" of the API version "1.21.8-R0.1-SNAPSHOT", for a server without the suffix. */
+    private static final Pattern LEADING_VERSION = Pattern.compile("[0-9]+\\.[0-9]+(\\.[0-9]+)?");
 
     Session(String host, int port, int mcpPort, String token, boolean tls, String tlsFingerprint,
             java.nio.file.Path runnerJar) {
@@ -123,9 +131,23 @@ final class Session {
         }
     }
 
+    /**
+     * The Minecraft version the agent's server runs, or null when server_info does not say in a
+     * form this recognises — and then the runner's ping decides alone, as it always did.
+     */
+    static String minecraftVersionOf(JsonNode serverInfo) {
+        Matcher suffix = MC_SUFFIX.matcher(serverInfo.path("version").asText(""));
+        if (suffix.find()) {
+            return suffix.group(1);
+        }
+        Matcher leading = LEADING_VERSION.matcher(serverInfo.path("minecraftVersion").asText(""));
+        return leading.lookingAt() ? leading.group() : null;
+    }
+
     private void launchBots() {
         try {
-            bots = BotRunner.launch(runnerJar, host, port, minecraftProtocol);
+            bots = BotRunner.launch(runnerJar, host, port, minecraftProtocol,
+                    minecraftVersionOf(serverInfo));
             botsUnavailable = null;
         } catch (java.io.IOException e) {
             bots = null;

@@ -119,9 +119,9 @@ final class SetupPrompts {
 
                     6. For a direct server on this machine, call session_start with no arguments; \
                     it finds the host, both ports and token. For a proxied network, pass the \
-                    proxy's Minecraft port and the backend agent's mcpPort. If the proxy echoes \
-                    the ping request's protocol, also pass the backend's minecraftProtocol. Then \
-                    report the server version, TPS and plugins it found.
+                    proxy's Minecraft port and the backend agent's mcpPort; bots follow the \
+                    backend's version as its agent reports it. Then report the server version, \
+                    TPS and plugins it found, and whether 'bots' says they can join.
 
                     7. Spawn one bot with the chosen auth mode to prove the path end to end, then \
                     disconnect it with session_reset.

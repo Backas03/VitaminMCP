@@ -54,9 +54,10 @@ final class SessionTools {
                                     + "port. Omit for a server on this machine; 25565 otherwise.");
                     number(properties, "minecraftProtocol",
                             "Optional Minecraft protocol number for bots, such as 772 for "
-                                    + "Minecraft 1.21.8. Omit to detect it with a server-list "
-                                    + "ping. Set it when a proxy advertises the ping request's "
-                                    + "protocol instead of the backend server's protocol.");
+                                    + "Minecraft 1.21.8. Omit to follow the Minecraft version the "
+                                    + "agent reports, checked against a server-list ping; that "
+                                    + "also covers a proxy that echoes the ping request's "
+                                    + "protocol. Set it only to override the agent's version.");
                     number(properties, "mcpPort",
                             "Agent's MCP port; what tells one backend's session from another. "
                                     + "Omit when only one agent runs on this machine.");
@@ -251,6 +252,14 @@ final class SessionTools {
         if (started.botsAvailable()) {
             result.put("minecraftProtocol", started.bots().protocol());
             bots.put("available", true);
+            int pinged = started.bots().pingProtocol();
+            if (pinged != 0) {
+                bots.put("pingProtocol", pinged);
+                bots.put("note", "The server-list ping answered protocol " + pinged + ", not "
+                        + "the protocol of the Minecraft version the agent reports. Something in "
+                        + "front of the server answered it — a proxy, or ViaVersion with "
+                        + "ViaBackwards — so bots follow the agent's version instead.");
+            }
         } else {
             result.putNull("minecraftProtocol");
             bots.put("available", false);

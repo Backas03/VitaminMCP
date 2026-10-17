@@ -76,3 +76,39 @@ export function versionForProtocol(protocol) {
       .join(', ')}). It supports ${mc.supportedVersions.join(', ')}.`,
   );
 }
+
+/**
+ * The protocol a Minecraft version speaks, from minecraft-data's table of every release it has
+ * heard of. That table is wider than the versions it carries data for, so a release the runner
+ * cannot speak yet still has a number here.
+ */
+export function protocolForVersion(minecraftVersion) {
+  return minecraftData.versionsByMinecraftVersion?.pc?.[minecraftVersion]?.version;
+}
+
+/**
+ * Which protocol to speak: the one the agent says its server runs, over the one the ping answered.
+ *
+ * A ping is answered by whatever holds the port, and two common things answer it with the
+ * protocol the ping was written in rather than the server's own: a proxy that echoes it, and
+ * ViaVersion with ViaBackwards, which rewrites the status reply to the client's protocol whenever
+ * it can translate. The ping is written in PING_VERSION, so either one made the runner join as
+ * 1.21.1 — on a 26.x server, through a chain of translations, without a word. The agent runs inside
+ * the server, and nothing answers for it.
+ *
+ * Without a version from the agent the ping decides, as it always did. `pinged` is returned only
+ * when the two disagree, so the caller can say so.
+ */
+export function selectProtocol(pinged, serverVersion) {
+  if (!serverVersion) {
+    return { protocol: pinged };
+  }
+  const declared = protocolForVersion(serverVersion);
+  if (declared === undefined) {
+    throw new Error(
+      `The agent reports Minecraft ${serverVersion}, which this runner's minecraft-data does not `
+        + 'know: the dependency is older than the server.',
+    );
+  }
+  return declared === pinged ? { protocol: declared } : { protocol: declared, pinged };
+}

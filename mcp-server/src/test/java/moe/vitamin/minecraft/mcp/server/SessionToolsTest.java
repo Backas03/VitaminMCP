@@ -88,6 +88,20 @@ class SessionToolsTest {
     }
 
     @Test
+    void theMinecraftVersionIsReadFromWhatServerInfoCarries() {
+        assertEquals("1.21.8", Session.minecraftVersionOf(MAPPER.createObjectNode()
+                .put("version", "1.21.8-60-5c4c5c2 (MC: 1.21.8)")
+                .put("minecraftVersion", "1.21.8-R0.1-SNAPSHOT")));
+        assertEquals("26.3-rc-3", Session.minecraftVersionOf(MAPPER.createObjectNode()
+                .put("version", "26.3-rc-3-12-abcdef (MC: 26.3-rc-3)")));
+        assertEquals("1.21.4", Session.minecraftVersionOf(MAPPER.createObjectNode()
+                .put("version", "git-Purpur-2400")
+                .put("minecraftVersion", "1.21.4-R0.1-SNAPSHOT")));
+        assertEquals(null, Session.minecraftVersionOf(MAPPER.createObjectNode()
+                .put("version", "unknown")));
+    }
+
+    @Test
     void botSpawnPublishesMicrosoftAuthenticationWithoutMakingItTheDefault() {
         JsonNode spawn = findTool(new SessionTools().listTools(), "bot_spawn");
 

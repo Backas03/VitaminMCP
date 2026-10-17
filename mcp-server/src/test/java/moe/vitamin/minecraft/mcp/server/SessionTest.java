@@ -40,6 +40,9 @@ class SessionTest {
     private HttpServer agent;
     private Path refusingRunner;
 
+    /** What the stand-in agent's server_info reports as Bukkit.getVersion(). */
+    private String reportedVersion = "26.3-200-abcdef (MC: 26.3)";
+
     @BeforeEach
     void startAgent() throws IOException {
         assumeTrue(nodeIsAvailable(), "Node is needed to run the stand-in runner");
@@ -144,22 +147,58 @@ class SessionTest {
         }
     }
 
+    /**
+     * ViaBackwards on a 26.1 server answers the ping in the ping request's protocol, 767. The
+     * stand-in runner reports what a real one does once it has the agent's version: 775 spoken,
+     * 767 pinged — and refuses if the version never reached it.
+     */
+    @Test
+    void botsFollowTheAgentsVersionAndSayWhenThePingDisagreed() throws IOException {
+        reportedVersion = "26.1.2-48-abcdef (MC: 26.1.2)";
+        Path translated = Files.createDirectories(directory.resolve("translated"))
+                .resolve("runner.mjs");
+        Files.writeString(translated,
+                "const version = process.env.VITAMINMCP_SERVER_VERSION;\n"
+                        + "process.stdout.write(version === '26.1.2'\n"
+                        + "  ? 'ready\\t775\\t767\\n'\n"
+                        + "  : 'err\\tstartup\\tError: the runner was told ' + version + '\\n');\n"
+                        + "process.stdin.on('data', () => process.exit(0));\n"
+                        + "process.stdin.on('end', () => process.exit(0));\n");
+
+        SessionTools tools = new SessionTools();
+        try {
+            JsonNode started = tools.call("session_start", start(translated));
+
+            assertTrue(started.path("bots").path("available").asBoolean(), started.toString());
+            assertEquals(775, started.path("minecraftProtocol").asInt(), started.toString());
+            assertEquals(767, started.path("bots").path("pingProtocol").asInt(), started.toString());
+            assertTrue(started.path("bots").path("note").asText().contains("ViaBackwards"),
+                    started.toString());
+        } finally {
+            tools.close();
+        }
+    }
+
     private ObjectNode start() {
+        return start(refusingRunner);
+    }
+
+    private ObjectNode start(Path runner) {
         return MAPPER.createObjectNode()
                 .put("host", "127.0.0.1")
                 .put("port", 25565)
                 .put("mcpPort", agent.getAddress().getPort())
                 .put("token", "token")
-                .put("runnerJar", refusingRunner.toString());
+                .put("runnerJar", runner.toString());
     }
 
-    /** The stand-in agent's answers: a writable 26.3 server with nobody on it. */
-    private static String answer(String tool) {
+    /** The stand-in agent's answers: a writable server with nobody on it. */
+    private String answer(String tool) {
         ObjectNode payload = MAPPER.createObjectNode();
         switch (tool) {
             case "server_info" -> payload
                     .put("implementation", "Paper")
-                    .put("version", "26.3-200-abcdef (MC: 26.3)")
+                    .put("version", reportedVersion)
                     .put("minecraftVersion", "26.3-R0.1-SNAPSHOT")
                     .put("readOnly", false);
             case "state_query" -> payload.put("online", false);
