@@ -339,10 +339,11 @@ Or in Claude Code: `claude mcp add vitaminmcp -- java -jar /absolute/path/mcp-se
 
 `VITAMINMCP_RUNNER_JAR`, or `session_start`'s `runnerJar`, names the Node script or native runner.
 
-**One Node runner, every supported version.** It normally pings the server before any bot connects
-and selects the matching mineflayer data, so the same source runner works on 1.21 through 26.1. A
-proxy that echoes the ping request's protocol needs `session_start.minecraftProtocol` set to the
-backend's actual numeric protocol.
+**One Node runner, every supported version.** It follows the Minecraft version the agent reports,
+checked against a server-list ping, and selects the matching mineflayer data, so the same source
+runner works on 1.21 through 26.1. A proxy that echoes the ping request's protocol needs nothing
+extra; `session_start.minecraftProtocol` is only an override. On a server newer than the runner
+supports (26.2 and 26.3 today) the session opens for the agent tools alone and says why.
 
 ---
 
