@@ -59,6 +59,7 @@ way.
 | `400 ... "otp" with value "[object Object]"` | An npm CLI bug on Windows: the one-time-password prompt passes an object through. Pass `--otp=<code>` on the command line instead, or upgrade npm |
 | `404 ... Adding a new TOTP 2FA is no longer supported` | Register a passkey or security key instead |
 | `400 ... NPM package ownership validation failed. Expected mcpName 'X', got 'x'` | From the MCP registry, not npm. `mcpName` is compared exactly, capitalisation included. A published npm version cannot be edited, so getting this wrong costs a patch release |
+| `400 ... NPM package 'vitaminmcp' exists, but version 'X' was not found (status: 404)` | Also from the MCP registry: npm had not started serving the version it had just accepted, which takes a minute or so. The workflow waits for npm before this step and retries this refusal, so seeing it means npm took longer than ten minutes. Rerun the failed job once npm serves the version |
 
 A granular token, if you use one at all, has to be scoped to **all packages** for a first publish.
 Scoped to selected packages it cannot create one that is not in its list yet — which a new package
@@ -107,11 +108,28 @@ node npm/scripts/stamp-checksums.mjs --sync
 ```
 
 That writes the version into `npm/package.json` and `server.json` (both places it appears there).
-Commit all three files together. The release workflow refuses to build if any of them disagrees
-with the tag, which is deliberate: a mismatch has to fail in the repository, not halfway through
+The Claude Code plugin manifests carry it too and are not synced — set the `version` in
+`.claude-plugin/marketplace.json` and `claude-code/.claude-plugin/plugin.json` by hand. Commit
+all five files together. The release workflow refuses to build if the first three disagree with
+the tag, which is deliberate: a mismatch has to fail in the repository, not halfway through
 publishing.
 
-### 2. Tag it
+### 2. Write the release notes
+
+Put them in `.github/release-notes/<version>.md` and commit it before tagging — the workflow reads
+the file from the tagged commit. It becomes the body of the GitHub release, and the Modrinth
+changelog is read back from that body. Without the file, GitHub generates notes from the merged
+pull requests. [3.2.1's](../.github/release-notes/3.2.1.md) is an example of the usual shape:
+a one-line summary, what breaks against the last version (usually nothing), then Added / Fixed /
+Upgrading, and credit for outside contributions.
+
+**Do not create the release with `gh` to get notes onto it.** It works — the workflow finds the
+release and only uploads its assets — but a release is authored by whoever created it, and the
+author can never be changed. Released this way it shows up as yours rather than github-actions',
+which is how 3.2.0 and 3.2.1 went out. Replacing such a release is not an option either: the
+workflow would build new jars for it, and the npm version already published pins the old ones.
+
+### 3. Tag it
 
 ```bash
 git tag 2.0.0
@@ -122,6 +140,10 @@ The workflow builds `dist`, creates the release with the agent/server jars, five
 assets and the optional Windows x64 viewer asset, then stamps the checksums from the
 jars it just built, publishes to npm, and publishes `server.json`. Watch it — the first two steps
 are irreversible before the third runs.
+
+Between npm and the registry it waits until npm serves the new version: the registry checks the
+package by fetching that version from npm, and a version npm has just accepted is served only a
+minute or so later. 3.2.1's registry step ran straight after the publish and was refused for it.
 
 ---
 
@@ -162,13 +184,20 @@ built twice gives two different files, and only one of them is the one people wi
 `npm publish` asks for a one-time password here, which is why the first release is easier by hand
 than through a token.
 
-If npm succeeded but the registry step did not, finish it without cutting anything again:
+If npm succeeded but the registry step did not, finish it without cutting anything again. While
+the failed run is recent, rerunning its failed job reuses the runners it already built:
+
+```bash
+gh run rerun <run-id> --failed
+```
+
+Otherwise dispatch the workflow for the version, which builds everything again:
 
 ```bash
 gh workflow run Release --ref master -f version=2.0.0
 ```
 
-Every step checks whether its own work is already done, so that publishes only what is missing.
+Every step checks whether its own work is already done, so either publishes only what is missing.
 
 Then install the publisher and claim the name. On Windows:
 
