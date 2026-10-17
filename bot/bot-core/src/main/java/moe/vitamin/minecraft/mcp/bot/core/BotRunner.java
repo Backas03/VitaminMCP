@@ -59,7 +59,11 @@ public final class BotRunner implements AutoCloseable {
         if (fields.length == 0 || !RunnerProtocol.READY.equals(fields[0])) {
             runner.close();
 
-            throw new IOException("The bot runner did not start. It said: " + ready);
+            // A startup refusal arrives as 'err', 'startup', reason; the reason is the useful part.
+            String said = fields.length >= 3 && RunnerProtocol.ERROR.equals(fields[0])
+                    ? fields[2]
+                    : ready;
+            throw new IOException("The bot runner did not start. It said: " + said);
         }
 
         runner.protocol = fields.length > 1 ? Integer.parseInt(fields[1]) : 0;

@@ -38,7 +38,10 @@ final class SessionTools {
                         + "others, and naming an open session's server and agent replaces it. "
                         + "The response includes the server details, the real agent tool "
                         + "definitions and the current session roster; sessions whose runner "
-                        + "process has exited are removed from that roster.",
+                        + "process has exited are removed from that roster. If bots cannot "
+                        + "join this server — one newer than the bot runner supports, say — "
+                        + "the session still opens for the agent tools, and 'bots' in the "
+                        + "response says why.",
                 properties -> {
                     string(properties, "session",
                             "Name for this session — 'lobby', 'survival'. Every other tool uses "
@@ -234,26 +237,29 @@ final class SessionTools {
             replaced.close();
         }
 
-        Session started;
-        try {
-            started = new Session(host, port, mcpPort, token,
-                    args.path("tls").asBoolean(false),
-                    args.path("tlsFingerprint").asText(null),
-                    runner, minecraftProtocol);
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException("Could not start the bot runner: " + e.getMessage(), e);
-        }
+        Session started = new Session(host, port, mcpPort, token,
+                args.path("tls").asBoolean(false),
+                args.path("tlsFingerprint").asText(null),
+                runner, minecraftProtocol);
         sessions.put(name, started);
-
-        JsonNode info = started.agent().call("server_info", AgentClient.arguments());
-        started.readOnly(info.path("readOnly").asBoolean(true));
 
         ObjectNode result = MAPPER.createObjectNode();
         result.put("session", name);
         result.put("connected", started.describe());
         result.put("resolvedFrom", connection.source());
-        result.put("minecraftProtocol", started.bots().protocol());
-        result.set("server", info);
+        ObjectNode bots = result.putObject("bots");
+        if (started.botsAvailable()) {
+            result.put("minecraftProtocol", started.bots().protocol());
+            bots.put("available", true);
+        } else {
+            result.putNull("minecraftProtocol");
+            bots.put("available", false);
+            bots.put("reason", started.botsUnavailable());
+            bots.put("note", "The session is open for the agent tools only. bot_spawn, "
+                    + "bot_inspect, bot_view and bot_run_scenario refuse until session_reset "
+                    + "or session_start finds a runner that can join this server.");
+        }
+        result.set("server", started.serverInfo());
 
         result.set("agentTools", started.agent().listTools());
         result.set("sessions", roster());
@@ -287,7 +293,8 @@ final class SessionTools {
             } catch (java.io.IOException e) {
                 throw new IllegalStateException(
                         "Bots were disconnected, but the replacement runner did not start: "
-                                + e.getMessage() + ". Call session_start again.", e);
+                                + e.getMessage() + " The session stays open for the agent "
+                                + "tools; call session_reset or session_start again to retry.", e);
             }
             result.put("reset", name);
             result.put("session", session.describe());
