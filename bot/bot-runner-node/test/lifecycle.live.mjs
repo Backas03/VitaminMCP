@@ -72,19 +72,23 @@ if (expectedProtocol !== undefined) {
   check(`the runner speaks protocol ${expectedProtocol} natively`, ready[1], expectedProtocol);
 }
 
+// ok, spawn, x, y, z, then the player name and UUID the server gave the bot.
 const spawned = await ask('spawn', bot);
-check('spawn answers ok with three coordinates', [spawned[0], spawned[1], spawned.length], ['ok', 'spawn', 5]);
-console.log(`      at ${spawned.slice(2).join(', ')}`);
+check('spawn answers ok with coordinates, player name and UUID',
+  [spawned[0], spawned[1], spawned.length], ['ok', 'spawn', 7]);
+const coordinates = spawned.slice(2, 5);
+console.log(`      at ${coordinates.join(', ')} as ${spawned[5]} ${spawned[6]}`);
 
 check(
   'coordinates are spelled the way Double.toString spells them',
-  spawned.slice(2).every((value) => /^-?\d+\.\d+(E-?\d+)?$/.test(value)),
+  coordinates.every((value) => /^-?\d+\.\d+(E-?\d+)?$/.test(value)),
   true,
 );
+check('an offline bot plays under the name it was given', spawned[5], bot);
 
 // Only the coordinates: each reply names its own verb, so the fields before them differ by design.
 const at = await ask('position', bot);
-check('position agrees with the position spawn reported', at.slice(2), spawned.slice(2));
+check('position agrees with the position spawn reported', at.slice(2), coordinates);
 
 check('an unknown verb is refused by name', await ask('nonsense', bot), [
   'err',
