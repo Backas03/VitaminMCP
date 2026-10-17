@@ -180,7 +180,7 @@ These are the requirements for using a prebuilt release:
 | **1.21 – 1.21.11** | **🟢** | **🟢** | **🟢** | **Supported and live-tested** |
 | **26.1 – 26.1.2** | **🟢** | **🟢** | **🟢** | **Supported and live-tested**; the server needs Java 25 |
 | **26.2 – 26.3**, agent | **🟢** | **🟢** | **🟢** | **Agent supported**: logs, events, state and commands, checked by hand on Paper 26.2-134 and 26.3-200; the server needs Java 25 |
-| 26.2 – 26.3, bots | 🔴 | 🔴 | 🔴 | Not yet: mineflayer stops at 26.1. `session_start` opens for the agent and says why bots cannot join |
+| 26.2 – 26.3, bots | 🔴 | 🔴 | 🔴 | Not yet: mineflayer stops at 26.1 ([#4](https://github.com/Backas03/VitaminMCP/issues/4)). `session_start` opens for the agent and says why bots cannot join |
 | Later releases | 🟡 | 🟡 | 🟡 | Each needs a compatibility run before it is added |
 
 #### Runner support by operating system
