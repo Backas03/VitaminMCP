@@ -299,25 +299,27 @@ public final class CaptureService implements AgentQueries {
     private static InventorySnapshot.ModelData modelDataOf(
             org.bukkit.inventory.meta.ItemMeta meta) {
         try {
-            if (!(boolean) meta.getClass().getMethod("hasCustomModelDataComponent").invoke(meta)) {
+            Class<?> metaType = org.bukkit.inventory.meta.ItemMeta.class;
+            if (!(boolean) metaType.getMethod("hasCustomModelDataComponent").invoke(meta)) {
                 return null;
             }
-            Object component =
-                    meta.getClass().getMethod("getCustomModelDataComponent").invoke(meta);
+            java.lang.reflect.Method getter = metaType.getMethod("getCustomModelDataComponent");
+            Object component = getter.invoke(meta);
             if (component == null) {
                 return null;
             }
+            Class<?> componentType = getter.getReturnType();
 
             List<String> colors = new java.util.ArrayList<>();
-            for (Object color : (List<Object>) read(component, "getColors")) {
+            for (Object color : (List<Object>) read(componentType, component, "getColors")) {
 
                 colors.add(hex((org.bukkit.Color) color));
             }
 
             InventorySnapshot.ModelData data = new InventorySnapshot.ModelData(
-                    (List<Float>) read(component, "getFloats"),
-                    (List<Boolean>) read(component, "getFlags"),
-                    (List<String>) read(component, "getStrings"),
+                    (List<Float>) read(componentType, component, "getFloats"),
+                    (List<Boolean>) read(componentType, component, "getFlags"),
+                    (List<String>) read(componentType, component, "getStrings"),
                     colors);
             return data.carriesNothing() ? null : data;
         } catch (ReflectiveOperationException | RuntimeException olderServer) {
@@ -326,9 +328,9 @@ public final class CaptureService implements AgentQueries {
         }
     }
 
-    private static List<?> read(Object component, String getter)
+    private static List<?> read(Class<?> type, Object component, String getter)
             throws ReflectiveOperationException {
-        Object value = component.getClass().getMethod(getter).invoke(component);
+        Object value = type.getMethod(getter).invoke(component);
         return value == null ? List.of() : (List<?>) value;
     }
 
