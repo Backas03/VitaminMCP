@@ -141,26 +141,16 @@ function delay(millis) {
 /** Runs a command as the bot. The leading slash is not part of the packet. */
 export function command(bot, name, line) {
   requireInWorld(bot, name);
-  bot._client.write('chat_command', {
-    command: line.startsWith('/') ? line.slice(1) : line,
-    timestamp: BigInt(Date.now()),
-    salt: 0n,
-    argumentSignatures: [],
-    messageCount: 0,
-    acknowledged: Buffer.alloc(3),
-    checksum: 0,
-  });
+  bot.chat(line.startsWith('/') ? line : `/${line}`);
 }
 
-/**
- * Says something in chat.
- *
- * Through `/say`, exactly as the Java runner does it. A bot cannot send a signed chat message
- * without a Mojang key, and an unsigned one is refused from 1.19 on, so the command is the only
- * route that reaches the same listeners.
- */
+/** Sends player chat through the library's signing and acknowledgement implementation. */
 export function chat(bot, name, message) {
-  command(bot, name, `say ${message}`);
+  requireInWorld(bot, name);
+  if (message.startsWith('/')) {
+    throw new Error('Use the command action for slash commands; chat sends player chat.');
+  }
+  bot.chat(message);
 }
 
 /** Right-clicks a block — which is how a container or a plugin menu gets opened. */

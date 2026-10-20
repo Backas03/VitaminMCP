@@ -5,6 +5,39 @@ import minecraftData from 'minecraft-data';
 
 import { Dispatch } from '../src/dispatch.mjs';
 
+function chatBot() {
+  const sent = [];
+  const bot = {
+    entity: { position: { x: 0, y: 64, z: 0 } },
+    _client: {
+      socket: { writable: true },
+      write() { throw new Error('chat packets must go through the signing implementation'); },
+    },
+    chat(message) { sent.push(message); },
+  };
+  return { dispatch: new Dispatch({ require: () => bot }), sent };
+}
+
+test('chat sends ordinary player chat without say permission', async () => {
+  const { dispatch, sent } = chatBot();
+  assert.equal(await dispatch.handle('chat\tTester1\t코인'), 'ok\tchat');
+  assert.deepEqual(sent, ['코인']);
+});
+
+test('commands use the library signing and acknowledgement state', async () => {
+  const { dispatch, sent } = chatBot();
+  assert.equal(await dispatch.handle('command\tTester1\tsay hello'), 'ok\tcommand');
+  assert.equal(await dispatch.handle('command\tTester1\t/say again'), 'ok\tcommand');
+  assert.deepEqual(sent, ['/say hello', '/say again']);
+});
+
+test('chat refuses a slash command instead of executing it', async () => {
+  const { dispatch, sent } = chatBot();
+  const reply = await dispatch.handle('chat\tTester1\t/op Tester1');
+  assert.match(reply, /^err\tchat\tUse the command action/);
+  assert.deepEqual(sent, []);
+});
+
 test('use waits until the client knows the target block', async () => {
   let known = false;
   const packets = [];

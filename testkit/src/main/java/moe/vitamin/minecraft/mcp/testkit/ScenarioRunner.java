@@ -213,8 +213,31 @@ public final class ScenarioRunner {
             }
 
             case "chat" -> {
-                act(step, bot -> bot.chat(required(step, "message")));
-                yield ScenarioResult.StepResult.ok(index, action, "sent");
+                if (!before.events().startsWith("events:")) {
+                    throw new IllegalStateException("could not read the event cursor to verify chat");
+                }
+                long[] messageSequence = new long[1];
+                act(step, bot -> {
+                    messageSequence[0] = bot.inspect().nextMessageSequence();
+                    bot.chat(required(step, "message"));
+                });
+                ObjectNode arguments = AgentClient.arguments();
+                arguments.put("condition", "event");
+                arguments.put("eventType", "AsyncChatEvent");
+                arguments.put("player", required(step, "bot"));
+                arguments.put("sinceSequence", Long.parseLong(before.events().substring(7)));
+                arguments.put("timeoutMillis", step.path("timeoutMillis").asLong(DEFAULT_WAIT.toMillis()));
+                JsonNode result = agent.call("wait_for", arguments);
+                if (result.path("matched").asBoolean()) {
+                    yield ScenarioResult.StepResult.ok(index, action, "server received player chat");
+                }
+                List<ClientMessage> received = new ArrayList<>();
+                act(step, bot -> received.addAll(bot.inspect().messages().stream()
+                        .filter(message -> message.sequence() >= messageSequence[0]).toList()));
+                yield ScenarioResult.StepResult.failed(index, action,
+                        "chat never reached AsyncChatEvent; check the bot's messages for a refusal",
+                        "messages=" + received + " events=" + result.path("recentEvents")
+                                + " logs=" + result.path("recentLogs"));
             }
 
             case "console" -> {
