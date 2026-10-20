@@ -202,7 +202,7 @@ class CompatibilityLiveTest {
         check("chat", () -> {
             long since = eventSequence(agent);
             bot.chat("compat-chat-" + System.nanoTime());
-            require(sawEvent(agent, "PlayerCommandPreprocessEvent", "Tester1", since),
+            require(sawEvent(agent, "AsyncChatEvent", "Tester1", since),
                     "the server never saw the bot say anything. Messages: " + messages(bot));
         });
 

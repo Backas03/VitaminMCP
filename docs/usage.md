@@ -461,7 +461,7 @@ state the scenario never described makes those failures meaningless.
 | `look_at` | `bot`, `x`, `y`, `z` | |
 | `assert_reachable` | `x`, `y`, `z` | `bot` (optional existing bot), `reachable` (default `true`), `timeoutMillis` |
 | `command` | `bot`, `command` | a command typed by the bot |
-| `chat` | `bot`, `message` | |
+| `chat` | `bot`, `message` | `timeoutMillis`; waits for the bot's `AsyncChatEvent`, including cancelled input |
 | `console` | `command` | a command typed by the console (via `command_exec`) |
 | `click_slot` | `bot`, `slot` | `click`: `left` (default) / `right` / `shift_left` / `shift_right` |
 | `close_menu` | `bot` | |

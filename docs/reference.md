@@ -141,9 +141,17 @@ Available inside `bot_run_scenario`.
 | `assert_reachable` | ask whether a loaded path exists without moving; set `reachable: false` for sealed-region assertions |
 | `click_slot` | click a slot: `left`, `right`, `shift_left`, `shift_right` |
 | `close_menu` | close the open menu |
-| `chat` / `command` | say something, or run a command as the bot |
+| `chat` | send player chat and wait for the bot's `AsyncChatEvent`; accepts `timeoutMillis` |
+| `command` | send a command as the bot; use assertions to verify its result |
 | `console` | run a command as the console |
 | `wait_for` | any condition above |
+
+`chat` uses normal player chat, including messages consumed by a chat-input plugin. A cancelled
+`AsyncChatEvent` still confirms delivery; use `assert_message` or state assertions to check the
+plugin's result. It does not use `/say` or require that command's permission. Offline bots have no
+Mojang chat signing key: a server requiring secure chat can refuse them. Such a refusal fails the
+step and includes messages received during the attempt. Use Microsoft authentication when signed
+chat is required; the tool does not change server settings.
 
 ### Assertions — scenario steps
 
