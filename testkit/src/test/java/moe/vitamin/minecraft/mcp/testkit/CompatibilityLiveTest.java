@@ -129,7 +129,7 @@ class CompatibilityLiveTest {
             require(ran.path("dispatched").asBoolean(),
                     "/list as an op player was not dispatched, so the player path never reaches "
                             + "the vanilla dispatcher: " + ran.path("reason").asText());
-            require(ran.path("reason").isNull(),
+            require(!ran.hasNonNull("reason"),
                     "a dispatched command still carried a reason: " + ran.path("reason"));
 
             console(agent, "deop Tester1");
@@ -142,7 +142,7 @@ class CompatibilityLiveTest {
             System.out.println("[compat] /list as a non-op: dispatched=" + dispatched);
 
             if (dispatched) {
-                require(asNonOp.path("reason").isNull(),
+                require(!asNonOp.hasNonNull("reason"),
                         "a dispatched command still carried a reason: " + reason);
             } else {
                 require(reason.startsWith("Nothing ran:"),
