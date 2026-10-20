@@ -66,7 +66,7 @@ proxied from the plugin, so which ones exist is decided by the server you connec
 
 | | |
 |---|---|
-| `session_start` | Connect to a server and its agent. Every other tool needs it. Several sessions can be open at once — one per backend of a proxied network. A proxy that echoes the ping request's protocol may need the backend's `minecraftProtocol` |
+| `session_start` | Connect to a server and its agent. Every other tool needs it. Several sessions can be open at once — one per backend of a proxied network. If bots cannot join the server, the session still opens for the agent tools and `bots` says why |
 | `session_reset` | Disconnect every bot, keeping the connection. Use between independent tests. World state is **not** rolled back. `close: true` ends the session instead |
 
 ### Players
@@ -187,7 +187,9 @@ These are the requirements for using a prebuilt release:
 | 1.18 – 1.20.6 | 🟡 | 🟡 | 🟡 | Planned; below the current agent floor (1.21) |
 | **1.21 – 1.21.11** | **🟢** | **🟢** | **🟢** | **Supported and live-tested** |
 | **26.1 – 26.1.2** | **🟢** | **🟢** | **🟢** | **Supported and live-tested**; the server needs Java 25 |
-| 26.2 and later | 🟡 | 🟡 | 🟡 | Released; each needs a compatibility run before it is added |
+| **26.2 – 26.3**, agent | **🟢** | **🟢** | **🟢** | **Agent supported**: logs, events, state and commands, checked by hand on Paper 26.2-134 and 26.3-200; the server needs Java 25 |
+| 26.2 – 26.3, bots | 🔴 | 🔴 | 🔴 | Not yet: mineflayer stops at 26.1 ([#4](https://github.com/Backas03/VitaminMCP/issues/4)). `session_start` opens for the agent and says why bots cannot join |
+| Later releases | 🟡 | 🟡 | 🟡 | Each needs a compatibility run before it is added |
 
 #### Runner support by operating system
 
@@ -202,7 +204,12 @@ These are the requirements for using a prebuilt release:
 **1.21 through 26.1 are supported today**, and every one of them runs in the matrix
 (`versions.yaml`). **1.21.11 is where the 1.21 line ends** — Minecraft moved to calendar versions
 after it, so what follows 1.21.11 is 26.1 rather than a 1.21.12. 26.1, 26.1.1 and 26.1.2 share one
-protocol and are covered together. 26.2 is released and is not in the matrix yet: adding it is a
+protocol and are covered together.
+
+**26.2 and 26.3 are agent-only for now.** The agent was checked by hand on Paper 26.2-134 and
+26.3-200 — it loads, captures events and logs, answers state queries and runs commands — but bots
+cannot join either until mineflayer and minecraft-protocol speak their protocols (776 and 777), so
+neither is in the matrix: `versions.yaml` is what bots are tested against. Adding one is still a
 compatibility run against a real server plus a check that the runner's bundled data covers it,
 never an edit to `versions.yaml` alone.
 
@@ -218,10 +225,12 @@ never cross-built, and every one of them is started in CI and has to refuse its 
 with the expected exit code before it is uploaded. The world view is the one piece that is still
 Windows-only, and it says so where it is offered.
 
-**You install one Node runner whatever the version.** It normally asks the server what it speaks
-and selects the matching minecraft-data entry, so there is no protocol-specific runner to choose.
-If a proxy echoes the ping request's protocol instead of its backend's, pass the backend's numeric
-protocol as `session_start.minecraftProtocol`.
+**You install one Node runner whatever the version.** It follows the Minecraft version the agent
+reports, checks it against a server-list ping, and selects the matching minecraft-data entry, so
+there is no protocol-specific runner to choose. When the two disagree — a proxy that echoes the
+ping request's protocol, or ViaVersion with ViaBackwards, which answers the ping in the client's
+protocol — the agent's version wins and `session_start` says so under `bots`.
+`session_start.minecraftProtocol` overrides both.
 
 Outside the supported range, things fail clearly rather than misbehaving: an older server declines
 to load the agent, and a server whose protocol has no minecraft-data entry is named at startup.
@@ -229,6 +238,8 @@ to load the agent, and a server whose protocol has no minecraft-data entry is na
 Agent support and bot support can also differ. The agent needs a compatible Paper API; bots need a
 matching minecraft-data entry and a supported runner environment. So a server may be readable by
 the agent before bots can join it — inspection, logs and events all still work without them.
+`session_start` then opens the session for the agent alone and `bots` in its response says why;
+the bot tools refuse with that reason, and `session_reset` tries the runner again.
 
 ---
 
@@ -257,7 +268,7 @@ no extra translation layer).
 and selects the matching minecraft-data entry, so a version needs nothing there beyond the build
 to download.
 
-Versions beyond 26.1 — 26.2 and whatever follows — require a compatibility run before they are
+Versions beyond 26.1 — 26.2, 26.3 and whatever follows — require a compatibility run before they are
 added, and a check that the runner's trimmed data covers them. The runner bundles every version
 minecraft-data ships from the floor up, selects the matching one from the server handshake, and
 refuses clearly rather than half-working when it has no entry.

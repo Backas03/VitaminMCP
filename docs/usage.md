@@ -300,7 +300,7 @@ Anything passed wins over the file, so a detail that differs is the only one wor
 {
   "port": 25577,          // a proxy in front of the Minecraft port the agent knows about
   "mcpPort": 25585,       // which agent, when several run here
-  "minecraftProtocol": 772 // optional: backend protocol when the proxy's ping advertises another
+  "minecraftProtocol": 772 // optional override; bots otherwise follow the version the agent reports
 }
 ```
 
@@ -309,9 +309,12 @@ A proxied network is several servers and there is no right guess between them.
 
 Omit `runnerJar` and it looks for the runner next to `mcp-server.jar`, or wherever
 `VITAMINMCP_RUNNER_JAR` says. There is one, whatever versions are supported: it carries a backend
-per protocol and normally picks the right one by asking the server what it speaks. A proxy may
-answer with the protocol used by the ping request rather than the backend's protocol; pass that
-backend protocol as `minecraftProtocol` in this case. Installed through npm, the runner may still
+per protocol and picks the right one from the Minecraft version the agent reports, checked against
+a server-list ping. A proxy that answers the ping with the request's protocol rather than the
+backend's therefore needs nothing extra, and `session_start` says under `bots` when the two
+disagreed; `minecraftProtocol` is only an override. If no runner can join the server — one newer
+than the runner supports — the session still opens for the agent tools and `bots` says why.
+Installed through npm, the runner may still
 be downloading — the call waits for it rather than failing, and only a call that needs bots waits
 at all.
 
@@ -362,12 +365,14 @@ they coexist; starting one never disturbs another, which matters because **closi
 disconnects its bots.**
 
 ```jsonc
-session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "minecraftProtocol": 772, "token": "..."}
-session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "minecraftProtocol": 772, "token": "..."}
+session_start {"session": "lobby",    "port": 25577, "mcpPort": 25585, "token": "..."}
+session_start {"session": "survival", "port": 25577, "mcpPort": 25586, "token": "..."}
 ```
 
 `port` is the **proxy's** port in both — that is where a real player connects, and bots are real
-players. What distinguishes the sessions is `mcpPort`: the agent inside each backend server.
+players. What distinguishes the sessions is `mcpPort`: the agent inside each backend server. Bots
+follow the Minecraft version that backend's agent reports; pass `minecraftProtocol` only when the
+backend a bot lands on first runs a different version from the one the session observes.
 
 Every other tool then takes `session`:
 

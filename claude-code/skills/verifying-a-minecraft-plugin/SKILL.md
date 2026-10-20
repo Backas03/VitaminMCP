@@ -33,8 +33,8 @@ Pass only what differs:
   others, so bots stay connected. Name them (`lobby`, `survival`) and pass `session` to every later
   call — it is optional only while exactly one is open
 - `port` — the Minecraft port bots connect to, which on a proxied network is the proxy's
-- `minecraftProtocol` — the backend's numeric Minecraft protocol, only when a proxy's status ping
-  echoes the request protocol instead of advertising the backend's
+- `minecraftProtocol` — rarely needed: bots follow the Minecraft version the agent reports, even
+  behind a proxy. Pass it only to override that version
 - `host` and `token` — **required together for a server on another machine.** A token minted
   locally says nothing about a remote server and is deliberately not sent there. The token is the
   `auth-token` in that server's `plugins/VitaminMCP/config.yml`; it is a credential, so ask the
@@ -49,6 +49,12 @@ this skill's plugin install that is `/mcp__plugin_vitaminmcp_vitaminmcp__setup` 
 **`session_start`'s own response carries `agentTools`** — the real parameters of the proxied tools,
 which depend on the agent. Read it: a read-only install (`read-only: true` is the default) exposes
 no `command_exec` at all, so the tool is there but every call is refused.
+
+**It also carries `bots`.** `available: false` means bots cannot join this server — on 26.2 and
+26.3 the runner cannot speak the protocol yet — and `reason` says why. The agent tools still work,
+so verify through logs, events and state, or ask the user to join with a real client; do not retry
+the bot tools. A `pingProtocol` there means a proxy or ViaVersion answered the ping and bots
+followed the agent's version instead.
 
 Then call `server_info`. A wrong host, port or token surfaces here instead of inside some unrelated
 tool three steps later.

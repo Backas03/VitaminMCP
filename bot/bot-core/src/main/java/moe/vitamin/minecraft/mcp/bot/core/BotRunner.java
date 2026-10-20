@@ -29,6 +29,10 @@ public final class BotRunner implements AutoCloseable {
     private final BufferedReader fromRunner;
     private final List<String> live = new ArrayList<>();
     private int protocol;
+    private int pingProtocol;
+
+    /** Where the runner reads the Minecraft version the agent reports. See runner.mjs. */
+    static final String SERVER_VERSION_VARIABLE = "VITAMINMCP_SERVER_VERSION";
 
     private BotRunner(Process process) {
         this.process = process;
@@ -47,11 +51,29 @@ public final class BotRunner implements AutoCloseable {
     /** Launches the runner with an optional Minecraft protocol override. */
     public static BotRunner launch(Path runnerPath, String host, int port, Integer protocol)
             throws IOException {
+        return launch(runnerPath, host, port, protocol, null);
+    }
+
+    /**
+     * Launches the runner, telling it which Minecraft version the agent says the server runs.
+     *
+     * <p>Without a protocol override the runner pings the server, and a ping can be answered by
+     * something in front of it — a proxy, or ViaVersion — in the ping request's own protocol. The
+     * agent's version is what the runner follows when the two disagree; null leaves the ping to
+     * decide alone.
+     */
+    public static BotRunner launch(Path runnerPath, String host, int port, Integer protocol,
+            String serverVersion) throws IOException {
         Objects.requireNonNull(runnerPath, "runnerPath");
 
-        Process process = new ProcessBuilder(commandFor(runnerPath, host, port, protocol))
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start();
+        ProcessBuilder builder = new ProcessBuilder(commandFor(runnerPath, host, port, protocol))
+                .redirectError(ProcessBuilder.Redirect.INHERIT);
+        if (serverVersion == null) {
+            builder.environment().remove(SERVER_VERSION_VARIABLE);
+        } else {
+            builder.environment().put(SERVER_VERSION_VARIABLE, serverVersion);
+        }
+        Process process = builder.start();
 
         BotRunner runner = new BotRunner(process);
         String ready = runner.fromRunner.readLine();
@@ -59,16 +81,29 @@ public final class BotRunner implements AutoCloseable {
         if (fields.length == 0 || !RunnerProtocol.READY.equals(fields[0])) {
             runner.close();
 
-            throw new IOException("The bot runner did not start. It said: " + ready);
+            // A startup refusal arrives as 'err', 'startup', reason; the reason is the useful part.
+            String said = fields.length >= 3 && RunnerProtocol.ERROR.equals(fields[0])
+                    ? fields[2]
+                    : ready;
+            throw new IOException("The bot runner did not start. It said: " + said);
         }
 
         runner.protocol = fields.length > 1 ? Integer.parseInt(fields[1]) : 0;
+        runner.pingProtocol = fields.length > 2 ? Integer.parseInt(fields[2]) : 0;
         return runner;
     }
 
     /** The protocol the loaded backend speaks, or 0 if the runner did not say. */
     public int protocol() {
         return protocol;
+    }
+
+    /**
+     * What the server-list ping answered when it disagreed with the agent's version, which the
+     * runner followed instead; 0 when they agreed or nothing was compared.
+     */
+    public int pingProtocol() {
+        return pingProtocol;
     }
 
     /**

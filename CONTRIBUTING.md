@@ -60,5 +60,11 @@ Why the project is built the way it is — the process boundaries, the Node runn
 budgets, the handshake trick that lets bots carry arbitrary UUIDs — is in
 [docs/design.md](docs/design.md). When something looks arbitrary, it is usually explained there.
 
+**`docs/` is published as the project site, so it holds what stays true:** the why (design.md) and
+the how (reference.md, usage.md). Findings that go stale — an investigation, a version's status
+before it is supported, the results of an experiment — belong in an issue, linked from where a
+reader would look for them (the version table, for a version). A pull request that adds such a
+note under `docs/` will have it moved to an issue when it is merged; nothing in it is lost.
+
 Commit messages in the `type(scope): subject` form are appreciated but not required. Write the body
 for whoever hits the commit in `git blame` later.

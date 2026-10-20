@@ -256,9 +256,23 @@ jobs:
               fi
             done
           else
+
+            # Notes written for this version, when there are any. They become the release body
+            # here and, read back from the release, the Modrinth changelog below; without a file
+            # GitHub generates them from the merged pull requests. Creating the release here
+            # rather than by hand is also what makes github-actions its author — a release made
+            # with gh by a person is theirs, and its author can never be changed afterwards.
+            notes_file=".github/release-notes/${VERSION}.md"
+            if [ -f "$notes_file" ]; then
+              echo "Using ${notes_file} as the release notes."
+              notes=(--notes-file "$notes_file")
+            else
+              echo "No ${notes_file}; generating the release notes."
+              notes=(--generate-notes)
+            fi
             gh release create "${VERSION}" \
               --title "${VERSION}" \
-              --generate-notes \
+              "${notes[@]}" \
               build/dist/VitaminMCP.jar \
               build/dist/mcp-server.jar \
               build/dist/runners/bot-runner-linux-x64 \
@@ -286,6 +300,25 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # The registry checks the npm package by fetching this exact version from npm, and npm
+      # serves a version it has just accepted only after a minute or so. 3.2.1's registry step
+      # ran 0.6 seconds after the publish and was refused with a 404 for it. So this asks npm the
+      # same question first, and waits until the answer is yes.
+      - name: Wait for npm to serve the launcher
+        run: |
+          set -euo pipefail
+          url="https://registry.npmjs.org/vitaminmcp/${VERSION}"
+          for attempt in $(seq 1 40); do
+            if curl -fsS -o /dev/null "$url"; then
+              echo "npm serves vitaminmcp@${VERSION}."
+              exit 0
+            fi
+            echo "npm does not serve vitaminmcp@${VERSION} yet (attempt ${attempt} of 40); waiting 15s."
+            sleep 15
+          done
+          echo "::error::npm still does not serve vitaminmcp@${VERSION} after 10 minutes." >&2
+          exit 1
+
       - name: Install mcp-publisher
         run: |
           set -euo pipefail
@@ -297,24 +330,42 @@ jobs:
         run: |
           set -euo pipefail
           name=$(node -p "require('./server.json').name")
+          # Asked for this version by name. A search lists every version of the server, oldest
+          # first, so taking its first match read the oldest one and never saw a version that
+          # was already there.
           published=$(curl -fsSL \
-            "https://registry.modelcontextprotocol.io/v0/servers?search=${name}" \
+            "https://registry.modelcontextprotocol.io/v0/servers?search=${name}&version=${VERSION}" \
             | node -e "
               let body = '';
               process.stdin.on('data', (chunk) => (body += chunk));
               process.stdin.on('end', () => {
                 const servers = (JSON.parse(body).servers ?? []).map((entry) => entry.server ?? entry);
-                const mine = servers.find((entry) => entry.name === process.argv[1]);
-                process.stdout.write(mine?.version ?? '');
+                const found = servers.some(
+                  (entry) => entry.name === process.argv[1] && entry.version === process.argv[2]);
+                process.stdout.write(found ? 'yes' : '');
               });
-            " "$name" || true)
+            " "$name" "${VERSION}" || true)
 
-          if [ "$published" = "${VERSION}" ]; then
+          if [ "$published" = "yes" ]; then
             echo "${name} ${VERSION} is already in the registry; nothing to publish."
             exit 0
           fi
           mcp-publisher login github-oidc
-          mcp-publisher publish
+
+          # npm answering the step above does not promise it answers the registry the same
+          # second, so a refusal for exactly that reason is retried rather than failed.
+          for attempt in 1 2 3 4 5; do
+            if output=$(mcp-publisher publish 2>&1); then
+              echo "$output"
+              exit 0
+            fi
+            echo "$output"
+            if ! grep -q "was not found" <<<"$output" || [ "$attempt" = 5 ]; then
+              exit 1
+            fi
+            echo "The registry cannot see vitaminmcp@${VERSION} on npm yet; retrying in 30s."
+            sleep 30
+          done
 
       # Mirrors the release to Modrinth — Modrinth has no GitHub sync of its own, so this step is
       # the sync: one Modrinth version per tag, serving the same plugin jar the GitHub release

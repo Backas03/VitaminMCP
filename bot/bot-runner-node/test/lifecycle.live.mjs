@@ -4,10 +4,16 @@
  * Needs a running backend on `online-mode=false` with `settings.bungeecord: false`, so it is not
  * part of `npm test` — the same reason the Java live tests are gated behind a system property.
  *
- *   node test/lifecycle.live.mjs [host] [port] [botName]
+ *   node test/lifecycle.live.mjs [host] [port] [botName] [expectedProtocol]
  *
  * It checks the protocol. It cannot check identity: that only the server knows, so ask the agent
  * what it recorded once this passes.
+ *
+ * expectedProtocol makes it the first check for a new version — 776 for 26.2, say. The runner pings
+ * the server on its own, so a runner that cannot speak that protocol fails here with its reason,
+ * and a server that negotiates anything else (the wrong server, or one translated by ViaBackwards)
+ * fails the check. Nothing forces a protocol, so a translation layer cannot make it pass. It is the
+ * first check and not the last: CompatibilityLiveTest and the matrix still decide support.
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -17,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 const host = process.argv[2] ?? '127.0.0.1';
 const port = process.argv[3] ?? '25565';
 const bot = process.argv[4] ?? 'Stage1Bot';
+const expectedProtocol = process.argv[5];
 
 const runner = fileURLToPath(new URL('../runner.mjs', import.meta.url));
 const child = spawn(process.execPath, [runner, host, port], { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -54,22 +61,34 @@ async function ask(...fields) {
 }
 
 const ready = (await next()).split('\t');
+if (ready[0] !== 'ready') {
+  // Nothing after this can run without a runner, and the refusal is the answer worth printing.
+  console.error(`FAIL  the runner did not start: ${ready.slice(2).join(' ') || ready.join(' ')}`);
+  process.exit(1);
+}
 check('ready names the protocol it negotiated', ready[0], 'ready');
 console.log(`      protocol ${ready[1]}`);
+if (expectedProtocol !== undefined) {
+  check(`the runner speaks protocol ${expectedProtocol} natively`, ready[1], expectedProtocol);
+}
 
+// ok, spawn, x, y, z, then the player name and UUID the server gave the bot.
 const spawned = await ask('spawn', bot);
-check('spawn answers ok with three coordinates', [spawned[0], spawned[1], spawned.length], ['ok', 'spawn', 5]);
-console.log(`      at ${spawned.slice(2).join(', ')}`);
+check('spawn answers ok with coordinates, player name and UUID',
+  [spawned[0], spawned[1], spawned.length], ['ok', 'spawn', 7]);
+const coordinates = spawned.slice(2, 5);
+console.log(`      at ${coordinates.join(', ')} as ${spawned[5]} ${spawned[6]}`);
 
 check(
   'coordinates are spelled the way Double.toString spells them',
-  spawned.slice(2).every((value) => /^-?\d+\.\d+(E-?\d+)?$/.test(value)),
+  coordinates.every((value) => /^-?\d+\.\d+(E-?\d+)?$/.test(value)),
   true,
 );
+check('an offline bot plays under the name it was given', spawned[5], bot);
 
 // Only the coordinates: each reply names its own verb, so the fields before them differ by design.
 const at = await ask('position', bot);
-check('position agrees with the position spawn reported', at.slice(2), spawned.slice(2));
+check('position agrees with the position spawn reported', at.slice(2), coordinates);
 
 check('an unknown verb is refused by name', await ask('nonsense', bot), [
   'err',
