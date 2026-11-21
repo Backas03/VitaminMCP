@@ -459,7 +459,11 @@ public final class CaptureService implements AgentQueries {
             if (sender == null) {
                 throw new IllegalArgumentException("No player online named " + asPlayer);
             }
-            return Bukkit.dispatchCommand(sender, normalised) ? null : refusalFor(normalised, sender);
+            try {
+                return Bukkit.dispatchCommand(sender, normalised) ? null : refusalFor(normalised, sender);
+            } catch (org.bukkit.command.CommandException thrown) {
+                return threw(exceptions, thrown);
+            }
         }, timeout, "Nothing ran: the agent stopped waiting for the server's main thread.");
 
         long millis = (System.nanoTime() - startedAt) / 1_000_000;
@@ -471,6 +475,17 @@ public final class CaptureService implements AgentQueries {
         return refusal == null
                 ? CommandResult.dispatched(normalised, executedAs, output, millis)
                 : CommandResult.refused(normalised, executedAs, refusal, output, millis);
+    }
+
+    static String threw(ExceptionRegistry exceptions, org.bukkit.command.CommandException thrown) {
+        String hash = exceptions.record(thrown, System.currentTimeMillis());
+        Throwable root = thrown;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        return "The command threw before it finished: " + root.getClass().getSimpleName() + ": "
+                + root.getMessage() + ". Whatever it did before that has already happened. The "
+                + "full stack is exceptions_recent with hash '" + hash + "'.";
     }
 
     /** Main thread only: asks the server what it knows about the command and the sender. */
