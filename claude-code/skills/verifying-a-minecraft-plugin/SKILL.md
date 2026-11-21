@@ -223,6 +223,16 @@ for the open menu. It is for showing a human what is happening; it answers nothi
 If the plugin's source is available, read which node the action needs and grant that. If it is not,
 granting op, testing, and taking op away again is an acceptable substitute. **Always take it away.**
 
+### Furniture and other packet-drawn hitboxes
+
+CraftEngine-style furniture is drawn with client-only entities. Place it by holding the item and
+`use_block` on the face to stand it on (not `place_block`: it is not a block), and click it with
+`use_entity` / `attack_entity` at its own coordinates. Those turn the bot and pick the hitbox a
+player would hit, and the reply names it and how far away it was. Its own events, such as
+`FurnitureInteractEvent`, are only captured once the plugin's event package is in the agent's
+`scan-packages`. Otherwise judge the click by what it led to: `state_query` for an opened menu,
+`bot_inspect` for a refusal.
+
 ### Reset between independent tests
 
 `session_reset` disconnects every bot and keeps the connection, so one test does not inherit the

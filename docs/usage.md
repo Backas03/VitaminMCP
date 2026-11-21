@@ -455,11 +455,11 @@ state the scenario never described makes those failures meaningless.
 | `despawn` | `bot` | |
 | `move_to` | `bot`, `x`, `y`, `z` | `mode`: `path` (default) or `teleport`; `timeoutMillis` (or `timeout`) for path movement |
 | `break_block` | `bot`, `x`, `y`, `z` | |
-| `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Waits for the target block to reach the client, then right-clicks it |
-| `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Right-click the nearest entity — an NPC, a villager |
-| `attack_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType` |
+| `use_block` | `bot`, `x`, `y`, `z` | `face` (default `UP`). Waits for the target block to reach the client, turns the bot to the middle of that face and right-clicks it there |
+| `use_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. Turns the bot to the nearest clickable entity and right-clicks it — an NPC, a villager, a furniture hitbox |
+| `attack_entity` | `bot`, `x`, `y`, `z` | `radius` (default 2), `entityType`. The same aim, then a left-click |
 | `hold_item` | `bot`, `slot` | hotbar slot 0..8 |
-| `drop_item` | `bot` | `count` (default: whole held stack) |
+| `drop_item` | `bot` | `count` (default: whole held stack). Presses drop the way a player does, and says whether the item came out or the server gave it back |
 | `place_block` | `bot`, `x`, `y`, `z` | `face` (default `up`); places the held item against the reference block |
 | `jump` | `bot` | |
 | `sneak` / `sprint` | `bot` | `state`: `on` or `off` |
@@ -559,7 +559,10 @@ hides behind.
 
 **The NPC is named by where it stands.** The protocol addresses entities by a numeric id the server
 invents, which never leaves the connection, so there is nothing stable for a scenario to have been
-written against. The runner tracks what the server spawned for this bot and picks the nearest match.
+written against. The runner tracks what the server spawned for this bot and picks the nearest match
+that a player could click, turns the bot to it, and clicks whatever that aim meets first. The step
+reports which entity that was and how far it was from the bot's eyes, and says so when that is
+farther than a survival player reaches.
 
 - `radius` defaults to 2 and should stay small. A generous radius does not fail when the
   coordinates are wrong — it quietly right-clicks a different entity.
@@ -583,6 +586,31 @@ That distinguishes wrong coordinates from a radius too tight from an NPC that wa
 > bot's right click produces the same pair of events a player's does. Anything less does not: NPC
 > plugins are commonly driven by the `AT` variant or by a packet listener expecting it, and sending
 > only `INTERACT` fires an event while the NPC does nothing.
+
+## Furniture and other packet-drawn hitboxes
+
+Plugins such as CraftEngine draw furniture with entities that exist only on the client: an
+`item_display` for how it looks and an `interaction` entity for where it can be clicked. They work
+out what was clicked from where the player is looking, which is why the bot always turns first.
+
+```json
+{"action": "hold_item",     "bot": "Tester1", "slot": 2},
+{"action": "use_block",     "bot": "Tester1", "x": -13, "y": 67, "z": -10, "face": "up"},
+{"action": "use_entity",    "bot": "Tester1", "x": -12.5, "y": 68, "z": -9.5},
+{"action": "attack_entity", "bot": "Tester1", "x": -12.5, "y": 68, "z": -9.5}
+```
+
+- **Place it with `use_block`, not `place_block`.** Furniture is not a block, so `place_block`
+  waits for a block that never appears. `use_block` on the face to stand it on is the right-click
+  a player makes. Use `face: up` for the ground, a side for a wall and `down` for a ceiling, and
+  stand within reach
+- **Click it at its own coordinates.** The visual entity sits exactly there and cannot be clicked,
+  so it is skipped; the `interaction` hitbox around it is what gets the click
+- **A sneaking click is a different click.** `sneak on` first when the plugin wants shift held
+- **The furniture's own events are not captured by default.** They live in the plugin's package.
+  Add it to `scan-packages`, for CraftEngine `net.momirealms.craftengine.bukkit.api.event`, to see
+  `FurnitureInteractEvent` and the like. What the click led to, an opened menu or a refusal sent to
+  the player, shows in `state_query` and `bot_inspect` either way
 
 ## Opening a chest directly
 
@@ -730,6 +758,9 @@ When the cause is not visible there, dig in this order:
 | A command silently does nothing | Check `bot_inspect`'s `messages` — the refusal is in there |
 | A chest will not open | An opaque block sits directly above it (a game rule) |
 | `use_entity` reports no entity there | Either the coordinates are off, or the bot is too far away to have been sent the entity at all. The failure lists what is nearby — `move_to` first if the list is empty |
+| `use_entity` reports no clickable entity | Only display entities, dropped items or markers are there, and a player's crosshair passes through those. A plugin that makes one clickable puts an `interaction` or other entity beside it; the failure lists what is nearby |
+| A click lands but the plugin does nothing | Read what the step said about distance. Farther than a survival player reaches, a plugin that checks reach ignores it — `move_to` closer |
+| `drop_item` says the server gave the item back | A `PlayerDropItemEvent` listener refused it, such as an item-drop rule in a protection plugin |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
 | `did not join within 30000ms (last state: configuration, ...)` | The server is still waiting for something the connection owes it. The packet named alongside is the last one it sent |
 | `is a jar, but this version's bot runner is not one` | A `runnerJar` path left over from before the native runner. Pass the runner that ships with this version |

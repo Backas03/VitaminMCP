@@ -146,9 +146,10 @@ public final class ScenarioRunner {
             }
 
             case "drop_item" -> {
-                act(step, bot -> bot.dropItem(step.hasNonNull("count")
+                String[] outcome = new String[1];
+                act(step, bot -> outcome[0] = bot.dropItem(step.hasNonNull("count")
                         ? step.path("count").asInt() : null));
-                yield ScenarioResult.StepResult.ok(index, action, "dropped");
+                yield ScenarioResult.StepResult.ok(index, action, outcome[0]);
             }
 
             case "place_block" -> {

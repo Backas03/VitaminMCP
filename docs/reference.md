@@ -132,8 +132,8 @@ Available inside `bot_run_scenario`.
 | `spawn` / `despawn` | connect or disconnect a bot |
 | `move_to` | walk to coordinates by default; use `mode: "teleport"` for fast setup placement. Optional `timeoutMillis` distinguishes a sealed route from a walk that did not arrive in time |
 | `break_block` / `use_block` | break, or right-click a block — `use_block` is how you open a chest |
-| `use_entity` | right-click an NPC, villager or armour stand, named by the coordinates it stands at |
-| `attack_entity` | left-click the nearest NPC, mob or armour stand at coordinates |
+| `use_entity` | right-click an NPC, villager, armour stand or furniture hitbox, named by the coordinates it stands at |
+| `attack_entity` | left-click the nearest NPC, mob, armour stand or furniture hitbox at coordinates |
 | `hold_item` / `drop_item` | select a hotbar slot, or drop the held item/one held item |
 | `place_block` | place the held item against a block face |
 | `jump` / `sneak` / `sprint` | perform one jump, or set the movement state on/off |

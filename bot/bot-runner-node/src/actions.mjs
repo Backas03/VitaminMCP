@@ -18,6 +18,8 @@ const FACES = { down: 0, up: 1, north: 2, south: 3, west: 4, east: 5 };
 /** PlayerAction. */
 const START_DIGGING = 0;
 const FINISH_DIGGING = 2;
+const DROP_ALL_ITEMS = 3;
+const DROP_ITEM = 4;
 
 /** Hand. */
 const MAIN_HAND = 0;
@@ -25,9 +27,6 @@ const MAIN_HAND = 0;
 /** InteractAction, as the `mouse` field spells it. */
 const INTERACT = 0;
 const INTERACT_AT = 2;
-
-/** No entity matched. */
-const NO_ENTITY = -1;
 
 /** Block interactions sent by each bot, which the server uses to acknowledge them in order. */
 const sequences = new WeakMap();
@@ -50,6 +49,20 @@ const DIG_ACK_TIMEOUT_MILLIS = 1500;
 
 /** How long the resulting block change gets to come back after the confirmation. */
 const DIG_SETTLE_MILLIS = 300;
+
+const DROP_SETTLE_MILLIS = 1500;
+
+const LOOK_SENT_TIMEOUT_MILLIS = 250;
+
+const SURVIVAL_ENTITY_REACH = 3.0;
+
+const UNCLICKABLE = new Set([
+  'item_display', 'block_display', 'text_display', 'marker', 'item', 'experience_orb',
+  'area_effect_cloud', 'lightning_bolt', 'arrow', 'spectral_arrow', 'trident',
+  'fishing_bobber', 'eye_of_ender', 'evoker_fangs', 'firework_rocket', 'snowball', 'egg',
+  'ender_pearl', 'potion', 'splash_potion', 'lingering_potion', 'experience_bottle',
+  'llama_spit', 'wind_charge', 'breeze_wind_charge', 'ominous_item_spawner',
+]);
 
 /** How long a client gets to receive the block before an interaction is sent. */
 const BLOCK_KNOWN_TIMEOUT_MILLIS = 15_000;
@@ -157,7 +170,8 @@ export function chat(bot, name, message) {
 export async function useBlock(bot, name, x, y, z, face) {
   requireInWorld(bot, name);
 
-  const direction = !face || !face.trim() ? FACES.up : FACES[face.trim().toLowerCase()];
+  const faceName = !face || !face.trim() ? 'up' : face.trim().toLowerCase();
+  const direction = FACES[faceName];
   if (direction === undefined) {
     throw new Error(
       `Unknown face '${face}'. Use ${Object.keys(FACES).join(', ')}.`,
@@ -167,13 +181,16 @@ export async function useBlock(bot, name, x, y, z, face) {
   const location = new Vec3(x, y, z);
   await blockKnown(bot, name, location);
 
+  const cursor = faceCentre(faceName);
+  await turnTowards(bot, location.plus(cursor));
+
   bot._client.write('block_place', {
     hand: MAIN_HAND,
     location: { x, y, z },
     direction,
-    cursorX: 0.5,
-    cursorY: 0.5,
-    cursorZ: 0.5,
+    cursorX: cursor.x,
+    cursorY: cursor.y,
+    cursorZ: cursor.z,
     insideBlock: false,
     worldBorderHit: false,
     sequence: nextSequence(bot),
@@ -208,21 +225,13 @@ async function blockKnown(bot, name, location) {
 }
 
 /** Right-clicks the nearest entity to a point, and returns which one it was. */
-export function useEntity(bot, name, x, y, z, radius, type) {
+export async function useEntity(bot, name, x, y, z, radius, type) {
   requireInWorld(bot, name);
 
-  const entityId = entityNear(bot, x, y, z, radius, type);
-  if (entityId === NO_ENTITY) {
-    const nearby = describeEntitiesNear(bot, x, y, z, radius);
-    throw new Error(
-      `no ${!type || !type.trim() ? 'entity' : type} within ${javaDouble(radius)} blocks of `
-        + `${javaDouble(x)} ${javaDouble(y)} ${javaDouble(z)}`
-        + (nearby === ''
-          ? '. The bot has been told about no entities near there at all — check the coordinates,'
-            + ' and that the bot is close enough to have them in view.'
-          : `. Nearby: ${nearby}`),
-    );
-  }
+  const struck = await aimAt(bot, x, y, z, radius, type);
+  const entityId = struck.entity.id;
+  const at = struck.point.minus(struck.entity.position);
+  const sneaking = Boolean(bot.getControlState('sneak'));
 
   if (interactCarriesMouseButton(bot)) {
     // Both packets, in this order, because that is what a real client sends and what the Java
@@ -230,28 +239,28 @@ export function useEntity(bot, name, x, y, z, radius, type) {
     bot._client.write('use_entity', {
       target: entityId,
       mouse: INTERACT_AT,
-      x: 0.0,
-      y: 1.0,
-      z: 0.0,
+      x: at.x,
+      y: at.y,
+      z: at.z,
       hand: MAIN_HAND,
-      sneaking: false,
+      sneaking,
     });
     bot._client.write('use_entity', {
       target: entityId,
       mouse: INTERACT,
       hand: MAIN_HAND,
-      sneaking: false,
+      sneaking,
     });
   } else {
     // 26.1: one packet with a hand and a hit position; attacks have their own packet.
     bot._client.write('use_entity', {
       target: entityId,
       hand: MAIN_HAND,
-      location: { x: 0.0, y: 1.0, z: 0.0 },
-      sneaking: false,
+      location: { x: at.x, y: at.y, z: at.z },
+      sneaking,
     });
   }
-  return entityId;
+  return { entityId, description: describeStrike(struck) };
 }
 
 /** Through 1.21.11 `use_entity` has a `mouse` field; from 26.1 it has a `location` instead. */
@@ -264,16 +273,157 @@ function interactCarriesMouseButton(bot) {
 }
 
 /** Left-clicks the nearest tracked entity. */
-export function attackEntity(bot, name, x, y, z, radius, type) {
+export async function attackEntity(bot, name, x, y, z, radius, type) {
   requireInWorld(bot, name);
-  const entityId = entityNear(bot, x, y, z, radius, type);
-  if (entityId === NO_ENTITY) {
-    throw new Error(`no ${!type || !type.trim() ? 'entity' : type} within ${javaDouble(radius)} blocks of `
-      + `${javaDouble(x)} ${javaDouble(y)} ${javaDouble(z)}`);
+  const struck = await aimAt(bot, x, y, z, radius, type);
+  bot.attack(struck.entity);
+  return { entityId: struck.entity.id, description: describeStrike(struck) };
+}
+
+async function aimAt(bot, x, y, z, radius, type) {
+  const target = entityNear(bot, x, y, z, radius, type);
+  if (target === null) {
+    throw new Error(noEntityThere(bot, x, y, z, radius, type));
   }
-  const entity = bot.entities[entityId];
-  bot.attack(entity);
-  return entityId;
+
+  const aim = centre(boundingBox(bot, target));
+  await turnTowards(bot, aim);
+
+  const eye = eyes(bot);
+  const typed = Boolean(type && type.trim());
+  const struck = typed ? null : firstAlongRay(bot, eye, aim);
+  const entity = struck?.entity ?? target;
+  const point = struck?.point ?? clip(eye, aim, boundingBox(bot, entity)) ?? aim;
+  return { entity, point, distance: point.distanceTo(eye) };
+}
+
+function describeStrike(struck) {
+  const reach = struck.distance > SURVIVAL_ENTITY_REACH
+    ? `, farther than the ${javaDouble(SURVIVAL_ENTITY_REACH)} blocks a survival player reaches, `
+      + 'so a plugin that checks reach may ignore it — move_to closer first'
+    : '';
+  return `${typeOf(struck.entity)}, ${fixed(struck.distance)} blocks from the bot's eyes${reach}`;
+}
+
+function noEntityThere(bot, x, y, z, radius, type) {
+  const wanted = !type || !type.trim() ? 'entity' : type;
+  const where = `${javaDouble(x)} ${javaDouble(y)} ${javaDouble(z)}`;
+  const unclickable = Object.values(bot.entities)
+    .filter((entity) => entity !== bot.entity && !clickable(entity)
+      && distanceTo(entity, x, y, z) <= radius && (!type || !type.trim() || matchesType(entity, type.trim())))
+    .map(typeOf);
+  if (unclickable.length > 0) {
+    return `no clickable ${wanted} within ${javaDouble(radius)} blocks of ${where}. There is `
+      + `${[...new Set(unclickable)].join(', ')}, which a player's crosshair passes through, so `
+      + 'clicking it is not something a player can do. A plugin that makes one clickable puts an '
+      + 'interaction or another entity at the same spot; look for that among the nearby entities.'
+      + nearbyClause(bot, x, y, z, radius);
+  }
+  const nearby = describeEntitiesNear(bot, x, y, z, radius);
+  return `no ${wanted} within ${javaDouble(radius)} blocks of ${where}`
+    + (nearby === ''
+      ? '. The bot has been told about no entities near there at all — check the coordinates,'
+        + ' and that the bot is close enough to have them in view.'
+      : `. Nearby: ${nearby}`);
+}
+
+function nearbyClause(bot, x, y, z, radius) {
+  const nearby = describeEntitiesNear(bot, x, y, z, radius);
+  return nearby === '' ? '' : ` Nearby: ${nearby}`;
+}
+
+async function turnTowards(bot, point) {
+  const sent = new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      bot.removeListener('physicsTick', done);
+      resolve();
+    };
+    const timer = setTimeout(done, LOOK_SENT_TIMEOUT_MILLIS);
+    bot.once('physicsTick', done);
+  });
+  await bot.lookAt(point, true);
+  await sent;
+}
+
+function eyes(bot) {
+  return bot.entity.position.offset(0, bot.entity.eyeHeight, 0);
+}
+
+function faceCentre(face) {
+  switch (face) {
+    case 'down': return new Vec3(0.5, 0, 0.5);
+    case 'up': return new Vec3(0.5, 1, 0.5);
+    case 'north': return new Vec3(0.5, 0.5, 0);
+    case 'south': return new Vec3(0.5, 0.5, 1);
+    case 'west': return new Vec3(0, 0.5, 0.5);
+    default: return new Vec3(1, 0.5, 0.5);
+  }
+}
+
+function clickable(entity) {
+  return !UNCLICKABLE.has(typeOf(entity).toLowerCase());
+}
+
+function boundingBox(bot, entity) {
+  let width = entity.width ?? 0;
+  let height = entity.height ?? 0;
+  if (typeOf(entity).toLowerCase() === 'interaction') {
+    const keys = bot.registry?.entitiesByName?.interaction?.metadataKeys ?? [];
+    const metaWidth = entity.metadata?.[keys.indexOf('width')];
+    const metaHeight = entity.metadata?.[keys.indexOf('height')];
+    width = typeof metaWidth === 'number' ? metaWidth : 1;
+    height = typeof metaHeight === 'number' ? metaHeight : 1;
+  }
+  const at = entity.position;
+  const half = width / 2;
+  return {
+    min: new Vec3(at.x - half, at.y, at.z - half),
+    max: new Vec3(at.x + half, at.y + height, at.z + half),
+  };
+}
+
+function centre(box) {
+  return box.min.plus(box.max).scaled(0.5);
+}
+
+function firstAlongRay(bot, from, to) {
+  let best = null;
+  for (const entity of Object.values(bot.entities)) {
+    if (entity === bot.entity || !clickable(entity) || !entity.position) {
+      continue;
+    }
+    const point = clip(from, to, boundingBox(bot, entity));
+    if (point && (best === null || point.distanceTo(from) < best.point.distanceTo(from))) {
+      best = { entity, point };
+    }
+  }
+  return best;
+}
+
+function clip(from, to, box) {
+  const direction = to.minus(from);
+  let near = 0;
+  let far = Number.POSITIVE_INFINITY;
+  for (const axis of ['x', 'y', 'z']) {
+    if (Math.abs(direction[axis]) < 1e-12) {
+      if (from[axis] < box.min[axis] || from[axis] > box.max[axis]) {
+        return null;
+      }
+      continue;
+    }
+    let enter = (box.min[axis] - from[axis]) / direction[axis];
+    let exit = (box.max[axis] - from[axis]) / direction[axis];
+    if (enter > exit) {
+      [enter, exit] = [exit, enter];
+    }
+    near = Math.max(near, enter);
+    far = Math.min(far, exit);
+    if (near > far) {
+      return null;
+    }
+  }
+  return from.plus(direction.scaled(near));
 }
 
 /** Selects a hotbar slot. */
@@ -288,18 +438,62 @@ export function holdItem(bot, name, slot) {
 /** Drops the held item, either one item or the whole held stack. */
 export async function dropItem(bot, name, count) {
   requireInWorld(bot, name);
-  if (!bot.heldItem) {
+  const held = bot.heldItem;
+  if (!held) {
     throw new Error(`Bot ${name} is holding no item to drop.`);
   }
-  const amount = count == null || String(count).trim() === '' ? bot.heldItem.count : Number(count);
-  if (!Number.isInteger(amount) || amount <= 0 || amount > bot.heldItem.count) {
-    throw new Error(`Drop count must be between 1 and ${bot.heldItem.count}, got '${count}'.`);
+  const amount = count == null || String(count).trim() === '' ? held.count : Number(count);
+  if (!Number.isInteger(amount) || amount <= 0 || amount > held.count) {
+    throw new Error(`Drop count must be between 1 and ${held.count}, got '${count}'.`);
   }
-  if (amount === bot.heldItem.count) {
-    await bot.tossStack(bot.heldItem);
-  } else {
-    await bot.toss(bot.heldItem.type, bot.heldItem.metadata, amount);
+
+  const slot = bot.QUICK_BAR_START + bot.quickBarSlot;
+  const what = `${amount} ${held.name}`;
+  const outcome = dropOutcome(bot, slot, held.count, what);
+
+  const whole = amount === held.count;
+  for (let pressed = 0; pressed < (whole ? 1 : amount); pressed += 1) {
+    bot._client.write('block_dig', {
+      status: whole ? DROP_ALL_ITEMS : DROP_ITEM,
+      location: { x: 0, y: 0, z: 0 },
+      face: FACES.down,
+      sequence: 0,
+    });
   }
+  bot.inventory.updateSlot(slot, whole
+    ? null
+    : Object.assign(Object.create(Object.getPrototypeOf(held)), held, { count: held.count - amount }));
+
+  return outcome;
+}
+
+function dropOutcome(bot, slot, before, what) {
+  return new Promise((resolve) => {
+    const finish = (message) => {
+      clearTimeout(timer);
+      bot.removeListener('entitySpawn', onSpawn);
+      bot.inventory.removeListener('updateSlot', onSlot);
+      resolve(message);
+    };
+    const onSpawn = (entity) => {
+      if (typeOf(entity).toLowerCase() === 'item' && entity.position?.distanceTo(eyes(bot)) < 3) {
+        finish(`dropped ${what}`);
+      }
+    };
+    const onSlot = (changed, oldItem, newItem) => {
+      if (changed === slot && newItem && newItem.count >= before) {
+        finish(`the server gave the ${newItem.name} back, so something refused the drop — a `
+          + 'PlayerDropItemEvent listener, such as an item-drop rule in a protection plugin');
+      }
+    };
+    const timer = setTimeout(
+      () => finish(`the server neither spawned the dropped item nor gave it back within `
+        + `${DROP_SETTLE_MILLIS}ms`),
+      DROP_SETTLE_MILLIS,
+    );
+    bot.on('entitySpawn', onSpawn);
+    bot.inventory.on('updateSlot', onSlot);
+  });
 }
 
 /** Places the held item against a block face. */
@@ -394,13 +588,12 @@ export function menu(bot, name) {
   return window ? { containerId: window.id, title: plainText(window.title) } : null;
 }
 
-/** The nearest tracked entity to a point, or {@link NO_ENTITY}. */
 function entityNear(bot, x, y, z, radius, type) {
   let best = null;
   let bestDistance = Number.MAX_VALUE;
 
   for (const entity of Object.values(bot.entities)) {
-    if (entity === bot.entity) {
+    if (entity === bot.entity || !clickable(entity)) {
       continue;
     }
     if (type && type.trim() && !matchesType(entity, type.trim())) {
@@ -412,7 +605,7 @@ function entityNear(bot, x, y, z, radius, type) {
       bestDistance = distance;
     }
   }
-  return best === null ? NO_ENTITY : best.id;
+  return best;
 }
 
 /** What is actually near a point, for when nothing matched. */
@@ -424,7 +617,7 @@ function describeEntitiesNear(bot, x, y, z, radius) {
     .map((entity) => {
       const at = entity.position;
       return `${typeOf(entity)} at ${fixed(at.x)} ${fixed(at.y)} ${fixed(at.z)} `
-        + `(${fixed(distanceTo(entity, x, y, z))} away)`;
+        + `(${fixed(distanceTo(entity, x, y, z))} away${clickable(entity) ? '' : ', not clickable'})`;
     })
     .join('; ');
 }

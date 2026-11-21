@@ -103,7 +103,7 @@ export class Dispatch {
       case protocol.USE_ENTITY: {
         const radius = command.length > 5 && command[5].trim() !== '' ? Number(command[5]) : 2.0;
         const type = command.length > 6 ? command[6] : null;
-        const entityId = actions.useEntity(
+        const struck = await actions.useEntity(
           this.#bots.require(command[1]),
           command[1],
           Number(command[2]),
@@ -112,26 +112,27 @@ export class Dispatch {
           radius,
           type,
         );
-        return protocol.encode(protocol.OK, verb, String(entityId));
+        return struckLine(verb, struck);
       }
 
       case protocol.ATTACK_ENTITY: {
         const radius = command.length > 5 && command[5].trim() !== '' ? Number(command[5]) : 2.0;
         const type = command.length > 6 ? command[6] : null;
-        const entityId = actions.attackEntity(
+        const struck = await actions.attackEntity(
           this.#bots.require(command[1]), command[1], Number(command[2]), Number(command[3]),
           Number(command[4]), radius, type);
-        return protocol.encode(protocol.OK, verb, String(entityId));
+        return struckLine(verb, struck);
       }
 
       case protocol.HOLD_ITEM:
         actions.holdItem(this.#bots.require(command[1]), command[1], Number(command[2]));
         return ok(verb);
 
-      case protocol.DROP_ITEM:
-        await actions.dropItem(this.#bots.require(command[1]), command[1],
+      case protocol.DROP_ITEM: {
+        const outcome = await actions.dropItem(this.#bots.require(command[1]), command[1],
           command.length > 2 ? command[2] : undefined);
-        return ok(verb);
+        return protocol.encode(protocol.OK, verb, protocol.sanitize(outcome));
+      }
 
       case protocol.PLACE_BLOCK:
         await actions.placeBlock(this.#bots.require(command[1]), command[1], Number(command[2]),
@@ -293,6 +294,15 @@ function bossBarList(bars) {
 
 function recordList(values) {
   return values.map(protocol.sanitize).join(protocol.RECORD_SEPARATOR);
+}
+
+function struckLine(verb, struck) {
+  return protocol.encode(
+    protocol.OK,
+    verb,
+    String(struck.entityId),
+    protocol.sanitize(struck.description),
+  );
 }
 
 function positionLine(verb, at) {

@@ -474,6 +474,28 @@ Embed Groovy or GraalJS in the bot context and handle only the complicated cases
 **Not included from the start.** It gets introduced once real cases that the declarative DSL cannot
 cover have accumulated.
 
+### A click is aimed (2026-11-22)
+
+A server cannot see a crosshair, so a plugin that needs to know what was clicked works it out from
+where the player is looking. CraftEngine does this for furniture: the hitbox is an `interaction`
+entity it sends only to clients, and a click on it counts only when a ray from the player's eyes
+along their look meets that hitbox. A bot that clicked without turning was ignored without a word.
+So `use_entity` and `attack_entity` turn the bot to the target and let that turn reach the server
+before the click goes out. They also choose only among entities a crosshair can stop on. Display
+entities, dropped items and markers are passed through by a real client, and a furniture's visual
+`item_display` sits at exactly the point a caller names, so the nearest entity there was usually
+the one thing no player could ever click.
+
+`use_block` clicks the middle of the face it names, not the middle of the block. Vanilla accepts
+either, but the click point is data a plugin can read. CraftEngine places ground furniture at the
+click's height, so a click at the block's centre put the furniture half inside the ground, and its
+obstruction check refused it.
+
+`drop_item` presses the drop key rather than throwing the stack out of the inventory screen. The
+two fire different events, and a plugin that blocks inventory clicks would block the second, which
+no player pressing Q ever meets. The server never confirms a drop, so the runner waits to see the
+item appear in the world or come back to the hand, and says which.
+
 ---
 
 ## 12. Determinism — tick synchronisation

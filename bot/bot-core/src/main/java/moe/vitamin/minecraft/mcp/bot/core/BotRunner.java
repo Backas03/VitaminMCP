@@ -399,7 +399,7 @@ public final class BotRunner implements AutoCloseable {
                     String.valueOf(x), String.valueOf(y), String.valueOf(z),
                     String.valueOf(radius), type == null ? "" : type);
 
-            return reply.length > 2 ? reply[2] : "";
+            return struck(reply);
         }
 
         public String attackEntity(double x, double y, double z, double radius, String type)
@@ -407,15 +407,26 @@ public final class BotRunner implements AutoCloseable {
             String[] reply = runner.send(RunnerProtocol.ATTACK_ENTITY, name,
                     String.valueOf(x), String.valueOf(y), String.valueOf(z),
                     String.valueOf(radius), type == null ? "" : type);
-            return reply.length > 2 ? reply[2] : "";
+            return struck(reply);
+        }
+
+        private static String struck(String[] reply) {
+            if (reply.length <= 2) {
+                return "";
+            }
+            return reply.length > 3 && !reply[3].isBlank()
+                    ? reply[2] + " (" + reply[3] + ")"
+                    : reply[2];
         }
 
         public void holdItem(int slot) throws IOException {
             runner.send(RunnerProtocol.HOLD_ITEM, name, String.valueOf(slot));
         }
 
-        public void dropItem(Integer count) throws IOException {
-            runner.send(RunnerProtocol.DROP_ITEM, name, count == null ? "" : String.valueOf(count));
+        public String dropItem(Integer count) throws IOException {
+            String[] reply = runner.send(RunnerProtocol.DROP_ITEM, name,
+                    count == null ? "" : String.valueOf(count));
+            return reply.length > 2 && !reply[2].isBlank() ? reply[2] : "dropped";
         }
 
         public void placeBlock(int x, int y, int z, String face) throws IOException {
