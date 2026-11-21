@@ -49,6 +49,28 @@ class SessionToolsTest {
     }
 
     @Test
+    void aRunnerOfAnotherReleaseIsReportedWithBothVersions() {
+        String warning = SessionTools.runnerMismatch("3.2.3", "3.0.2");
+
+        assertTrue(warning.contains("3.0.2") && warning.contains("3.2.3"), warning);
+        assertTrue(warning.contains("VITAMINMCP_RUNNER_JAR"), warning);
+    }
+
+    @Test
+    void aRunnerThatReportsNoVersionIsReportedAsOlder() {
+        String warning = SessionTools.runnerMismatch("3.2.3", null);
+
+        assertTrue(warning.contains("does not report its version"), warning);
+        assertTrue(warning.contains("auth='microsoft' is refused"), warning);
+    }
+
+    @Test
+    void theMatchingRunnerAndADevelopmentBuildAreNotWarnedAbout() {
+        assertEquals(null, SessionTools.runnerMismatch("3.2.3", "3.2.3"));
+        assertEquals(null, SessionTools.runnerMismatch("dev", "3.2.2"));
+    }
+
+    @Test
     void aRunnerIsFoundUnderEveryNameAReleasePublishes() {
         assertTrue(SessionTools.isRunnerFile("runner.mjs"));
         assertTrue(SessionTools.isRunnerFile("runner.js"));

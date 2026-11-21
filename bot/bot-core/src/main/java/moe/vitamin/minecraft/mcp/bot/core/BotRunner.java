@@ -30,6 +30,7 @@ public final class BotRunner implements AutoCloseable {
     private final List<String> live = new ArrayList<>();
     private int protocol;
     private int pingProtocol;
+    private String version;
 
     /** Where the runner reads the Minecraft version the agent reports. See runner.mjs. */
     static final String SERVER_VERSION_VARIABLE = "VITAMINMCP_SERVER_VERSION";
@@ -90,7 +91,12 @@ public final class BotRunner implements AutoCloseable {
 
         runner.protocol = fields.length > 1 ? Integer.parseInt(fields[1]) : 0;
         runner.pingProtocol = fields.length > 2 ? Integer.parseInt(fields[2]) : 0;
+        runner.version = fields.length > 3 && !fields[3].isBlank() ? fields[3] : null;
         return runner;
+    }
+
+    public String version() {
+        return version;
     }
 
     /** The protocol the loaded backend speaks, or 0 if the runner did not say. */
@@ -247,13 +253,27 @@ public final class BotRunner implements AutoCloseable {
     /** Connects an offline bot or a Microsoft-authenticated Minecraft account. */
     public BotHandle spawn(String name, String clientIp, String auth, String account)
             throws IOException {
+        String mode = auth == null || auth.isBlank()
+                ? "offline"
+                : auth.trim().toLowerCase(java.util.Locale.ROOT);
+        if (!mode.equals("offline") && !mode.equals("microsoft")) {
+            throw new IOException("Unknown bot auth '" + auth + "'. Use offline or microsoft.");
+        }
+        if (mode.equals("microsoft") && version == null) {
+            throw new IOException("This bot runner does not report its version, so it is older "
+                    + "than this MCP server, and runners before 3.1.1 ignore auth: the bot would "
+                    + "join as an offline player, which an online-mode server kicks as "
+                    + "unverified_username. Nothing was sent. Use the runner that ships with this "
+                    + "MCP server: leave VITAMINMCP_RUNNER_JAR unset, or point it at that "
+                    + "runner.");
+        }
         String[] reply = send(RunnerProtocol.SPAWN, name, clientIp == null ? "" : clientIp,
-                auth == null ? "offline" : auth, account == null ? "" : account);
+                mode, account == null ? "" : account);
         String playerName = reply.length > 5 && !reply[5].isBlank() ? reply[5] : name;
         String uuid = reply.length > 6 && !reply[6].isBlank()
                 ? reply[6]
                 : BotIdentity.offlineUuid(name).toString();
-        if ("microsoft".equalsIgnoreCase(auth) && reply.length <= 6) {
+        if (mode.equals("microsoft") && reply.length <= 6) {
             throw new IOException(
                     "This bot runner predates Microsoft authentication; use the runner that "
                             + "ships with this MCP server version.");

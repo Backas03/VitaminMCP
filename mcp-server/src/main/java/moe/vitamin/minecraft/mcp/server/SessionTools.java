@@ -252,6 +252,12 @@ final class SessionTools {
         if (started.botsAvailable()) {
             result.put("minecraftProtocol", started.bots().protocol());
             bots.put("available", true);
+            String runnerVersion = started.bots().version();
+            bots.put("runnerVersion", runnerVersion);
+            String mismatch = runnerMismatch(SERVER_VERSION, runnerVersion);
+            if (mismatch != null) {
+                bots.put("runnerWarning", mismatch);
+            }
             int pinged = started.bots().pingProtocol();
             if (pinged != 0) {
                 bots.put("pingProtocol", pinged);
@@ -273,6 +279,25 @@ final class SessionTools {
         result.set("agentTools", started.agent().listTools());
         result.set("sessions", roster());
         return result;
+    }
+
+    static final String SERVER_VERSION = java.util.Objects.requireNonNullElse(
+            SessionTools.class.getPackage().getImplementationVersion(), "dev");
+
+    static String runnerMismatch(String serverVersion, String runnerVersion) {
+        if (runnerVersion == null) {
+            return "This bot runner does not report its version, so it is older than this MCP "
+                    + "server (" + serverVersion + "). Offline bots may still work, but "
+                    + "auth='microsoft' is refused, and other actions may behave as they did in "
+                    + "the older release. Use the runner that ships with this server: leave "
+                    + "VITAMINMCP_RUNNER_JAR unset, or point it at that runner.";
+        }
+        if ("dev".equals(serverVersion) || runnerVersion.equals(serverVersion)) {
+            return null;
+        }
+        return "This bot runner is " + runnerVersion + " but this MCP server is " + serverVersion
+                + ". Bot actions behave as the runner's release does. Use the runner that ships "
+                + "with this server: leave VITAMINMCP_RUNNER_JAR unset, or point it at that runner.";
     }
 
     static Integer minecraftProtocol(JsonNode args) {

@@ -761,6 +761,8 @@ When the cause is not visible there, dig in this order:
 | `use_entity` reports no clickable entity | Only display entities, dropped items or markers are there, and a player's crosshair passes through those. A plugin that makes one clickable puts an `interaction` or other entity beside it; the failure lists what is nearby |
 | A click lands but the plugin does nothing | Read what the step said about distance. Farther than a survival player reaches, a plugin that checks reach ignores it — `move_to` closer |
 | `drop_item` says the server gave the item back | A `PlayerDropItemEvent` listener refused it, such as an item-drop rule in a protection plugin |
+| `This bot runner does not report its version` | `VITAMINMCP_RUNNER_JAR` names a runner from an older release. Microsoft sign-in is refused with it. Unset it, or point it at the runner that ships with this version |
+| `This bot runner is X but this MCP server is Y` | The same mismatch, with a runner new enough to say which release it is |
 | `click_slot` fails with `has no menu open` | Clicked before it opened. `wait_for inventory_open` first |
 | `did not join within 30000ms (last state: configuration, ...)` | The server is still waiting for something the connection owes it. The packet named alongside is the last one it sent |
 | `is a jar, but this version's bot runner is not one` | A `runnerJar` path left over from before the native runner. Pass the runner that ships with this version |

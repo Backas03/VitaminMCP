@@ -19,6 +19,7 @@ import { createInterface } from 'node:readline';
 import { BotRegistry } from './src/bots.mjs';
 import { Dispatch } from './src/dispatch.mjs';
 import * as protocol from './src/protocol.mjs';
+import { VERSION } from './src/release.mjs';
 import { pingProtocol, selectProtocol, versionForProtocol } from './src/version.mjs';
 
 // stdout is the protocol channel; a dependency's console.log (mineflayer did this on 26.1, with a
@@ -64,10 +65,7 @@ async function main() {
     process.exit(1);
   }
 
-  // A third field only when the ping disagreed, so the line a caller already parses is unchanged.
-  write(pinged === undefined
-    ? protocol.encode(protocol.READY, String(negotiated))
-    : protocol.encode(protocol.READY, String(negotiated), String(pinged)));
+  write(protocol.encode(protocol.READY, String(negotiated), String(pinged ?? 0), VERSION));
 
   const dispatch = new Dispatch(bots);
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });

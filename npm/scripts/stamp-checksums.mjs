@@ -191,6 +191,11 @@ async function sync() {
   }
   await fs.writeFile(marketFile, `${JSON.stringify(market, null, 2)}\n`);
 
+  await fs.writeFile(
+    path.join(REPOSITORY, 'bot/bot-runner-node/src/release.mjs'),
+    `export const VERSION = '${version}';\n`,
+  );
+
   return version;
 }
 
