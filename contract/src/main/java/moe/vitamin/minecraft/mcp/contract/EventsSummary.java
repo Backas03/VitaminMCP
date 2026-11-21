@@ -5,10 +5,17 @@ import java.util.List;
 import java.util.Objects;
 
 /** Per-type event counts over a time window. */
-public record EventsSummary(long from, long to, long total, long dropped, List<TypeCount> counts) {
+public record EventsSummary(
+        long from, long to, long total, long dropped, List<TypeCount> counts,
+        List<TypeCount> rateLimited) {
+
+    public EventsSummary(long from, long to, long total, long dropped, List<TypeCount> counts) {
+        this(from, to, total, dropped, counts, List.of());
+    }
 
     public EventsSummary {
         counts = List.copyOf(Objects.requireNonNull(counts, "counts"));
+        rateLimited = rateLimited == null ? List.of() : List.copyOf(rateLimited);
     }
 
     /** How often one event type occurred. */

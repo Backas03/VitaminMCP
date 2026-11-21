@@ -139,6 +139,14 @@ extra-high-frequency: []
 # and returned normally.
 reinstate-types: []
 
+# A busy server has world-ticking events no list foresees: hoppers searching, mobs taking
+# damage, plugins moving entities every tick. Any event type with no player involved that fires
+# more than this many times in one second keeps the first ones and only counts the rest, so it
+# cannot push everything else out of the buffer. events_summary lists what was counted rather
+# than kept, under 'rateLimited'. Events involving a player and the types under reinstate-types
+# are never limited. 0 turns the limit off.
+event-rate-limit: 200
+
 # Packages searched for event classes. Empty uses the defaults:
 #   org.bukkit.event, io.papermc.paper.event, com.destroystokyo.paper.event
 # Add a plugin's event package to capture its custom events too.

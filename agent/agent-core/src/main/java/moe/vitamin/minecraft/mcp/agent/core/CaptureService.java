@@ -42,7 +42,8 @@ public final class CaptureService implements AgentQueries {
         this.logs = new SequencedRingBuffer<>(settings.logBufferSize());
         this.exceptions = new ExceptionRegistry(settings.maxExceptionGroups());
         this.eventCapture = new EventCapture(
-                plugin, events, highFrequency, settings.captureHighFrequency(), settings.scanPackages());
+                plugin, events, highFrequency, settings.captureHighFrequency(),
+                settings.scanPackages(), settings.eventRate());
         this.logCapture = new LogCapture(logs, exceptions, plugin.getLogger());
         this.waitForService = new WaitForService(plugin, events, logs, highFrequency);
     }
@@ -77,9 +78,14 @@ public final class CaptureService implements AgentQueries {
                 .sorted(EventsSummary.TypeCount.mostFrequentFirst())
                 .toList();
 
+        List<EventsSummary.TypeCount> rateLimited = eventCapture.rate().notKept().entrySet().stream()
+                .map(entry -> new EventsSummary.TypeCount(entry.getKey(), entry.getValue()))
+                .sorted(EventsSummary.TypeCount.mostFrequentFirst())
+                .toList();
+
         return new EventsSummary(
                 from, windowEnd == Long.MAX_VALUE ? System.currentTimeMillis() : windowEnd,
-                total[0], dropped, typeCounts);
+                total[0], dropped, typeCounts, rateLimited);
     }
 
     /** Reads events matching the given filters. */
@@ -171,6 +177,8 @@ public final class CaptureService implements AgentQueries {
         status.put("logCaptureActive", logCaptureActive);
         status.put("distinctExceptions", exceptions.size());
         status.put("highFrequencyExcluded", List.copyOf(highFrequency.excluded()));
+        status.put("eventRateLimit", eventCapture.rate().perSecond());
+        status.put("eventsRateLimited", eventCapture.rate().totalNotKept());
         return status;
     }
 

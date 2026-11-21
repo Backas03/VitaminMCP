@@ -415,6 +415,22 @@ Bukkit has no "subscribe to all events" API. The standard approach is scanning
 - Register at `EventPriority.MONITOR` — observing the outcome after other plugins have handled it
 - `ignoreCancelled = false` — **cancelled events matter most for debugging**
 
+### Floods no list foresees (2026-11-22)
+
+The high-frequency list has been wrong every time it met a new kind of server: once idle, once with
+a player connected, and then on a production network where `HopperInventorySearchEvent` fired for
+every hopper on every tick. There it was thousands a second, the buffer turned over in under a
+minute, and the `PlayerInteractEvent` someone was looking for was gone before they asked. Adding
+that one name fixed that server and no other.
+
+So each event type is also capped per second: past `event-rate-limit` (200 by default) the rest of
+that second is counted rather than kept, and `events_summary` says how many under `rateLimited`.
+The cap only applies to events with no player involved. What testers look for is a player doing
+something, and a busy server can have more legitimate `PlayerInteractEvent`s a second than any flat
+cap would allow. The floods are world ticking: hoppers, mobs taking damage, plugins moving entities
+every tick. Types in `reinstate-types` are exempt too, since an operator who named one asked for
+it.
+
 ---
 
 ## 9. Log collection — no file tailing

@@ -55,7 +55,10 @@ final class AgentTools {
         tools.add(tool("events_summary",
                 "Counts captured events by type over a time window. ALWAYS call this before "
                         + "events_query — it stays small however busy the server is, and says "
-                        + "which types are worth querying in detail.",
+                        + "which types are worth querying in detail. 'rateLimited' lists types "
+                        + "with no player involved that fired faster than the agent's "
+                        + "event-rate-limit per second, with how many were counted but not kept "
+                        + "since the agent started.",
                 properties -> {
                     numberProperty(properties, "from",
                             "Window start, epoch milliseconds. Omit for everything retained.");

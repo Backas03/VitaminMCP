@@ -10,6 +10,7 @@ import java.util.logging.Level;
 import moe.vitamin.minecraft.mcp.agent.core.ActivityLogging;
 import moe.vitamin.minecraft.mcp.agent.core.AgentSettings;
 import moe.vitamin.minecraft.mcp.agent.core.CaptureService;
+import moe.vitamin.minecraft.mcp.agent.core.EventRateLimit;
 import moe.vitamin.minecraft.mcp.agent.core.OAuthSettings;
 import moe.vitamin.minecraft.mcp.agent.core.TlsSettings;
 import moe.vitamin.minecraft.mcp.contract.LocalHandshake;
@@ -143,7 +144,8 @@ public final class VitaminMcpPlugin extends JavaPlugin {
                 stringList(config, "scan-packages"),
                 readOAuth(config),
                 readTls(config),
-                ActivityLogging.parse(config.getString("activity-log", "full")));
+                ActivityLogging.parse(config.getString("activity-log", "full")),
+                config.getInt("event-rate-limit", EventRateLimit.DEFAULT_PER_SECOND));
     }
 
     /** Reads the OAuth block. */

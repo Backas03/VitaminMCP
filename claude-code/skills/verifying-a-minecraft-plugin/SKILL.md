@@ -150,7 +150,8 @@ it as yours. A `NullPointerException: Name is null` looks like your code and is 
 
 The summary is small however busy the server is. Read the counts per type, then dig into the one
 type worth reading. High-frequency events — `PlayerMoveEvent`, `BlockPhysicsEvent`, chunk and
-entity movement — are excluded unless a query names them.
+entity movement — are excluded unless a query names them. A type listed under `rateLimited` fired
+so often with no player involved that only its first events each second were kept.
 
 **If the plugin fires a custom event, assert on the event rather than on a log line.** Log wording
 changes under refactoring; an event type rarely does.

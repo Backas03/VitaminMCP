@@ -33,6 +33,7 @@ public final class EventCapture implements Listener {
     private final SequencedRingBuffer<EventRecord> buffer;
     private final HighFrequencyEvents highFrequency;
     private final boolean captureHighFrequency;
+    private final EventRateLimit rate;
     private final List<String> scanPackages;
     private final EventDetails details = new EventDetails();
     private final Logger logger;
@@ -45,8 +46,10 @@ public final class EventCapture implements Listener {
             SequencedRingBuffer<EventRecord> buffer,
             HighFrequencyEvents highFrequency,
             boolean captureHighFrequency,
-            Collection<String> scanPackages) {
+            Collection<String> scanPackages,
+            EventRateLimit rate) {
         this.plugin = plugin;
+        this.rate = rate;
         this.buffer = buffer;
         this.highFrequency = highFrequency;
         this.captureHighFrequency = captureHighFrequency;
@@ -115,6 +118,9 @@ public final class EventCapture implements Listener {
         try {
             long timestamp = System.currentTimeMillis();
             String player = details.playerName(event);
+            if (!rate.admit(type, player != null, timestamp)) {
+                return;
+            }
             boolean cancelled = EventDetails.isCancelled(event);
             var payload = details.payload(event);
 
@@ -124,6 +130,10 @@ public final class EventCapture implements Listener {
 
             logger.log(Level.FINE, "Failed to record " + type, e);
         }
+    }
+
+    public EventRateLimit rate() {
+        return rate;
     }
 
     /** Event types currently registered, for reporting through {@code server_info}. */

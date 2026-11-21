@@ -45,6 +45,12 @@ the response budget on events you do not care about.
 by default, so if you genuinely need them you also have to enable `capture-high-frequency` in
 `config.yml`.
 
+**A flood that no list names is capped.** Any event type with no player involved that fires more
+than `event-rate-limit` times in one second (200 by default) keeps the first ones each second and
+only counts the rest, so it cannot push everything else out of the buffer. `events_summary` lists
+those types under `rateLimited`, with how many were counted but not kept. Events that involve a
+player are never capped, and neither are the types in `reinstate-types`.
+
 ## Logs — found by pattern
 
 ```
@@ -748,7 +754,7 @@ When the cause is not visible there, dig in this order:
 | Microsoft login owns a different profile | `name` must be the authenticated Minecraft Java profile name; keep `account` as the cache alias |
 | Bot actions are unavailable in read-only mode | Set `read-only: false` in the agent config and restart; bot joins and actions change server state |
 | `err startup ... unsupported server version` | The Node runner has no minecraft-data entry for what this server speaks. Add the version to the compatibility matrix only after a live verification. |
-| Events are not captured | The type is on the high-frequency list. Name it in `types`, and enable `capture-high-frequency` if needed |
+| Events are not captured | The type is on the high-frequency list. Name it in `types`, and enable `capture-high-frequency` if needed. A type under `rateLimited` in `events_summary` kept only its first events each second |
 | `command_exec` is missing | `read-only: true` (the default). `session_start`'s `agentTools` lists the tools that actually exist |
 | A proxied tool refuses with something like `... needs 'kind'` | Parameters were wrapped. Pass them flat, at the top level |
 | `presented a certificate that no trusted authority signed` | Self-signed server. Pass the `tlsFingerprint` from the startup log |

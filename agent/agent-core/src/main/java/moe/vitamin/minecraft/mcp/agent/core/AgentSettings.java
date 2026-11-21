@@ -18,12 +18,33 @@ public record AgentSettings(
         List<String> scanPackages,
         OAuthSettings oauth,
         TlsSettings tls,
-        ActivityLogging activityLog) {
+        ActivityLogging activityLog,
+        int eventRateLimit) {
 
     /** Loopback. */
     public static final String DEFAULT_BIND_ADDRESS = "127.0.0.1";
 
     public static final int DEFAULT_PORT = 25585;
+
+    public AgentSettings(
+            String bindAddress,
+            int port,
+            String authToken,
+            boolean readOnly,
+            int eventBufferSize,
+            int logBufferSize,
+            int maxExceptionGroups,
+            boolean captureHighFrequency,
+            List<String> extraHighFrequency,
+            List<String> reinstatedTypes,
+            List<String> scanPackages,
+            OAuthSettings oauth,
+            TlsSettings tls,
+            ActivityLogging activityLog) {
+        this(bindAddress, port, authToken, readOnly, eventBufferSize, logBufferSize,
+                maxExceptionGroups, captureHighFrequency, extraHighFrequency, reinstatedTypes,
+                scanPackages, oauth, tls, activityLog, EventRateLimit.DEFAULT_PER_SECOND);
+    }
 
     public AgentSettings {
         Objects.requireNonNull(bindAddress, "bindAddress");
@@ -74,10 +95,18 @@ public record AgentSettings(
         if (eventBufferSize < 1 || logBufferSize < 1) {
             throw new IllegalStateException("Buffer sizes must be at least 1");
         }
+        if (eventRateLimit < 0) {
+            throw new IllegalStateException(
+                    "event-rate-limit must be 0 (no limit) or more, was " + eventRateLimit);
+        }
     }
 
     /** The high-frequency policy these settings describe. */
     public HighFrequencyEvents highFrequencyEvents() {
         return HighFrequencyEvents.of(extraHighFrequency, reinstatedTypes);
+    }
+
+    public EventRateLimit eventRate() {
+        return new EventRateLimit(eventRateLimit, reinstatedTypes);
     }
 }

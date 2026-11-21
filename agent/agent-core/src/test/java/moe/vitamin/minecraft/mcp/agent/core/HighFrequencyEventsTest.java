@@ -30,6 +30,11 @@ class HighFrequencyEventsTest {
     }
 
     @Test
+    void excludesTheHopperSearchThatFiresForEveryHopperEveryTick() {
+        assertTrue(HighFrequencyEvents.defaults().contains("HopperInventorySearchEvent"));
+    }
+
+    @Test
     void excludesTheTypesThatOnlyAppearWhenSomeoneIsPlaying() {
         HighFrequencyEvents events = HighFrequencyEvents.defaults();
 
